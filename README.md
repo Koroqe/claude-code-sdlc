@@ -48,44 +48,48 @@ bash install.sh --init-project
 
 Every feature flows through a structured pipeline:
 
-```mermaid
-graph TD
-    A["Feature Request"] --> B["Plan Mode"]
-    B --> B1["Explore codebase"]
-    B1 --> B2["Design approach"]
-    B2 --> B3["Write plan"]
-    B3 --> B4["Plan Critic review"]
-    B4 --> C["User approves plan"]
-
-    C --> D["/bootstrap-feature"]
-    D --> D1["PRD Writer documents requirements"]
-    D1 --> D2["Business Analyst writes use cases"]
-    D2 --> D3["Architect reviews design"]
-    D3 --> D4["QA Lead documents test cases"]
-    D4 --> D5["Tech Lead creates implementation plan"]
-
-    D5 --> E["/implement-slice loop"]
-    E --> E1["Write tests first"]
-    E1 --> E2["Implement to pass tests"]
-    E2 --> E3["Verify: typecheck + tests + build"]
-    E3 --> E4["Commit"]
-    E4 --> E5{"More slices?"}
-    E5 -->|Yes| E1
-    E5 -->|No| F
-
-    F["/merge-ready"] --> F1["Code Review"]
-    F1 --> F2["Security Audit"]
-    F2 --> F3["Build Verification"]
-    F3 --> F4["E2E Tests"]
-    F4 --> F5["Documentation Check"]
-    F5 --> G["MERGE READY"]
-
-    style A fill:#4CAF50,color:#fff
-    style G fill:#4CAF50,color:#fff
-    style B fill:#2196F3,color:#fff
-    style D fill:#FF9800,color:#fff
-    style E fill:#9C27B0,color:#fff
-    style F fill:#F44336,color:#fff
+```
+  Feature Request
+       |
+       v
+  +-----------+
+  | PLAN MODE |  Explore codebase -> Design approach -> Plan Critic review
+  +-----------+
+       |
+       v  (user approves)
+  +---------------------+
+  | /bootstrap-feature  |
+  +---------------------+
+       |
+       +---> PRD Writer .............. documents requirements
+       +---> Business Analyst ........ writes use cases
+       +---> Architect ............... reviews design
+       +---> QA Lead ................. documents test cases
+       +---> Tech Lead ............... creates implementation plan
+       |
+       v
+  +---------------------+
+  | /implement-slice    |  (loops for each slice)
+  +---------------------+
+       |
+       +---> Write tests first (TDD)
+       +---> Implement to pass tests
+       +---> Verify: typecheck + tests + build
+       +---> Commit
+       |
+       v
+  +---------------------+
+  | /merge-ready        |
+  +---------------------+
+       |
+       +---> Code Review
+       +---> Security Audit
+       +---> Build Verification
+       +---> E2E Tests
+       +---> Documentation Check
+       |
+       v
+  MERGE READY
 ```
 
 ### The Pipeline In Detail
