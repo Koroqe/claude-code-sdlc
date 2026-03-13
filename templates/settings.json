@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit*)",
+      "Edit(.claude/scratchpad.md)",
+      "Write(.claude/scratchpad.md)"
+    ]
+  }
+}
