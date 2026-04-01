@@ -26,6 +26,12 @@ If scratchpad is stale:
 - Log recent commits and changes
 - Revise next steps based on progress
 
+If scratchpad exceeds 100 lines:
+- Move completed slices from `## Plan` to `## Archive` (section at the bottom)
+- Keep only the current and next 2 slices in `## Plan`
+- Keep only the last 3 entries in `## Completed`
+- This prevents the scratchpad itself from consuming excessive context
+
 ### 4. Summarize Context
 Provide concise summary of where we are.
 

@@ -61,7 +61,7 @@ WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
   agents/          12 specialized agent prompts
   commands/        5 SDLC pipeline commands
-  rules/           3 process rules
+  rules/           4 process rules
 
 WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
@@ -181,7 +181,7 @@ install_user_config() {
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (12 files — specialized agent prompts)"
   echo "    commands/ (5 files — SDLC pipeline commands)"
-  echo "    rules/   (3 files — process rules)"
+  echo "    rules/   (4 files — process rules)"
   echo ""
 
   if ! confirm "Proceed with installation?"; then

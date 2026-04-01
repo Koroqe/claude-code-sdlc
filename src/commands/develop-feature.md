@@ -23,7 +23,7 @@ Loop: follow the `/implement-slice` workflow for each slice until all slices are
 
 ### Phase 2.5: Code Cleanup (if 4+ slices were implemented)
 Delegate to `refactor-cleaner` agent to review the accumulated changes:
-- Remove dead code from iteration
+- **Step 0**: Remove dead code, unused imports, and debug logs first — verify typecheck passes on the clean baseline before proceeding
 - Consolidate duplicated patterns across slices
 - Improve type safety where obvious
 Then commit cleanup as a single `chore(core): clean up <feature> implementation` commit.

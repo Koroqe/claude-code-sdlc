@@ -25,9 +25,11 @@ Delegate to `test-writer` agent:
 - Tests should FAIL initially (no implementation yet)
 
 ### 3. Implement Code
+- Before editing each file: re-read it from disk (do NOT rely on earlier in-context reads — context compaction may have made them stale)
 - Make minimal changes to pass the tests
 - Follow the project structure as defined in CLAUDE.md
 - Keep route handlers thin, business logic in services/data layer
+- If this slice edits 4+ files: run the project's typecheck command after every 3 file edits before continuing (per error-recovery rules)
 
 ### 4. Verify
 Delegate to `build-runner` agent:

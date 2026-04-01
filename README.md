@@ -213,10 +213,11 @@ The installer adds files to `~/.claude/` (user-level, applies to all projects):
     develop-feature.md
     implement-slice.md
     merge-ready.md
-  rules/                 # 3 process rules
+  rules/                 # 4 process rules
     error-recovery.md
     git.md
     scratchpad.md
+    tool-limitations.md
 ```
 
 ---
