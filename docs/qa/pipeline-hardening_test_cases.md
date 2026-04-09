@@ -14,7 +14,7 @@
 |---|----------|-----------|---------------|-------|-----------------|
 | 1.1.1 | UC-1 | `src/agents/verifier.md` exists on disk | Implementation complete | Glob for `src/agents/verifier.md` | File exists and is non-empty |
 | 1.1.2 | UC-1 | `verifier.md` has valid YAML frontmatter with all required fields | `src/agents/verifier.md` exists | Read the file; parse the YAML block between `---` delimiters | Frontmatter contains `name: verifier`, `description:` (non-empty string), `tools:` (array), and `model:` field |
-| 1.1.3 | UC-1 | `verifier.md` frontmatter `model` field is set to `sonnet` | `src/agents/verifier.md` exists | Read frontmatter `model` value | `model: sonnet` (per NFR-4: consistent with verification agent cost tier) |
+| 1.1.3 | UC-1 | `verifier.md` frontmatter `model` field is set to `opus` | `src/agents/verifier.md` exists | Read frontmatter `model` value | `model: opus` (per NFR-4 as amended by architecture review: consistent with all existing agents) |
 | 1.1.4 | UC-1 | `verifier.md` frontmatter `tools` includes Read, Glob, Grep | `src/agents/verifier.md` exists | Read frontmatter `tools` array | Tools array includes at minimum `Read`, `Glob`, `Grep` (needed for file existence checks, stub scanning, wiring verification) |
 
 ### 1.2 Verifier Agent Content -- Four Verification Levels
