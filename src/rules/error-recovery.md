@@ -82,3 +82,31 @@ When a slice requires editing 4 or more files:
 For slices touching 3 or fewer files: end-of-slice verification is sufficient.
 
 Deviation rules apply identically to errors found during mid-slice verification.
+
+## Parallel Wave Execution
+
+When multiple slices execute in parallel (same wave, different subagents):
+
+### Independent Retry Budgets
+- Each subagent has its own 3-retry budget, tracked independently
+- One subagent exhausting its retries does NOT affect siblings
+- Deviation rules (1-4) apply identically within each subagent
+- Mid-slice verification applies identically within each subagent
+
+### Failure Isolation
+- A failing subagent does NOT cause other subagents in the wave to stop — they continue independently
+- File conflicts cannot occur because wave assignment guarantees exclusive file ownership per wave
+- Each subagent commits only its own files — successful commits from siblings are preserved, never rolled back
+
+### Post-Wave Result Collection
+After all subagents in a wave complete, the orchestrator collects results and takes action:
+
+- **All succeeded** → update scratchpad, proceed to next wave
+- **Some failed** → report failures with slice numbers, error categories (per deviation rules), and retry counts. Present escalation options:
+  1. **Retry** — re-run failed slice(s) only with fresh retry budget
+  2. **Continue** — proceed to next wave, address failures later
+  3. **Abort** — stop implementation, report as blocker
+- **All failed** → report as blocker, stop and ask user
+
+### Rule 4 in Parallel Mode
+When a subagent encounters a Rule 4 escalation (architectural decision needed), it returns the escalation context to the orchestrator (decision needed, options, tradeoffs). The orchestrator presents it during post-wave result collection — the decision is not made mid-wave.
