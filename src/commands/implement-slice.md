@@ -13,6 +13,18 @@ Implement only the next smallest slice from the plan using TDD.
 ## TDD Implementation Flow
 
 ### 1. Identify the Slice
+
+Read the current slice from the implementation plan. Two formats are supported:
+
+**Executable format** (preferred — when the slice has `Files:`, `Changes:`, `Verify:`, `Done when:` fields):
+- Use the `Files:` list directly — these are the exact files to create/modify
+- Use the `Changes:` descriptions as implementation guidance
+- Use the `Verify:` commands in step 4
+- Use the `Done when:` condition to confirm completion
+- List the use-case scenarios this slice covers (from `Use cases:` field)
+- Re-read each file from the `Files:` list before modifying
+
+**Legacy format** (fallback — when the slice is prose without structured fields):
 - Restate the next slice in 1 sentence
 - List the use-case scenarios this slice covers (UC-X.Y, UC-X-A, etc.)
 - Read existing files that will be modified
@@ -32,8 +44,14 @@ Delegate to `test-writer` agent:
 - If this slice edits 4+ files: run the project's typecheck command after every 3 file edits before continuing (per error-recovery rules)
 
 ### 4. Verify
-Delegate to `build-runner` agent:
-- Run the project's typecheck, test, and build commands (from CLAUDE.md)
+
+**If the slice has a `Verify:` field:** run the exact command(s) from that field first. Then delegate to `build-runner` for full verification (typecheck, tests, build).
+
+**If the slice has a `Done when:` field:** after verification passes, confirm the done-condition is satisfied (e.g., run the grep, check the endpoint, verify the file exists). If the done-condition is not met, the slice is not complete — investigate and fix.
+
+**If the slice has a `Verify:` field with "Manual verification:":** report the check instructions in the output so the developer can verify manually.
+
+**Fallback (no structured fields):** delegate to `build-runner` agent to run the project's typecheck, test, and build commands (from CLAUDE.md).
 
 ### 5. Commit
 - `git add` specific changed files (not `git add -A`)
