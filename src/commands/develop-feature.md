@@ -14,12 +14,49 @@ After the plan is created by the Tech Lead:
 - **Security Engineer** (security-auditor) reviews slices touching auth, financial data, or external APIs — flags security requirements
 - Incorporate review feedback into slice implementation notes in the scratchpad
 
-### Phase 2: Implement All Slices
-Loop: follow the `/implement-slice` workflow for each slice until all slices are complete.
-- Read `.claude/scratchpad.md` between slices to identify the next one
-- Each slice follows TDD: tests first → implement → verify → commit → update scratchpad
-- Each slice references which use-case scenarios it covers
-- Continue looping until all slices show DONE in the scratchpad
+### Phase 2: Implement All Slices (Wave-Aware)
+
+Read `.claude/scratchpad.md` to identify the current wave and its pending slices. Process waves in order (Wave 1 → Wave 2 → ... → Wave N).
+
+**Single-slice wave (or no `Wave:` fields in plan):**
+Follow the `/implement-slice` workflow directly — identical to current sequential behavior.
+
+**Multi-slice wave (2+ pending slices in same wave):**
+Spawn parallel subagents — one Agent tool call per slice in a single message:
+
+```
+For each pending slice in the current wave, spawn an Agent with this prompt:
+
+"You are implementing Slice [N]: [description].
+Follow the /implement-slice TDD workflow for this slice ONLY.
+
+Slice specification:
+- Wave: [W] (sibling slices: [list])
+- Files: [files]
+- Changes: [changes]
+- Verify: [verify command]
+- Done when: [condition]
+
+CRITICAL RULES FOR PARALLEL EXECUTION:
+1. Do NOT write to .claude/scratchpad.md — the orchestrator handles scratchpad updates
+2. Do NOT auto-continue to the next slice — return to the orchestrator after committing
+3. Chain git commands: git add <files> && git commit -m '...' (single command to prevent staging conflicts)
+4. Read the project's CLAUDE.md at .claude/CLAUDE.md for conventions
+
+Report your result: PASS (with commit hash) or FAIL (with error details)."
+```
+
+After all subagents complete:
+1. **Collect results** — which slices succeeded (commit hashes), which failed (errors)
+2. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
+3. **Handle failures** (per error-recovery parallel wave rules):
+   - All succeeded → proceed to next wave
+   - Some failed → keep successful sibling commits (independent files), report failures, ask user: retry / continue / abort
+   - All failed → report as blocker, stop
+
+**Continue until all waves show complete in the scratchpad.**
+
+**Backward compatibility:** When slices have no `Wave:` fields, treat each slice as its own wave — sequential execution, identical to current behavior.
 
 ### Phase 2.5: Code Cleanup (if 4+ slices were implemented)
 Delegate to `refactor-cleaner` agent to review the accumulated changes:
