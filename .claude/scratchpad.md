@@ -1,19 +1,33 @@
-## Feature: Pipeline Hardening — Verification, Deviation Rules, Executable Plans
-## Branch: feat/pipeline-hardening
-## Status: complete — ready for quality gates
+## Feature: Execution Waves — Parallel Slice Implementation
+## Branch: feat/execution-waves
+## Status: implementing wave 1 slice 1/9
 
 ## Plan
-1. [x] Slice 1: Create verifier agent (`src/agents/verifier.md`) — a87b903
-2. [x] Slice 2: Augment error recovery with deviation rules (`src/rules/error-recovery.md`) — 4271291
-3. [x] Slice 3: Update planner with executable plan format (`src/agents/planner.md`) — 596acd2
-4. [x] Slice 4: Update implement-slice for executable fields (`src/commands/implement-slice.md`) — ef083ad
-5. [x] Slice 5: Add scope reduction detection to Plan Critic (`src/claude.md`) — f4c297f
-6. [x] Slice 6: Wire verifier into merge-ready + agent table (`src/commands/merge-ready.md`, `src/claude.md`) — 1759ce4
-7. [x] Slice 7: Update README.md (counts, table, diagram) — 221040b
-8. [x] Slice 8: Update install.sh agent count references — 6ba367e
+
+### Wave 1
+1. [ ] Slice 1: Planner — Wave field + Wave Assignment algorithm (`src/agents/planner.md`)
+2. [ ] Slice 2: Scratchpad rules — wave-grouped format (`src/rules/scratchpad.md`)
+3. [ ] Slice 3: Error recovery — Parallel Wave Execution section (`src/rules/error-recovery.md`)
+
+### Wave 2
+4. [ ] Slice 4: develop-feature — Wave-Aware Phase 2 orchestration (`src/commands/develop-feature.md`) [architect pre-review]
+5. [ ] Slice 5: implement-slice — wave context + auto-continue suppression (`src/commands/implement-slice.md`)
+
+### Wave 3
+6. [ ] Slice 6: bootstrap-feature — wave-grouped scratchpad init (`src/commands/bootstrap-feature.md`)
+7. [ ] Slice 7: Plan Critic — Wave Assignment Validation (`src/claude.md`)
+8. [ ] Slice 8: context-refresh — wave-grouped progress (`src/commands/context-refresh.md`)
+
+### Wave 4
+9. [ ] Slice 9: README + install.sh — documentation updates
+
+## Architecture Review Notes
+- Auto-Continue must be suppressed in parallel subagent mode
+- develop-feature Phase 2 is highest-risk slice — needs architect pre-review
+- Git: subagents must chain `git add && git commit` as single command
+- Scratchpad: orchestrator-only writes during parallel waves
+- Wave computation: Plan Critic validates as safety net
 
 ## Completed
-All 8 slices implemented and committed.
 
 ## Blockers
-None.
