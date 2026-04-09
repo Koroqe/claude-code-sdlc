@@ -141,6 +141,16 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Do NOT flag technical identifiers in file paths (e.g., "v1" in `src/api/v1/routes.ts`)
 > - Do NOT flag features that the PRD explicitly marks as phased, deferred, or future scope
 >
+> **Wave Assignment Validation (if any slices have `Wave:` fields):**
+> - Skip entirely if no slices have `Wave:` fields (legacy plan — note in VERIFIED)
+> - If ANY slice has a `Wave:` field, ALL slices must have one — mixed is MAJOR
+> - Wave numbers must be contiguous 1-indexed integers (1, 2, 3...) with no gaps — non-contiguous is MAJOR
+> - For each wave: collect `Files:` lists of all slices in that wave and verify zero intersection. Any shared file within a wave = CRITICAL (parallel execution would cause file conflicts). Include the specific file path and slice numbers in the finding
+> - Check dependency ordering: if slice A's `Done when:` references output created by slice B, A must be in a later wave than B — violation is CRITICAL
+> - The same file appearing across different waves is valid (sequential execution between waves)
+> - Single-slice waves are valid — not every slice can parallelize
+> - Note case-sensitivity: on case-insensitive filesystems, `src/Auth.ts` and `src/auth.ts` are the same file
+>
 > Return ONLY this structure:
 >
 > FINDINGS:
