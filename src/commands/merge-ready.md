@@ -42,13 +42,22 @@ Delegate to `e2e-runner` agent:
 - [ ] Error flows tested
 - [ ] Data flow chains work end-to-end
 
-## Gate 6: Documentation Accuracy
+## Gate 6: Goal-Backward Verification
+Delegate to `verifier` agent:
+- [ ] Level 1 — File Existence: all planned files exist on disk
+- [ ] Level 2 — No Stubs/Placeholders: no TODO/FIXME/placeholder markers in production code
+- [ ] Level 3 — Wiring: exports imported, routes registered, components rendered, middleware applied
+- [ ] Level 4 — Data Flow (advisory): real data paths connected end-to-end
+
+Note: Level 4 failures produce WARN, not FAIL — they are advisory and do not block merge.
+
+## Gate 7: Documentation Accuracy
 Delegate to `doc-updater` agent:
 - [ ] `CLAUDE.md` is accurate if structure/commands/env vars changed
 - [ ] PRD section matches implementation
 - [ ] Use cases match actual behavior
 
-## Gate 7: UI/UX (if user-facing changes)
+## Gate 8: UI/UX (if user-facing changes)
 - [ ] Visual consistency with project's design system
 - [ ] All component states (loading, error, empty, success)
 - [ ] Responsive behavior
@@ -67,6 +76,7 @@ Delegate to `doc-updater` agent:
 | Security Audit | PASS/FAIL | |
 | Build Verification | PASS/FAIL | |
 | E2E Tests | PASS/FAIL/N/A | |
+| Goal-Backward Verification | PASS/FAIL/WARN | WARN = Level 4 advisory only |
 | Documentation Accuracy | PASS/FAIL | |
 | UI/UX | PASS/FAIL/N/A | |
 

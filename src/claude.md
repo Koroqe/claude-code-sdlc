@@ -20,6 +20,7 @@ This workflow mirrors a professional software development team:
 | QA Engineer | `e2e-runner` | E2E tests from use-case scenarios |
 | Code Reviewer | `code-reviewer` | Code quality and standards |
 | DevOps | `build-runner` | Typecheck, tests, build verification |
+| Verification Engineer | `verifier` | Goal-backward integration verification (wiring, data flow, stub detection) |
 | Tech Writer | `doc-updater` | Documentation accuracy |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
 
