@@ -7,8 +7,8 @@ Rebuild context from scratchpad to maintain clarity during long sessions.
 ### 1. Read Scratchpad
 Read `.claude/scratchpad.md` and extract:
 - Feature name and branch (`## Feature:`, `## Branch:`)
-- Current status (`## Status:` — idle/bootstrapping/implementing/quality-gates/complete/blocked)
-- Plan progress (which slices are DONE vs IN PROGRESS vs pending)
+- Current status (`## Status:` — idle/bootstrapping/implementing wave W slice N/M/implementing slice N/M/quality-gates/complete/blocked)
+- Plan progress by wave (if `### Wave N` subheadings exist): which waves are complete, which wave is current, per-slice status within the current wave. If no wave subheadings, extract flat slice progress as before
 - Any blockers (`## Blockers`)
 - Recent work from `## Completed` section
 
@@ -27,8 +27,8 @@ If scratchpad is stale:
 - Revise next steps based on progress
 
 If scratchpad exceeds 100 lines:
-- Move completed slices from `## Plan` to `## Archive` (section at the bottom)
-- Keep only the current and next 2 slices in `## Plan`
+- Move completed waves (all slices DONE) from `## Plan` to `## Archive` as a unit — keep the `### Wave N` block together. If no wave subheadings, move completed slices individually
+- Keep only the current wave and next wave in `## Plan`
 - Keep only the last 3 entries in `## Completed`
 - This prevents the scratchpad itself from consuming excessive context
 
@@ -48,7 +48,7 @@ Based on context health:
 Context Summary:
 - Goal: [current goal]
 - Branch: [current git branch]
-- Progress: [what's done]
+- Progress: [what's done — e.g., "Wave 1 complete (3/3), Wave 2 in progress (1/2)" or flat "5/8 slices done"]
 - Next: [top 3 items]
 
 Status: [Clean/Noisy/Stale/Overwhelming]
