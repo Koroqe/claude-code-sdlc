@@ -57,8 +57,8 @@ Delegate to `planner` agent:
 ### Step 7: Initialize Scratchpad
 Update `.claude/scratchpad.md` with the full feature context:
 - Feature name and branch
-- Status: "implementing slice 1/N"
-- Full plan with all slices listed as "pending"
+- Status: "implementing wave 1 slice 1/N" (when plan has `Wave:` fields) or "implementing slice 1/N" (when no wave assignments)
+- Full plan with slices grouped by wave: each wave as a `### Wave N` subheading with its slices listed as "pending". When plan has no `Wave:` fields, list slices as a flat numbered list under `### Wave 1 (sequential)`
 - Empty blockers section
 
 This is CRITICAL for surviving context compaction during long sessions.
@@ -86,9 +86,14 @@ This is CRITICAL for surviving context compaction during long sessions.
 - Total test cases: [count]
 - Use-case coverage: [all UC-X mapped / gaps]
 
-## Plan (5-9 slices)
+## Plan (5-9 slices across N waves)
+### Wave 1
 1. [slice description] — covers UC-X.Y
-2. ...
+2. [slice description] — covers UC-X.Z
+
+### Wave 2
+3. [slice description] — covers UC-X.W
+...
 
 ## Acceptance Criteria
 - [verifiable condition]
