@@ -6,7 +6,11 @@ Implement only the next smallest slice from the plan using TDD.
 
 1. Confirm you are NOT on `main` — must be on a feature branch (`feat/*` or `fix/*`)
 2. Confirm `git status` is clean (or explain why not)
-3. Confirm these documentation files exist:
+3. **Parallel subagent mode:** when running as a subagent within a parallel wave (wave context provided in spawn prompt), the following rules apply for the entire execution:
+   - Do NOT write to `.claude/scratchpad.md` — the orchestrator handles scratchpad updates
+   - Do NOT auto-continue to the next slice — return to the orchestrator after committing
+   - Chain git commands: `git add <files> && git commit -m '...'` as a single Bash command to prevent staging conflicts with sibling subagents
+4. Confirm these documentation files exist:
    - `docs/qa/<feature>_test_cases.md` — if not, delegate to `qa-planner` first
    - `docs/use-cases/<feature>_use_cases.md` — if not, delegate to `ba-analyst` first
 
@@ -60,7 +64,9 @@ Delegate to `test-writer` agent:
 - Scopes: `api | ui | db | auth | core | infra`
 
 ### 6. Update Scratchpad
-Update `.claude/scratchpad.md` with:
+**Skip this step when running as a parallel subagent** (wave context provided in spawn prompt). The orchestrator handles scratchpad updates after collecting all wave results.
+
+**When running standalone** (no wave context), update `.claude/scratchpad.md` with:
 - What changed
 - Commit hash + message
 - Use cases covered by this slice
@@ -77,6 +83,7 @@ Update `.claude/scratchpad.md` with:
 
 ```
 ## Slice: [description]
+### Wave: [N — slice X of Y in this wave] (or "standalone — no wave context")
 
 ### Use Cases Covered
 - UC-X.Y: [scenario name]
@@ -103,7 +110,9 @@ Update `.claude/scratchpad.md` with:
 
 ## Auto-Continue
 
-After committing this slice, if there are remaining slices in the plan:
+**When running as a parallel subagent** (wave context provided): do NOT auto-continue. Return your result (PASS with commit hash, or FAIL with error details) to the orchestrator. Wave progression is managed by develop-feature.
+
+**When running standalone** (no wave context), after committing this slice, if there are remaining slices in the plan:
 - Immediately proceed to the next slice
 - Do NOT wait for user input
 - Read `.claude/scratchpad.md` to identify the next slice
