@@ -125,7 +125,7 @@ Every feature flows through a structured pipeline:
 | **Plan** | Explore codebase, design approach, write plan, critic review | You + Claude |
 | **Bootstrap** | PRD, use cases, architecture review, QA test cases, implementation plan | 5 agents |
 | **Implement** | TDD slices: tests first, implement, verify, commit | 2 agents per slice |
-| **Quality Gates** | Code review, security audit, build, E2E tests, docs check | 5 agents |
+| **Quality Gates** | Code review, security audit, build, E2E tests, goal-backward verification, docs check | 6 agents |
 
 ---
 
