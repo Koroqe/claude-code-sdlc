@@ -28,9 +28,17 @@ You plan new features by breaking them into small, testable implementation slice
    - QA test cases: `docs/qa/<feature>_test_cases.md` — [test count]
    - Architecture review: [PASS/FAIL verdict]
 
-2. **Implementation plan** (5-9 slices): Each slice should be independently testable and committable
-   - Each slice lists which use-case scenarios it implements (UC-X.Y)
-   - Flag slices that need architect or security pre-review (auth, data, external APIs)
+2. **Implementation plan** (5-9 slices): Each slice must be independently testable and committable. Use the executable format below for every slice:
+
+   ```
+   ### Slice N: [short description]
+   - **Use cases:** UC-X.Y, UC-X-A1, ...
+   - **Files:** [exact paths — verify existing paths via Glob; mark new files with `[new]`]
+   - **Changes:** [specific changes per file — what to add/modify, not just "implement X"]
+   - **Verify:** [exact shell command(s) to confirm the slice works, e.g., `npm run typecheck && npm test -- --grep "feature"`]
+   - **Done when:** [testable boolean condition, e.g., "`POST /api/users` with invalid email returns 400"]
+   - **Pre-review:** [architect / security / none]
+   ```
 
 3. **Acceptance criteria**: Bullet list of verifiable "done" conditions
 
@@ -49,3 +57,6 @@ You plan new features by breaking them into small, testable implementation slice
 - Do NOT implement any code — only plan
 - Every slice should reference the use-case scenarios it covers
 - Flag slices touching auth, financial data, or external APIs for security pre-review
+- `Done when:` conditions MUST be testable boolean statements — not vague descriptions like "works correctly" or "is implemented"
+- For markdown-only or non-server projects, `Done when:` can reference file existence checks, Grep content matches, or structural validation
+- Verify existing file paths via Glob during planning — if a file has been moved or deleted, update the plan to reflect actual state
