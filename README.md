@@ -31,6 +31,7 @@ Claude Code out of the box:
 - **Context integrity** — mandatory re-read before edit, scratchpad persistence, chunked reads for large files
 - **Rename safety** — 7-step protocol covering barrel files, dynamic imports, re-exports, typecheck verification
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
+- **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
 - **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
 
 ---
@@ -74,12 +75,11 @@ PLAN MODE -----> Explore codebase, design approach, Plan Critic review
   - Tech Lead ............ creates executable plan (5-9 slices)
      |
      v
-/implement-slice (loops per slice)
-  - Re-read files from disk
-  - Write tests first (TDD)
-  - Implement to pass tests
-  - Verify: typecheck + tests + build + done-condition
-  - Commit
+/develop-feature Phase 2 (wave-aware)
+  - Single-slice wave: TDD as before
+  - Multi-slice wave: spawn parallel subagents (one per slice)
+  - Wait for wave completion -> next wave
+  - Each slice: re-read files, TDD, verify, commit
      |
      v
 /merge-ready
@@ -128,7 +128,7 @@ MERGE READY
 Claude automatically:
 1. Plans -> explores codebase -> critic review
 2. Bootstraps -> PRD, use cases, architecture, QA, executable plan
-3. Implements -> TDD slice loop with deviation rules
+3. Implements -> TDD slices in parallel waves (independent slices run simultaneously)
 4. Verifies -> 9 quality gates including goal-backward verification
 ```
 
@@ -149,6 +149,7 @@ Claude automatically:
 | Vague plans cause implementation drift | Executable format: `Files:`, `Changes:`, `Verify:`, `Done when:` per slice |
 | Code compiles but feature is disconnected | 4-level goal-backward verification: existence, stubs, wiring, data flow |
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
+| Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
 
 ---
 
