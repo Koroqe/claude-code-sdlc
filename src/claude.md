@@ -132,6 +132,14 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Race conditions considered for concurrent operations
 > - Rollback strategy exists for multi-step operations
 >
+> **Scope Reduction Detection:**
+> - Scan all slice descriptions, done-conditions, and implementation notes for hedging language that silently downgrades scope
+> - Hedging terms (non-exhaustive): "v1", "basic version", "simplified", "placeholder", "for now", "future enhancement", "out of scope for now", "minimal implementation", "stubbed out", "hardcoded for now", "bare minimum", "just enough to", "temporary solution", "will revisit"
+> - When hedging language is found AND the corresponding feature is marked as in-scope in the PRD, flag as MAJOR with: the verbatim hedging phrase, the slice/field where it appears, and the PRD requirement it violates
+> - Do NOT flag hedging in risk assessments, mitigation strategies, or dependency notes — those sections legitimately use cautious language
+> - Do NOT flag technical identifiers in file paths (e.g., "v1" in `src/api/v1/routes.ts`)
+> - Do NOT flag features that the PRD explicitly marks as phased, deferred, or future scope
+>
 > Return ONLY this structure:
 >
 > FINDINGS:
