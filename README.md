@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-12 specialized AI agents. Documentation-first pipeline. TDD enforcement. Quality gates before every merge. Hardened against Claude Code's known internal limitations.
+13 specialized AI agents. Documentation-first pipeline. TDD enforcement. Quality gates before every merge. Hardened against Claude Code's known internal limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.1.0-green.svg)]()
@@ -23,7 +23,7 @@ Claude Code is powerful, but out of the box it has habits that burn you on real 
 
 ## The Solution
 
-This project fixes all of that. One install, and Claude Code becomes a **12-agent development team** with a structured pipeline, mandatory documentation phases, TDD enforcement, quality gates, and built-in defenses against its own mechanical limitations.
+This project fixes all of that. One install, and Claude Code becomes a **13-agent development team** with a structured pipeline, mandatory documentation phases, TDD enforcement, quality gates, and built-in defenses against its own mechanical limitations.
 
 ---
 
@@ -111,6 +111,7 @@ Every feature flows through a structured pipeline:
        +---> Security Audit
        +---> Build Verification
        +---> E2E Tests
+       +---> Goal-Backward Verification
        +---> Documentation Check
        |
        v
@@ -130,7 +131,7 @@ Every feature flows through a structured pipeline:
 
 ## The Agency
 
-12 specialized agents, each with a clear role:
+13 specialized agents, each with a clear role:
 
 | Role | Agent | What It Does |
 |------|-------|-------------|
@@ -144,6 +145,7 @@ Every feature flows through a structured pipeline:
 | QA Engineer | `e2e-runner` | Creates and runs end-to-end tests from use cases |
 | Code Reviewer | `code-reviewer` | Reviews for quality, security, and architecture compliance |
 | DevOps | `build-runner` | Runs typecheck, tests, and build verification |
+| Verification Engineer | `verifier` | Goal-backward integration checks — wiring, data flow, stub detection |
 | Tech Writer | `doc-updater` | Keeps documentation accurate after changes |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup with rename safety and Step 0 protocol |
 
@@ -193,7 +195,7 @@ These rules run automatically on every session — no manual configuration neede
 ### Edit Safety
 - **Mid-slice typecheck**: When a slice edits 4+ files, typecheck runs after every 3 edits to catch cascading errors early
 - **End-of-slice verification**: Every slice runs typecheck + tests + build before commit — the agent cannot report success without passing verification
-- **Error recovery**: Autonomous fix-and-retry up to 3 times before escalating to the user
+- **Deviation rules**: Graduated error recovery — auto-fix typos (free), auto-add validation (free), auto-resolve dependency issues (costs retry), escalate architectural decisions (stop)
 
 ### Refactor Safety
 - **Step 0 cleanup**: Before any refactor touching 5+ files, dead code is removed and committed separately to establish a clean baseline
@@ -245,7 +247,7 @@ The installer adds files to `~/.claude/` (user-level, applies to all projects):
 ```
 ~/.claude/
   claude.md              # Main workflow instructions
-  agents/                # 12 agent prompt files
+  agents/                # 13 agent prompt files
     architect.md
     ba-analyst.md
     build-runner.md
@@ -258,6 +260,7 @@ The installer adds files to `~/.claude/` (user-level, applies to all projects):
     refactor-cleaner.md
     security-auditor.md
     test-writer.md
+    verifier.md
   commands/              # 5 pipeline commands
     bootstrap-feature.md
     context-refresh.md
@@ -329,6 +332,12 @@ The `.claude/scratchpad.md` file survives context compaction during long session
 
 ### Use Case-Driven
 The Business Analyst creates comprehensive use-case documents that drive both QA test cases and E2E tests. Every test traces back to a documented scenario.
+
+### Goal-Backward Verification
+After implementation, the `verifier` agent checks 4 levels: file existence, no stubs/placeholders, wiring (exports imported, routes registered), and data flow tracing. Catches the case where code compiles and tests pass but the feature is structurally disconnected.
+
+### Executable Plans
+Each implementation slice includes `Files:`, `Changes:`, `Verify:`, and `Done when:` fields — eliminating interpretation drift between planning and implementation. The implementing agent reads these fields directly instead of re-interpreting prose.
 
 ### Tool Limitation Awareness
 Rules that account for Claude Code's internal constraints — file read caps, search truncation, text-only grep — so agents never silently work with incomplete data.
