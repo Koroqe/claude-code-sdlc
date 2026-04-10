@@ -5,7 +5,7 @@
 13 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.0.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
 
 ---
 
