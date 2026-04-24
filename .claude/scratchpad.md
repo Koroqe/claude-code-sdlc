@@ -1,40 +1,53 @@
 ## Feature: Product Changelog Maintenance (Iteration 1: Content Sync)
 ## Branch: feat/product-changelog
-## Status: quality-gates
+## Status: complete — MERGE READY
 
 ## Plan
 
 ### Wave 1 [COMPLETE]
-- [x] Slice 1: `templates/rules/changelog.md` [new] — downstream-scoped policy + sentinel doc — `8e7a9e8`
-- [x] Slice 2: `src/agents/changelog-writer.md` [new] — agent with self-check, commit mapping, idempotent diff, markdown output schema — `d27ff60`
-- [x] Slice 3: `install.sh` [edit] — `cp` in scaffold_project + 5 banner "13→14" + static awk self-skip verify — `4354ec2`
-- [x] Slice 4: `src/agents/prd-writer.md` [edit] — Changelog field + authoring constraints subsection — `120f9d2`
-- [x] Slice 5: 4 command files [edit] — pipeline hooks with SKIP-in-subagent guard + orchestrator-once-per-wave (all sizes) — `65a766f`
-- [x] Slice 6: `src/claude.md` [edit] — Release Scribe row in Agency Roles — `8432fc1`
-- [x] Slice 7: `README.md` [edit] — 13→14 tagline/heading + agent row + downstream CHANGELOG section — `25b4222`
-- [x] Slice 8: `templates/CLAUDE.md` [edit] — Version source placeholder (dead metadata for iteration 2) — `a57929c`
+- [x] Slice 1: `templates/rules/changelog.md` [new] — `8e7a9e8`
+- [x] Slice 2: `src/agents/changelog-writer.md` [new] — `d27ff60`
+- [x] Slice 3: `install.sh` [edit] — `4354ec2`
+- [x] Slice 4: `src/agents/prd-writer.md` [edit] — `120f9d2`
+- [x] Slice 5: 4 command files [edit] — `65a766f`
+- [x] Slice 6: `src/claude.md` [edit] — `8432fc1`
+- [x] Slice 7: `README.md` [edit] — `25b4222`
+- [x] Slice 8: `templates/CLAUDE.md` [edit] — `a57929c`
 
 ### Post-wave fixes
-- [x] `d7d6f66` — rephrase "Version source:" literal in changelog-writer prohibition to avoid cross-slice grep collision (Rule 2 auto-add)
+- [x] `d7d6f66` — rephrase "Version source:" literal in changelog-writer prohibition (Rule 2 auto-add)
+- [x] `5dcb545` — scratchpad Wave 1 complete marker
+- [x] `f413e4e` — code-review MINOR fixes (post-wave scope clarity in develop-feature.md + markdown-link semantics in changelog-writer.md)
+- [x] `1cd30e5` — QA file TBD resolutions per planner's structural pinnings
 
-## Post-wave verification (orchestrator)
+## Quality Gates
 
-- `bash -n install.sh`: syntax OK
-- Banner counts: 14 specialized=3, 14 AI agents=1, (14 files=1; all 13-counterparts=0
-- Merge-ready: exactly 9 gates (Gate 0-8), zero Gate 10
-- Agent file count: 14 (was 13)
-- awk function-body check: `templates/rules/changelog.md` line present in `scaffold_project()`, absent from `install_user_config()` — SDLC self-skip proven structurally
+| Gate | Status | Notes |
+|------|--------|-------|
+| 0. Git Hygiene | PASS | 13 commits on branch, clean tree, feat/product-changelog |
+| 1. Documentation Completeness | PASS | PRD §3, use cases (42 scenarios), QA (84 TCs) |
+| 2. Code Review | PASS | 3 MINOR findings, 2 auto-fixed |
+| 3. Security Audit | PASS | 0 CRITICAL/HIGH/MEDIUM; install.sh quoting, self-check first, no-network confirmed |
+| 4. Build Verification | PASS | install.sh syntax OK; 14/14 agents valid YAML frontmatter |
+| 5. E2E Tests | PASS | byte-for-byte install.sh simulation (sandbox blocked direct run) |
+| 6. Goal-Backward Verification | PASS | all 4 levels clean; 14 agent count consistent, 9 gates unchanged |
+| 7. Documentation Accuracy | PASS | TBD resolutions committed |
+| 8. UI/UX | N/A | markdown-only project, no UI surface |
 
-## Completed
+**Overall: MERGE READY**
 
-- Bootstrap: PRD section #3 (198 lines), use cases (42 scenarios), architect review (PASS + 5 [STRUCTURAL]), QA test cases (84 TCs), plan (8 slices / 1 wave), Plan Critic pass (3 CRITICAL + 5 MAJOR + 6 MINOR all addressed)
-- Wave 1: all 8 slices in parallel, zero failures, orchestrator fixed one sibling-contract violation (Slice 8 flagged Slice 2's literal "Version source:" — Rule 2 auto-add applied)
+## Summary
+
+- 11 feature commits + 2 chore commits on `feat/product-changelog` (13 total)
+- Files changed: 16 (+3134 / -33 lines)
+- New: `templates/rules/changelog.md`, `src/agents/changelog-writer.md`, `docs/use-cases/product-changelog_use_cases.md`, `docs/qa/product-changelog_test_cases.md`, `.claude/plan.md`
+- Agent count 13 → 14 propagated through README, src/claude.md, install.sh (5 banners)
+- Iteration 2 deferred: GitHub Releases automation + CI/CD verification role (tracked as Task #15 resource-manager-architect and Task #16 role-planner)
+
+## Next steps
+
+User decides: push branch + open PR, or continue to iteration 2 (GitHub Releases automation), or pick up queued features #4 (Resource Manager-Architect) / #5 (Role Planner).
 
 ## Blockers
 
 (none)
-
-## Next
-
-- `/merge-ready` quality gates: git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
-- Iteration 2 deferred: GitHub Releases automation + CI/CD verification role (tracked as queued features #4 and #5)
