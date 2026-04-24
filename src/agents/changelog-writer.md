@@ -184,6 +184,6 @@ This agent is strictly scoped to `[Unreleased]` maintenance in iteration 1. The 
 - create release-notes files
 - invoke any release-tagging command
 - invoke any remote release-publishing command
-- consume the `Version source:` field in `templates/CLAUDE.md`
+- consume the iteration-2 version-source metadata placeholder in `templates/CLAUDE.md` (the one-line `TODO` field reserved for semver automation)
 
 These capabilities are explicitly deferred to iteration 2 and MUST NOT leak into iteration-1 behavior.
