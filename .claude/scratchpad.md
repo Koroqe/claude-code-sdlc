@@ -1,52 +1,38 @@
-## Feature: Product Changelog Maintenance (Iteration 1: Content Sync)
-## Branch: feat/product-changelog
-## Status: complete — MERGE READY
+## Feature: Resource Manager-Architect (Iteration 1: Mandatory Pipeline Role)
+## Branch: feat/resource-manager-architect
+## Status: implementing wave 1 slice 1/6
 
 ## Plan
 
-### Wave 1 [COMPLETE]
-- [x] Slice 1: `templates/rules/changelog.md` [new] — `8e7a9e8`
-- [x] Slice 2: `src/agents/changelog-writer.md` [new] — `d27ff60`
-- [x] Slice 3: `install.sh` [edit] — `4354ec2`
-- [x] Slice 4: `src/agents/prd-writer.md` [edit] — `120f9d2`
-- [x] Slice 5: 4 command files [edit] — `65a766f`
-- [x] Slice 6: `src/claude.md` [edit] — `8432fc1`
-- [x] Slice 7: `README.md` [edit] — `25b4222`
-- [x] Slice 8: `templates/CLAUDE.md` [edit] — `a57929c`
+### Wave 1
+- [ ] Slice 1: `src/agents/resource-architect.md` [new] — agent with Authority/Output Boundaries, six categories, pinned markdown output format
+- [ ] Slice 2: `install.sh` — banner strings 14→15 in all 5 locations
 
-### Post-wave fixes
-- [x] `d7d6f66` — rephrase "Version source:" literal in changelog-writer prohibition (Rule 2 auto-add)
-- [x] `5dcb545` — scratchpad Wave 1 complete marker
-- [x] `f413e4e` — code-review MINOR fixes (post-wave scope clarity in develop-feature.md + markdown-link semantics in changelog-writer.md)
-- [x] `1cd30e5` — QA file TBD resolutions per planner's structural pinnings
+### Wave 2
+- [ ] Slice 3: `src/commands/bootstrap-feature.md` — insert Step 3.5 AFTER FAILS subsection, before Step 4
+- [ ] Slice 4: `src/agents/planner.md` — read/inline/MUST-delete `.claude/resources-pending.md`
 
-## Quality Gates
+### Wave 3
+- [ ] Slice 5: `src/claude.md` — Agency Roles row + Plan Critic bullet (single file; `src/CLAUDE.md` is case-alias to same inode 4432546)
+- [ ] Slice 6: `README.md` — tagline 14→15, "## The 15 Agents", agent row, feature section
 
-| Gate | Status | Notes |
-|------|--------|-------|
-| 0. Git Hygiene | PASS | 13 commits on branch, clean tree, feat/product-changelog |
-| 1. Documentation Completeness | PASS | PRD §3, use cases (42 scenarios), QA (84 TCs) |
-| 2. Code Review | PASS | 3 MINOR findings, 2 auto-fixed |
-| 3. Security Audit | PASS | 0 CRITICAL/HIGH/MEDIUM; install.sh quoting, self-check first, no-network confirmed |
-| 4. Build Verification | PASS | install.sh syntax OK; 14/14 agents valid YAML frontmatter |
-| 5. E2E Tests | PASS | byte-for-byte install.sh simulation (sandbox blocked direct run) |
-| 6. Goal-Backward Verification | PASS | all 4 levels clean; 14 agent count consistent, 9 gates unchanged |
-| 7. Documentation Accuracy | PASS | TBD resolutions committed |
-| 8. UI/UX | N/A | markdown-only project, no UI surface |
+## Structural decisions pinned
 
-**Overall: MERGE READY**
+1. Agent name: `resource-architect`; role title "Resource Manager-Architect"
+2. Output format: `## Recommended Resources` → summary → 6 `### <Category>` → each as `#### <Name>` with 5 bold-labeled fields. Empty categories show `(none)`
+3. MUST-level deletion wording in planner (no "may"/"should")
+4. Verdict forwarding: orchestrator inlines architect's PASS verdict into resource-architect spawn prompt
+5. Single file edit for Slice 5 (Plan Critic CRITICAL 1 — `src/CLAUDE.md` is case-alias, not mirror)
 
-## Summary
+## Plan Critic findings
 
-- 11 feature commits + 2 chore commits on `feat/product-changelog` (13 total)
-- Files changed: 16 (+3134 / -33 lines)
-- New: `templates/rules/changelog.md`, `src/agents/changelog-writer.md`, `docs/use-cases/product-changelog_use_cases.md`, `docs/qa/product-changelog_test_cases.md`, `.claude/plan.md`
-- Agent count 13 → 14 propagated through README, src/claude.md, install.sh (5 banners)
-- Iteration 2 deferred: GitHub Releases automation + CI/CD verification role (tracked as Task #15 resource-manager-architect and Task #16 role-planner)
+- 1 CRITICAL (mirror invariant was phantom — same inode verified) — addressed
+- 5 MAJOR (AC-5 traceability, permissive Verify in Slice 6, useless diff in Slice 5, Slice 3 insertion point, loose Slice 2 counts) — addressed
+- 4 MINOR (tightness, checklist state, debuggability, TC cross-refs) — 2 fixed, 2 documented in Review Notes
 
-## Next steps
+## Completed
 
-User decides: push branch + open PR, or continue to iteration 2 (GitHub Releases automation), or pick up queued features #4 (Resource Manager-Architect) / #5 (Role Planner).
+(bootstrap artifacts staged but not yet committed — message: `chore(core): add bootstrap documentation for resource-manager-architect`)
 
 ## Blockers
 

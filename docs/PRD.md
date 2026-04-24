@@ -558,3 +558,246 @@ Iteration 2 will, at minimum, cover the following areas:
 5. **Separation of concerns across the local and remote halves.** Iteration 2 splits cleanly into two halves: (a) the **local half**, performed by the pipeline at Gate 10 during `/merge-ready`, which computes the semver bump, renames `[Unreleased]` to `[X.Y.Z]` with a date stamp, creates the release-notes file, commits the result, and outputs the `git tag` and `git push` commands for the developer to run; and (b) the **remote half**, performed by the CI/CD workflow that the new role ensures exists, which fires on the tag push and creates the GitHub Release with the correct body. Iteration 1 does neither half — it only maintains `[Unreleased]` content sync.
 
 The exact role placement (new agent versus extension of an existing role), the CI/CD provider support matrix (GitHub Actions is the primary target for iteration 2; GitLab CI, CircleCI, and others are **TBD** and may be deferred to a later iteration), and the semver source-of-truth (whether to read from `templates/CLAUDE.md` `Version source:`, from `package.json`, from an explicit input, or from another location) are all explicitly deferred to iteration 2 planning and are NOT decided in iteration 1.
+
+---
+
+## 4. Resource Manager-Architect — Iteration 1: Mandatory Pipeline Role
+
+**Status:** [IN DEVELOPMENT]
+**Date:** 2026-04-24
+**Priority:** Medium
+**Related:** Section 1 (FR-3: Executable Plan Format — recommendations are inlined into `.claude/plan.md`), Section 3 (FR-3: PRD Changelog Field — this section includes the field per that contract)
+**Changelog:** Pipeline now recommends MCP tools, cloud resources, external APIs, third-party services, libraries, and hardware considerations at the start of each feature so setup needs are surfaced before implementation begins.
+
+### 4.1 Description
+
+Add a new mandatory agent `resource-architect` ("Resource Manager-Architect") to the global pipeline. The agent runs once per feature during `/bootstrap-feature` — immediately after the architecture review and before QA test case authoring — and produces a recommendation-only list of external resources the feature will likely need: MCP tools, cloud/compute, external APIs, third-party services, libraries/frameworks, and hardware. The agent writes its output to a temp file `.claude/resources-pending.md`; the `planner` agent then inlines that content as a top-level `## Recommended Resources` section at the top of `.claude/plan.md` (before `## Prerequisites verified`) and deletes the temp file.
+
+**Why:** The current pipeline assumes all external dependencies are already configured on the developer's machine. When a feature implicitly requires a new MCP server (e.g., Playwright for browser E2E), a cloud GPU (e.g., for model fine-tuning), or a third-party service (e.g., Sentry for error tracking), those needs surface ad-hoc during implementation — often mid-slice — and cause retries, context switches, or silent scope reduction. Adding a dedicated resource-recommendation step between architecture review and test planning puts the full list of external dependencies in front of the developer before any code is written, lets the architect's validated approach inform what resources to recommend, and lets the QA lead assume those resources exist when authoring test cases.
+
+**Audience:** The audience of the `## Recommended Resources` section in `.claude/plan.md` is the **developer running the SDLC pipeline** (internal developer-facing content). This is distinct from Section 3's `CHANGELOG.md`, which targets product owners and end users. The resource list is a working document that the developer reads once at bootstrap time and copies commands from; it is not preserved across features and is not surfaced to downstream users.
+
+**Scope boundary:** This section covers **Iteration 1: Mandatory Pipeline Role ONLY**. The agent is suggest-only — it does NOT install, configure, or modify any resource. Automatic installation, merge-ready re-check, cross-feature cost tracking, cloud-provider SDK integration, teardown recommendations, and cross-feature resource conflict detection are deferred. See section 4.8 "Out of Scope for Iteration 1".
+
+**Design decisions:**
+1. **Agent name and role title.** The agent file is `src/agents/resource-architect.md`. In the Agency Roles table, the role is titled "Resource Manager-Architect" and the agent column is `resource-architect`. The kebab-case name matches the existing `prd-writer` and `changelog-writer` pattern.
+2. **Permanent member of the global mandatory scope.** Unlike a future `role-planner` agent (which would generate optional feature-specific agents), `resource-architect` itself is a core pipeline agent installed by the default `install.sh` path and invoked in every bootstrap cycle for every feature. It is NOT feature-opt-in and NOT downstream-project-scoped. The total global agent count rises from 14 to 15.
+3. **Pipeline position: Step 3.5 of `/bootstrap-feature`.** The agent is invoked between Step 3 (Software Architect review) and Step 4 (QA Lead test cases). Architect first validates the technical approach; `resource-architect` then recommends resources informed by the architect's verdict; QA then writes test cases that can legitimately assume those resources exist (e.g., a browser-E2E test case can assume the Playwright MCP is available because it was recommended).
+4. **One-shot timing.** One invocation per bootstrap per feature. No re-check in `/merge-ready`, no continuous sync like `changelog-writer`, no re-run on subsequent slices. If the feature's resource needs change mid-implementation, that is out of scope for iteration 1 and is handled by the developer manually re-running the agent if desired.
+5. **Full resource scope, six categories.** The agent recommends across: (a) **MCP tools** (e.g., `playwright` for browser testing, `filesystem` for file ops, project-specific MCPs), (b) **Cloud/Compute** (AWS/GCP/Azure instances, GPUs for ML workloads, local dev containers, serverless runtimes), (c) **External APIs** (OpenAI, Anthropic, Stripe, third-party SaaS integrations), (d) **Third-party Services** (error tracking like Sentry, monitoring like Datadog, CDN, auth providers like Auth0), (e) **Libraries/Frameworks** (for green-field projects: choice of web framework, ORM, test runner, etc.), (f) **Hardware** (RAM/disk requirements, special hardware like USB debuggers for embedded work).
+6. **Suggest-only authority.** The agent's output is pure recommendation text — command snippets the user can copy-paste, rationale for each resource, cost/complexity flags. The user decides what to install. The agent MUST NOT modify `~/.claude/settings.json` or any Claude Code configuration, MUST NOT install MCP servers via `claude mcp add`, MUST NOT touch cloud credentials or `.env` files or any secrets store, MUST NOT run `npm install`/`pip install`/`brew install` or any package-manager command, and MUST NOT make network calls (same no-network constraint established by `changelog-writer` in Section 3 NFR-7).
+7. **Temp-file handoff to planner.** The agent writes to `.claude/resources-pending.md` at Step 3.5. At Step 5, the planner reads `.claude/resources-pending.md` (if present), inlines its content as a top-level `## Recommended Resources` section at the top of `.claude/plan.md` (before `## Prerequisites verified`), and deletes the temp file. This pattern keeps the agent stateless and lets the planner own final placement of the content in the plan.
+8. **Structured recommendation format.** Each recommendation includes six fields — Category, Name, Why, Install/Activate command or procedure, Cost/complexity flag (`trivial` / `moderate` / `expensive`), Reversibility (`easy` / `moderate` / `hard`). This is the internal developer's equivalent of the structured-field pattern established by Section 1 FR-3 for slices.
+9. **No self-check opt-out.** Unlike `changelog-writer` (which self-skips when `.claude/rules/changelog.md` is absent), `resource-architect` is globally mandatory and has no opt-out sentinel. It runs on every feature regardless of project configuration. Features with zero external resource needs receive an empty recommendation list with an explicit "no external resources required" note (not a no-op return).
+10. **Changelog field value.** The SDLC repo itself has no `.claude/rules/changelog.md` (per Section 3 design decision 1, the SDLC opts out of its own changelog maintenance), so `changelog-writer` will self-skip for this PRD section. The `Changelog:` field is still required per Section 3 FR-3.3 and is authored accordingly.
+
+### 4.2 User Story
+
+As a developer using the Claude Code SDLC pipeline, I want the pipeline to present a complete list of external resources my feature will need — MCP tools, cloud/compute, external APIs, third-party services, libraries, and hardware — along with install commands and cost/reversibility flags, before any code is written, so that I can provision everything once at the start of the feature instead of discovering missing dependencies mid-slice and retrying or silently descoping.
+
+### 4.3 Functional Requirements
+
+#### FR-1: Resource-Architect Agent Specification
+
+A new global agent that produces structured resource recommendations during bootstrap.
+
+1. **FR-1.1:** A new file `src/agents/resource-architect.md` MUST exist with frontmatter matching the existing agent format (`name: resource-architect`, `description`, `tools`, `model: opus` for consistency with Section 1 NFR-4).
+2. **FR-1.2:** The agent's prompt MUST document that it reads the following inputs in order: (a) the newly-written PRD section in `docs/PRD.md` for the current feature, (b) the use-cases file in `docs/use-cases/<feature>_use_cases.md`, (c) the architect's verdict (passed to the agent by `/bootstrap-feature` as context from Step 3), (d) the project's `CLAUDE.md` or equivalent context file for tech-stack awareness. The agent MUST NOT read `.claude/scratchpad.md` — at Step 3.5 the scratchpad's feature context is already known and the agent does not need implementation progress.
+3. **FR-1.3:** The agent MUST produce a structured recommendation list covering the six categories defined in FR-4.1. For each recommended resource, the output MUST include the six fields defined in FR-1.4. The agent MAY produce an empty list within a category when no resources from that category are needed (e.g., a pure-refactor feature may have empty Cloud/Compute and External API lists).
+4. **FR-1.4:** Each recommendation entry MUST include all six of the following fields:
+   - **Category:** exactly one of `MCP`, `Cloud/Compute`, `External API`, `Third-party Service`, `Library/Framework`, `Hardware`.
+   - **Name:** a concrete identifier (e.g., `Playwright MCP server`, `AWS EC2 t3.medium`, `Sentry SaaS`, `pytest`, `16 GB RAM minimum`).
+   - **Why:** a one-sentence rationale tied to a specific use case or PRD requirement, ideally referencing the PRD section and FR number (e.g., "FR-2.3 requires browser-based E2E — Playwright MCP enables the `e2e-runner` agent to drive a real browser").
+   - **Install/activate command or procedure:** the exact shell command when applicable (e.g., `claude mcp add playwright ...`); for credentials or manual steps, a short numbered checklist (e.g., "1. Create Sentry project, 2. Copy DSN, 3. Add `SENTRY_DSN` to `.env`").
+   - **Cost/complexity flag:** exactly one of `trivial` (free and no configuration), `moderate` (setup required, possibly small paid tier or local daemon), `expensive` (non-trivial dollars or operational burden).
+   - **Reversibility:** exactly one of `easy` (uninstall in one command, no persistent state), `moderate` (uninstall requires multiple steps but no external commitments), `hard` (persistent cloud resources, contracts, data migrations, domain names, etc.).
+5. **FR-1.5:** When the feature has NO external resource needs (e.g., a pure internal refactor that touches only existing files), the agent MUST emit an explicit "No external resources required" statement as the body of the output, NOT an empty file and NOT a no-op return. The explicit statement is required so downstream consumers (planner, human reader) can distinguish "considered and none needed" from "agent did not run".
+6. **FR-1.6:** The agent MUST output a short top-level summary above the per-category lists: total count of recommendations, count of `expensive` flags, count of `hard` reversibility flags. This lets the developer see the cost/commitment shape at a glance before reading the details.
+7. **FR-1.7:** When a category has zero recommendations but the feature is not a pure-internal refactor (i.e., other categories DO have recommendations), the agent MUST still list the category with the literal string `(none)` underneath. Omitting empty categories entirely is prohibited — the six categories always appear in the output for consistent human scanning.
+
+#### FR-2: Output File Contract (temp-file handoff)
+
+Define the contract for `.claude/resources-pending.md` — the temp file that carries the agent's output from Step 3.5 to Step 5.
+
+1. **FR-2.1:** The agent MUST write its structured output to `.claude/resources-pending.md` in the project CWD. The agent MUST NOT write to any other location, MUST NOT write directly to `.claude/plan.md`, and MUST NOT modify `docs/PRD.md` or any other file.
+2. **FR-2.2:** The temp file's content MUST be a self-contained markdown fragment starting with a top-level `## Recommended Resources` heading, followed by the summary line (per FR-1.6), followed by six subsection headings — one per category — each with its recommendations as per-resource blocks matching the FR-1.4 field schema. No frontmatter, no agent-meta commentary, no trailing "end of output" markers.
+3. **FR-2.3:** The temp file's lifecycle is: created by `resource-architect` at Step 3.5, read and inlined by `planner` at Step 5, deleted by `planner` after successful inlining. If the planner fails before deletion, the temp file remains on disk — the next bootstrap invocation for the same feature overwrites it, and `/merge-ready` does not check for its absence.
+4. **FR-2.4:** If `.claude/resources-pending.md` already exists when `resource-architect` runs (e.g., leftover from a previous aborted bootstrap), the agent MUST overwrite it without prompting. Stale content from a previous run MUST NOT be appended to or merged with the new content.
+5. **FR-2.5:** The `planner` agent prompt (`src/agents/planner.md`) MUST be updated to include a new step in its Process or Output Format section: "Read `.claude/resources-pending.md` if it exists. Inline its content verbatim (preserving all formatting) as the first top-level section of `.claude/plan.md`, placed immediately before `## Prerequisites verified`. After successful inlining, delete `.claude/resources-pending.md`. If the file does not exist, skip this step silently."
+6. **FR-2.6:** The inlined `## Recommended Resources` section in `.claude/plan.md` MUST appear at the very top of the plan file, before `## Prerequisites verified` and before the slice list. This places the resource list where the developer sees it first when opening the plan.
+
+#### FR-3: Pipeline Integration (bootstrap-feature Step 3.5 and planner update)
+
+Integrate the agent as a mandatory, non-skippable step of `/bootstrap-feature` and wire the planner to consume its output.
+
+1. **FR-3.1:** `src/commands/bootstrap-feature.md` MUST be updated to insert a new Step 3.5 between the existing Step 3 (Software Architect review) and Step 4 (QA Lead test cases). The step's title MUST be "Resource Manager-Architect recommendation" and its body MUST document: the delegation to the `resource-architect` agent, the inputs the agent will read (per FR-1.2), the expected output file (`.claude/resources-pending.md`, per FR-2.1), and the hand-off contract to the planner at Step 5 (per FR-2.5).
+2. **FR-3.2:** Step 3.5 MUST be a mandatory, non-skippable step. `/bootstrap-feature` MUST NOT offer a flag or heuristic to skip resource recommendation. Features with no external resource needs are handled by the agent producing an explicit "No external resources required" output per FR-1.5, not by skipping the step.
+3. **FR-3.3:** If the `resource-architect` agent fails (e.g., the agent crashes or returns an error), `/bootstrap-feature` MUST report the failure to the user and MUST NOT proceed to Step 4. This differs from `changelog-writer`'s non-blocking behavior (Section 3 FR-4.5) because resource recommendations are a prerequisite for informed QA test case authoring.
+4. **FR-3.4:** `src/agents/planner.md` MUST be updated per FR-2.5 to read `.claude/resources-pending.md`, inline its content at the top of `.claude/plan.md`, and delete the temp file. The planner's other existing responsibilities (slice breakdown, wave assignment from Section 2, executable plan fields from Section 1 FR-3) MUST be preserved unchanged.
+5. **FR-3.5:** The step-number change in `/bootstrap-feature` (Step 3 → Step 3.5 → Step 4 → Step 5) MUST be reflected consistently across all cross-referencing command files. Any existing references to "Step 4" that mean the QA step MUST remain accurate (QA is still Step 4); any existing references to "Step 5" that mean the planner MUST remain accurate (planner is still Step 5). The new Step 3.5 is inserted without renumbering the subsequent steps.
+6. **FR-3.6:** The `/develop-feature` command MUST continue to invoke `/bootstrap-feature` as a delegated subcommand with no direct change to `/develop-feature`'s own prompt. Because `/develop-feature` delegates bootstrap work wholesale, the new Step 3.5 is inherited automatically. No update to `src/commands/develop-feature.md` is required for resource recommendation wiring.
+
+#### FR-4: Scope Boundaries (resource categories)
+
+Define precisely which resource categories are in and out of scope for the agent's recommendations.
+
+1. **FR-4.1:** The agent MUST recommend across exactly the six categories listed in FR-1.4 and design decision 5: `MCP`, `Cloud/Compute`, `External API`, `Third-party Service`, `Library/Framework`, `Hardware`. The agent MUST NOT introduce additional categories in iteration 1 (e.g., "Database", "Message Queue", "Developer Tooling") — those concerns are either subsumed by existing categories or explicitly deferred.
+2. **FR-4.2:** **MCP category** MUST cover Model Context Protocol servers — both official (e.g., `filesystem`, `git`, `github`, `playwright`) and project-specific custom MCPs the feature would benefit from. Recommendations MUST include the exact `claude mcp add ...` command when applicable.
+3. **FR-4.3:** **Cloud/Compute category** MUST cover remote compute resources (AWS/GCP/Azure VMs, serverless runtimes like Lambda/Cloud Run, GPUs for ML workloads), as well as local compute where it represents a deliberate setup step (Docker containers, devcontainers, local Kubernetes). Bare "use your laptop" does NOT belong in this category.
+4. **FR-4.4:** **External API category** MUST cover paid or authenticated HTTP APIs the feature's code will call (OpenAI, Anthropic, Stripe, Twilio, etc.). Recommendations MUST include the credential-acquisition procedure as the install/activate field.
+5. **FR-4.5:** **Third-party Service category** MUST cover operational SaaS that augments the running system but is not directly called in feature code paths: error tracking (Sentry, Rollbar), monitoring (Datadog, New Relic), CDN (Cloudflare, Fastly), auth providers (Auth0, Clerk), analytics (PostHog, Amplitude). The distinction from External API is: External API is code-path-coupled; Third-party Service is operational-coupled.
+6. **FR-4.6:** **Library/Framework category** MUST cover package-manager dependencies that represent a deliberate framework choice, primarily for green-field features: web framework (Express vs. Fastify vs. Hono), ORM (Prisma vs. Drizzle vs. Kysely), test runner (Vitest vs. Jest), etc. For established projects where the framework is already chosen, this category is typically `(none)`. Individual utility libraries (`lodash`, `date-fns`) do NOT belong here — those are routine slice-level `npm install` calls, not architectural decisions.
+7. **FR-4.7:** **Hardware category** MUST cover non-cloud physical resource requirements that exceed typical developer-laptop defaults: RAM/disk minimums beyond 8 GB / 100 GB, special hardware (USB debuggers for embedded work, FPGA boards, GPUs local to the dev machine, peripherals for hardware-in-the-loop testing), or host OS constraints (macOS-only, Linux-only, specific kernel versions).
+
+#### FR-5: Authority Boundaries (suggest-only, no installs)
+
+Enforce the suggest-only authority boundary with explicit prohibitions in the agent prompt.
+
+1. **FR-5.1:** The agent prompt MUST contain an explicit "Authority Boundary" section listing prohibited actions. The section MUST state that the agent's output is pure recommendation text and that the user decides what to install.
+2. **FR-5.2:** The agent MUST NOT modify `~/.claude/settings.json`, any project-local `.claude/settings.json`, or any Claude Code configuration file.
+3. **FR-5.3:** The agent MUST NOT invoke `claude mcp add`, `claude mcp remove`, or any other `claude` subcommand that mutates configuration. The agent MAY include these commands as copy-paste snippets in its recommendation text — emitting a command into text output is not the same as executing it.
+4. **FR-5.4:** The agent MUST NOT touch cloud credentials, `.env` files, `.envrc` files, `~/.aws/credentials`, `~/.config/gcloud/`, or any secrets store. The agent MAY describe credential-acquisition procedures in text for the user to perform manually.
+5. **FR-5.5:** The agent MUST NOT run `npm install`, `pnpm add`, `yarn add`, `pip install`, `poetry add`, `brew install`, `apt install`, `cargo add`, or any package-manager command. The agent MAY include these commands as copy-paste snippets in its recommendation text.
+6. **FR-5.6:** The agent MUST NOT make network calls (HTTP, DNS, git fetch, etc.). All inputs are local files (PRD, use cases, project `CLAUDE.md`) and agent-context (architect verdict passed by the bootstrap command). This matches the no-network constraint established for `changelog-writer` in Section 3 NFR-7.
+7. **FR-5.7:** The agent's `tools` frontmatter field MUST be restricted to the minimum set required for local file reads and the single write to `.claude/resources-pending.md` (e.g., `Read`, `Write`, `Glob`, `Grep`). The `Bash` tool MUST NOT be included — excluding Bash at the tool-declaration level is a defense-in-depth measure that mechanically prevents accidental `npm install` or `claude mcp add` invocations even if the prompt instructions were ignored.
+
+#### FR-6: Registration and Documentation (Agency Roles, README, install.sh)
+
+Register the new agent in the agency table, update all agent-count references from 14 to 15, and document the feature in the README.
+
+1. **FR-6.1:** `src/claude.md` Agency Roles table MUST be updated to include a new row: Role = "Resource Manager-Architect", Agent = `resource-architect`, Responsibility = "Recommend external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap time". The row MUST be placed in the table at a position consistent with the pipeline order — after "Software Architect" and before "QA Lead".
+2. **FR-6.2:** All references to "14 agents" in `src/claude.md` prose MUST be updated to "15 agents". Agent-count references in `README.md` — both the tagline and the `## The 14 Agents` heading — MUST be updated to "15 agents" and `## The 15 Agents` respectively.
+3. **FR-6.3:** `README.md` MUST include a new row for `resource-architect` in its agent table/list alongside the existing 14 agents, placed consistent with the Agency Roles table ordering (after `architect`, before `qa-planner`).
+4. **FR-6.4:** `README.md` MUST add a brief feature section (or update an existing features list) explaining that the pipeline now recommends external resources at the start of each feature, describing the six categories, and noting that the agent is suggest-only (no installs).
+5. **FR-6.5:** `install.sh` banner strings MUST be updated from "14" to "15" in all five locations that currently state "14" (same propagation pattern used in Section 1 NFR-5 for the 12→13 transition and in Section 3 FR-5.2 for the 13→14 transition). The exact set of banner strings is enumerated in the Agent Count Propagation subsection of 4.6.
+6. **FR-6.6:** `install.sh` MUST copy `src/agents/resource-architect.md` into `~/.claude/agents/` as part of the default install path (NOT gated behind `--init-project`). Verification: if the installer uses a glob over `src/agents/*.md`, no code change is required beyond verification; if it uses an explicit file list, the list MUST be extended.
+7. **FR-6.7:** The Plan Critic prompt in `src/claude.md` MUST be updated to recognize `## Recommended Resources` as a valid top-level section of `.claude/plan.md`. Absence of the section is NOT a critic finding (legacy plans and plans from pre-iteration-1 branches will lack the section); presence of the section with malformed category blocks MAY be a MINOR finding.
+
+### 4.4 Non-Functional Requirements
+
+1. **NFR-1:** All changes are markdown prompt files only. No runtime code (JavaScript, TypeScript, Python) is introduced. `install.sh` is modified only for banner strings (per FR-6.5) and file-copy verification (per FR-6.6); the shell logic itself is not restructured.
+2. **NFR-2:** All changes MUST be backward compatible with the existing pipeline. Projects using SDLC v3.1.0 or the iteration-1 version of Section 3 MUST continue to function after upgrading. Existing `.claude/plan.md` files without a `## Recommended Resources` section MUST continue to parse correctly (the planner's inlining step is a no-op if `.claude/resources-pending.md` does not exist, per FR-2.5).
+3. **NFR-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). No migration steps beyond re-running the installer.
+4. **NFR-4:** The `resource-architect` agent MUST use the `opus` model consistent with all other agents (per Section 1 NFR-4).
+5. **NFR-5:** The total global agent count rises from 14 to 15. All documentation references MUST be updated (per FR-6.2, FR-6.3, FR-6.5).
+6. **NFR-6:** The agent MUST NOT access the network (per FR-5.6). All inputs are local files and context passed by the bootstrap command. This keeps the agent fast, deterministic, and safe in restricted environments.
+7. **NFR-7:** The agent's typical wall-clock runtime SHOULD be under 30 seconds per invocation. This is a soft performance target. Because the agent runs once per feature at bootstrap time (not per slice, not per wave), runtime is not latency-critical, but excessively long runtimes would signal the agent is doing research it should not be doing (e.g., trying to fetch current pricing information, which is out of scope).
+8. **NFR-8:** The structured recommendation format (six fields per entry per FR-1.4) MUST be strict. Entries missing any of the six fields are malformed and SHOULD be flagged by the Plan Critic as a MINOR finding (per FR-6.7). Iteration 1 does not enforce format strictness programmatically — enforcement is via agent prompt guidance and critic observation.
+9. **NFR-9:** The agent is one-shot per bootstrap — no re-check in `/merge-ready`, no continuous sync, no re-run on subsequent slices (per design decision 4). If the feature's resource needs change mid-implementation, the developer may manually re-invoke the agent, but the pipeline does not do so automatically.
+
+### 4.5 Acceptance Criteria
+
+1. **AC-1:** A file `src/agents/resource-architect.md` exists with valid frontmatter (`name: resource-architect`, `description`, `tools` restricted per FR-5.7 with no `Bash` tool, `model: opus`) and a prompt that implements the input-reading (FR-1.2), structured output (FR-1.3 through FR-1.7), temp-file write (FR-2.1 through FR-2.4), and authority boundary (FR-5.1 through FR-5.6) specifications.
+2. **AC-2:** `src/commands/bootstrap-feature.md` contains an explicit Step 3.5 "Resource Manager-Architect recommendation" between Step 3 (architect) and Step 4 (QA), delegating to `resource-architect` and documenting the temp-file hand-off (per FR-3.1, FR-3.2).
+3. **AC-3:** `src/commands/bootstrap-feature.md` explicitly states that Step 3.5 is mandatory and non-skippable, and that a `resource-architect` failure halts bootstrap at Step 3.5 (per FR-3.2, FR-3.3).
+4. **AC-4:** `src/agents/planner.md` includes an explicit instruction to read `.claude/resources-pending.md` (if present), inline its content verbatim as the first top-level section of `.claude/plan.md` before `## Prerequisites verified`, and delete the temp file after inlining (per FR-2.5, FR-2.6).
+5. **AC-5:** The Agency Roles table in `src/claude.md` has a row for `resource-architect` with Role = "Resource Manager-Architect" placed between "Software Architect" and "QA Lead", and all "14 agents" references in `src/claude.md` are updated to "15 agents" (per FR-6.1, FR-6.2).
+6. **AC-6:** `README.md` updates the tagline from "14 specialized AI agents" (or equivalent) to "15 specialized AI agents", updates the `## The 14 Agents` heading to `## The 15 Agents`, includes a row for `resource-architect` in the agent table, and adds a feature section describing the resource-recommendation capability (per FR-6.2, FR-6.3, FR-6.4).
+7. **AC-7:** `install.sh` has all five banner strings containing "14" updated to "15", matching the propagation pattern used for the 13→14 transition in Section 3 (per FR-6.5).
+8. **AC-8:** `install.sh` copies `src/agents/resource-architect.md` into `~/.claude/agents/` as part of the default install path. After running `bash install.sh` on a clean machine, the file `~/.claude/agents/resource-architect.md` exists (per FR-6.6).
+9. **AC-9:** When `/bootstrap-feature` is invoked end-to-end for a new feature, the sequence of steps is: 1 (user intent) → 2 (PRD) → 3 (architect) → 3.5 (resource-architect) → 4 (QA) → 5 (planner), and the resulting `.claude/plan.md` contains a `## Recommended Resources` top-level section at the very top, before `## Prerequisites verified` (per FR-3.1, FR-2.6).
+10. **AC-10:** When `/bootstrap-feature` is invoked for a feature with no external resource needs, the `## Recommended Resources` section contains the explicit statement "No external resources required" (per FR-1.5), and all six category headings still appear with `(none)` underneath (per FR-1.7).
+11. **AC-11:** After a successful bootstrap, the file `.claude/resources-pending.md` does NOT exist (the planner has inlined and deleted it per FR-2.5).
+12. **AC-12:** The agent's `tools` frontmatter field does NOT include `Bash` (per FR-5.7). Verifiable via `grep -n "tools:" src/agents/resource-architect.md` and inspecting the tool list.
+13. **AC-13:** Each recommendation entry in the agent's output includes all six fields (Category, Name, Why, Install/activate, Cost/complexity flag, Reversibility) in the specified value domains (per FR-1.4). Verifiable by running the agent on a sample feature and inspecting the output.
+14. **AC-14:** The Plan Critic prompt in `src/claude.md` recognizes `## Recommended Resources` as a valid top-level plan section; its absence is NOT flagged (per FR-6.7).
+15. **AC-15:** Cross-references are valid: the agent registered in `src/claude.md` has a corresponding `src/agents/resource-architect.md` file; `src/commands/bootstrap-feature.md` references the agent by its exact registered name; `src/agents/planner.md` references the exact temp-file path `.claude/resources-pending.md`; no phantom paths.
+
+### 4.6 Affected Components
+
+#### New Files
+
+| File | Purpose | Related Requirements |
+|------|---------|---------------------|
+| `src/agents/resource-architect.md` | The resource-architect agent prompt with input discovery, structured output, temp-file write, and explicit authority boundary | FR-1.1 through FR-1.7, FR-2.1 through FR-2.4, FR-5.1 through FR-5.7 |
+| `docs/use-cases/resource-architect_use_cases.md` | Use-case scenarios for the feature (authored by `ba-analyst` during this feature's own bootstrap) | Documentation phase deliverable |
+| `docs/qa/resource-architect_test_cases.md` | QA test cases (authored by `qa-planner` during this feature's own bootstrap) | Documentation phase deliverable |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `src/commands/bootstrap-feature.md` | Insert Step 3.5 "Resource Manager-Architect recommendation" between Step 3 and Step 4; document temp-file hand-off; mark step mandatory and non-skippable; document failure behavior halting bootstrap | FR-3.1, FR-3.2, FR-3.3, FR-3.5 |
+| `src/agents/planner.md` | Add step to read `.claude/resources-pending.md`, inline content as `## Recommended Resources` top section of `.claude/plan.md` before `## Prerequisites verified`, delete temp file after inlining | FR-2.5, FR-2.6, FR-3.4 |
+| `src/claude.md` | Add `resource-architect` row to Agency Roles table between "Software Architect" and "QA Lead"; update "14 agents" prose references to "15 agents"; update Plan Critic prompt to recognize `## Recommended Resources` as valid plan section | FR-6.1, FR-6.2, FR-6.7 |
+| `README.md` | Update tagline "14" to "15"; update `## The 14 Agents` heading to `## The 15 Agents`; add `resource-architect` row to agent table; add feature section describing resource-recommendation capability | FR-6.2, FR-6.3, FR-6.4 |
+| `install.sh` | Update all five banner strings from "14" to "15" matching the 13→14 propagation pattern from Section 3; verify `src/agents/resource-architect.md` is copied into `~/.claude/agents/` by the default install path | FR-6.5, FR-6.6 |
+
+#### Agent Count Propagation (enumeration of every 14→15 location)
+
+The agent-count propagation MUST update every one of the following locations. This enumeration exists specifically so the Plan Critic can verify no banner is missed during implementation (same diligence applied in Section 1 NFR-5 and Section 3 FR-5.2).
+
+| Location | Current Value | Target Value | Related Requirement |
+|----------|---------------|--------------|---------------------|
+| `install.sh` banner 1 of 5 | "14" | "15" | FR-6.5 |
+| `install.sh` banner 2 of 5 | "14" | "15" | FR-6.5 |
+| `install.sh` banner 3 of 5 | "14" | "15" | FR-6.5 |
+| `install.sh` banner 4 of 5 | "14" | "15" | FR-6.5 |
+| `install.sh` banner 5 of 5 | "14" | "15" | FR-6.5 |
+| `README.md` tagline | "14 specialized AI agents" (or equivalent) | "15 specialized AI agents" | FR-6.2 |
+| `README.md` section heading | `## The 14 Agents` | `## The 15 Agents` | FR-6.2 |
+| `src/claude.md` prose references | "14 agents" (all occurrences) | "15 agents" | FR-6.2 |
+
+Note: the exact wording of the `README.md` tagline and heading MUST be verified during implementation via `grep -n "14" README.md` — the above rows reflect the expected shape based on the Section 3 precedent, but the implementer MUST confirm the literal text before editing.
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/architect.md` | Architect review runs at Step 3, before `resource-architect` is invoked. The architect passes its verdict to the bootstrap command as context, not as a direct call to `resource-architect`. No change to the architect prompt itself. |
+| `src/agents/ba-analyst.md` | Use-case authoring is not a resource-recommendation input. The agent reads use cases produced by `ba-analyst` at Step 2. |
+| `src/agents/qa-planner.md` | QA is Step 4, after `resource-architect`. `qa-planner` MAY optionally read the `## Recommended Resources` section of `.claude/plan.md` when it is produced, but no change to the `qa-planner` prompt is required in iteration 1 — assuming recommended resources exist is a natural consequence of Step 3.5 having run. |
+| `src/agents/prd-writer.md` | PRD authoring is Step 2, before `resource-architect`. No change. |
+| `src/agents/test-writer.md` | Test writing happens within slices after bootstrap completes. No change. |
+| `src/agents/security-auditor.md` | Security review is a pre-slice and post-implementation concern, not a bootstrap-time concern. No change. |
+| `src/agents/code-reviewer.md` | Code review runs in Phase 4 quality gates. No change. |
+| `src/agents/build-runner.md` | Build verification runs in Phase 4. No change. |
+| `src/agents/e2e-runner.md` | E2E tests run in Phase 4. `e2e-runner` MAY benefit from the recommended-resources list (e.g., knowing Playwright MCP is available), but reading the plan's resource section is already implicit in `e2e-runner`'s plan-reading behavior. No prompt change required. |
+| `src/agents/verifier.md` | Verification runs in Phase 4. No change. |
+| `src/agents/doc-updater.md` | Documentation update runs in Phase 4. No change. |
+| `src/agents/refactor-cleaner.md` | Cleanup runs in Phase 2.5. No change. |
+| `src/agents/changelog-writer.md` | Shipped in Section 3. `resource-architect` and `changelog-writer` are independent — their outputs go to different files (`.claude/resources-pending.md` vs. `CHANGELOG.md`) and their invocation points are different (bootstrap Step 3.5 vs. four lifecycle hooks). No change to `changelog-writer`. |
+| `src/rules/git.md` | Git workflow unchanged. |
+| `src/rules/scratchpad.md` | Scratchpad format unchanged. `resource-architect` does NOT read or write the scratchpad (per FR-1.2). |
+| `src/rules/error-recovery.md` | Error recovery rules unchanged. A `resource-architect` failure halts bootstrap per FR-3.3 — this is an error-escalation (Rule 4) by design, not a deviation rule change. |
+| `src/rules/tool-limitations.md` | Tool limitation awareness unchanged. |
+| `src/commands/develop-feature.md` | Delegates to `/bootstrap-feature` wholesale, so Step 3.5 is inherited automatically. No prompt change required (per FR-3.6). |
+| `src/commands/implement-slice.md` | Slice execution reads `.claude/plan.md` which will contain the `## Recommended Resources` section at the top, but slice implementation itself does not consume the resource list directly. No prompt change. |
+| `src/commands/merge-ready.md` | Merge-ready does NOT re-check resource recommendations (per design decision 4 and NFR-9). No change. |
+| `src/commands/context-refresh.md` | Context refresh reads scratchpad, not `.claude/plan.md` directly. No change. |
+| `templates/rules/changelog.md` | Downstream-project-scoped changelog rule from Section 3. Independent of resource recommendation. No change. |
+| `templates/CLAUDE.md` | Downstream-project template from Section 3. Independent of resource recommendation. No change. |
+
+### 4.7 UI Changes, Schema Changes, Affected Endpoints
+
+Not applicable on all three counts. The SDLC project is a collection of markdown prompt files with no UI, database, or API.
+
+### 4.8 Out of Scope for Iteration 1
+
+The following items are explicitly out of scope for iteration 1 and MUST NOT be implemented as part of this section. They are listed explicitly so the Plan Critic does not flag their absence as a gap during iteration 1 planning.
+
+1. **Automatic installation of any recommended resource.** The agent is strictly suggest-only (FR-5.1 through FR-5.7). Automating `claude mcp add`, `npm install`, or cloud-provisioning calls is deferred to a future iteration 2 (if ever).
+2. **Merge-ready re-check.** Iteration 1 invokes `resource-architect` exactly once per feature at bootstrap Step 3.5 (NFR-9). Re-checking resource needs at merge-ready — e.g., to detect resources that were recommended but never used, or resources needed but never recommended — is deferred.
+3. **Resource cost tracking across features.** Aggregating `expensive` flags across features (e.g., "this sprint commits to 3 `expensive` cloud resources") is deferred. Iteration 1 reports cost/complexity flags per feature only, not aggregated.
+4. **Integration with specific cloud-provider SDKs.** The agent produces text recommendations; it does not call AWS, GCP, or Azure APIs to check quotas, estimate costs, or verify credentials. Provider-specific integrations are deferred.
+5. **Teardown recommendations when a feature is reverted.** If a feature is merged and later reverted, the agent does not produce a "resources to uninstall" list. Reversibility is captured per-resource at bootstrap time (FR-1.4) so the developer can reason about teardown manually.
+6. **Resource conflict detection between features.** If two features in flight both require different versions of the same MCP or library, the agent does not detect the conflict. Cross-feature conflict detection is deferred.
+7. **Feature-specific role generation (`role-planner`).** A future agent that would generate optional, feature-specific agents on demand is an unrelated future capability. `resource-architect` is permanent, global, and mandatory (design decision 2); it is NOT the same concept as a hypothetical `role-planner`.
+8. **Post-hoc mid-implementation re-invocation.** If a feature's resource needs change during implementation (e.g., a slice reveals a new API dependency), the pipeline does not automatically re-run `resource-architect`. The developer may manually re-invoke it, but the pipeline does not trigger a re-run.
+9. **Programmatic validation of the six-field format.** FR-1.4 and NFR-8 specify strict field requirements, but iteration 1 does not add a schema-validation step. Enforcement is via agent prompt guidance and Plan Critic MINOR findings (FR-6.7). A dedicated validator is deferred.
+10. **Recommendation quality learning.** The agent does not learn from which of its past recommendations were actually installed versus ignored. Recommendation quality is entirely prompt-driven in iteration 1.
+
+### 4.9 Risks and Dependencies
+
+1. **Risk: Agent over-recommends, flooding the plan with trivial or irrelevant resources.** If the agent is too aggressive, every feature acquires a 30-item resource list and the developer learns to ignore the section entirely. Mitigation: the agent prompt MUST instruct conservative recommendations — only resources the PRD and use cases actually require, with `Why` field explicitly citing the PRD requirement that drives the recommendation (FR-1.4). The summary line (FR-1.6) surfaces `expensive` and `hard` counts at the top so the developer sees cost-commitment shape at a glance.
+2. **Risk: Agent under-recommends, missing resources the feature actually needs.** Conversely, overly-conservative recommendations cause mid-slice surprises — the exact problem this feature exists to prevent. Mitigation: the agent prompt MUST include positive-example checklists per category (e.g., "if the PRD mentions browser testing, consider Playwright MCP"). Iteration 1 accepts that this is prompt-quality-dependent and does not attempt automated coverage guarantees.
+3. **Risk: Suggest-only authority violated by prompt drift.** Over time, the agent prompt could be revised to make the agent more capable, inadvertently granting it install authority. Mitigation: FR-5.7 restricts the agent's `tools` frontmatter field to exclude `Bash`, making it mechanically impossible for the agent to execute install commands even if the prompt were revised. This is a defense-in-depth measure — the prompt boundary AND the tool boundary both prohibit installs.
+4. **Risk: Temp file not cleaned up.** If the planner fails between reading `.claude/resources-pending.md` and deleting it, the temp file persists. Mitigation: FR-2.4 specifies the next bootstrap invocation for the same feature overwrites the file, so stale content cannot be silently merged with new content. `/merge-ready` does not check for the temp file's presence, so a persistent temp file does not block merge.
+5. **Risk: Step-number confusion (3.5 vs. 4).** Inserting a half-step between Step 3 and Step 4 deviates from the pattern of integer step numbers used elsewhere in bootstrap. Mitigation: FR-3.5 explicitly preserves Step 4 as QA and Step 5 as planner. The half-step notation is unambiguous. An alternative of renumbering all subsequent steps (Step 4 QA → Step 5 QA, Step 5 planner → Step 6 planner) was considered and rejected because it would churn every cross-reference for no semantic gain.
+6. **Risk: Resource-architect blocks bootstrap on trivial failures.** FR-3.3 halts bootstrap if the agent fails, which could block the developer on a transient failure (e.g., the agent crashes on an unusual PRD format). Mitigation: the agent is deterministic and has no network dependencies (FR-5.6), so failure modes are limited. A retry is not automated in iteration 1 — the developer re-invokes `/bootstrap-feature`. If this proves frequent, a future iteration may soften the halt to a warning.
+7. **Risk: Agent-count propagation drift.** The 14→15 update touches five `install.sh` banners, two `README.md` locations, and prose in `src/claude.md`. Missing a single location leaves inconsistent documentation. Mitigation: the Agent Count Propagation table in section 4.6 enumerates every location, and the Plan Critic is expected to verify all are addressed before merge (same diligence pattern applied in Section 1 NFR-5 and Section 3 FR-5.2).
+8. **Risk: Architect verdict not available to the agent.** FR-1.2 specifies the architect's verdict as an input passed by the bootstrap command. If the bootstrap command's prompt does not actually forward the verdict to the agent, the agent falls back to reading PRD + use cases only. Mitigation: FR-3.1 requires the bootstrap command to document the architect-verdict-as-context hand-off explicitly. Acceptance criterion AC-2 verifies the Step 3.5 documentation in `src/commands/bootstrap-feature.md`.
+9. **Dependency: Section 1 FR-3 (Executable Plan Format).** The recommendation structured-field format (FR-1.4) follows the same pattern as the slice structured fields (`Files:`, `Changes:`, `Verify:`, `Done when:`). Section 1 is [SHIPPED], so this dependency is satisfied.
+10. **Dependency: Section 3 FR-3 (PRD Changelog Field).** This PRD section itself includes a `Changelog:` field per Section 3 FR-3. Section 3 is [IN DEVELOPMENT] concurrently; this dependency is satisfied by the prd-writer update in Section 3 FR-3.1. If Section 3 does not ship before Section 4, the `Changelog:` field is documentation-only — it does not affect Section 4's functional requirements.
+11. **Dependency: SDLC repo opts out of changelog maintenance.** Per Section 3 design decision 1, the SDLC repo itself has no `.claude/rules/changelog.md`, so `changelog-writer` self-skips for this PRD section (per Section 3 FR-2.2). This is the expected behavior and is NOT a risk — the `Changelog:` field on this section is captured for authoring consistency but does not flow into any `CHANGELOG.md`.
+12. **Dependency: Section 2 FR-2 (Wave-Aware Orchestration).** Orthogonal — `resource-architect` runs at bootstrap time, before any slice or wave exists. Wave orchestration is unaffected and is not a dependency in either direction. Listed here only to disclaim the non-relationship.
