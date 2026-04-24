@@ -23,6 +23,7 @@ This workflow mirrors a professional software development team:
 | Verification Engineer | `verifier` | Goal-backward integration verification (wiring, data flow, stub detection) |
 | Tech Writer | `doc-updater` | Documentation accuracy |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
+| Release Scribe | `changelog-writer` | Maintain the `[Unreleased]` section of downstream project `CHANGELOG.md` in sync with PRD, scratchpad, and git log |
 
 ### What Every Plan MUST Include
 
