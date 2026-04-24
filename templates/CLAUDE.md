@@ -2,6 +2,12 @@
 
 TODO: One-line description of the project.
 
+## Project Metadata
+
+<!-- Iteration 1: the following field is reserved for future semver automation (iteration 2). In iteration 1 it is informational only and has NO runtime effect. Leave as-is or fill in if known. -->
+
+- **Version source:** TODO (e.g., `package.json`, `pyproject.toml`, `templates/CLAUDE.md` itself — reserved for iteration 2)
+
 ## Tech Stack
 
 **Frontend:**
