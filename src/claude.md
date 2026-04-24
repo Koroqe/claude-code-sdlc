@@ -13,6 +13,7 @@ This workflow mirrors a professional software development team:
 | Product Manager | `prd-writer` | Feature requirements in `docs/PRD.md` |
 | Business Analyst | `ba-analyst` | Use cases in `docs/use-cases/<feature>_use_cases.md` |
 | Software Architect | `architect` | Architecture review, technical design validation |
+| Resource Manager-Architect | `resource-architect` | Recommend external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap time |
 | QA Lead | `qa-planner` | Test cases in `docs/qa/<feature>_test_cases.md` |
 | Tech Lead | `planner` | Implementation plan (5-9 slices) |
 | Security Engineer | `security-auditor` | Security review for sensitive slices |
@@ -108,6 +109,7 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Deliverables checklist is present: PRD, use cases, architecture review, QA test cases
 > - Implementation slices are numbered with: description, files affected, testable done-condition
 > - Risks and dependencies section exists and is substantive
+> - The `## Recommended Resources` section (if present at the top of the plan, before `## Prerequisites verified`) is a valid top-level section produced by `resource-architect` at bootstrap Step 3.5 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed recommendation entries missing any of the six fields (Category, Name, Why, Install/activate, Cost/complexity, Reversibility) MAY be raised as MINOR — not CRITICAL, not MAJOR.
 >
 > **Slice Quality:**
 > - No slice is too large (>200 lines of production code) — flag for splitting
