@@ -1,39 +1,45 @@
 ## Feature: Resource Manager-Architect (Iteration 1: Mandatory Pipeline Role)
 ## Branch: feat/resource-manager-architect
-## Status: implementing wave 1 slice 1/6
+## Status: quality-gates
 
 ## Plan
 
-### Wave 1
-- [ ] Slice 1: `src/agents/resource-architect.md` [new] — agent with Authority/Output Boundaries, six categories, pinned markdown output format
-- [ ] Slice 2: `install.sh` — banner strings 14→15 in all 5 locations
+### Wave 1 [COMPLETE]
+- [x] Slice 1: `src/agents/resource-architect.md` [new] — `b9d3f7c`
+- [x] Slice 2: `install.sh` banners 14→15 — `cf25c87`
 
-### Wave 2
-- [ ] Slice 3: `src/commands/bootstrap-feature.md` — insert Step 3.5 AFTER FAILS subsection, before Step 4
-- [ ] Slice 4: `src/agents/planner.md` — read/inline/MUST-delete `.claude/resources-pending.md`
+### Wave 2 [COMPLETE]
+- [x] Slice 3: `src/commands/bootstrap-feature.md` Step 3.5 — `f8040eb`
+- [x] Slice 4: `src/agents/planner.md` read/inline/MUST-delete — `0eba414`
 
-### Wave 3
-- [ ] Slice 5: `src/claude.md` — Agency Roles row + Plan Critic bullet (single file; `src/CLAUDE.md` is case-alias to same inode 4432546)
-- [ ] Slice 6: `README.md` — tagline 14→15, "## The 15 Agents", agent row, feature section
+### Wave 3 [COMPLETE]
+- [x] Slice 5: `src/claude.md` Agency Roles + Plan Critic bullet — `a52f417`
+- [x] Slice 6: `README.md` tagline + heading + row + feature section — `8327db9`
 
-## Structural decisions pinned
+## Post-wave verification (orchestrator)
 
-1. Agent name: `resource-architect`; role title "Resource Manager-Architect"
-2. Output format: `## Recommended Resources` → summary → 6 `### <Category>` → each as `#### <Name>` with 5 bold-labeled fields. Empty categories show `(none)`
-3. MUST-level deletion wording in planner (no "may"/"should")
-4. Verdict forwarding: orchestrator inlines architect's PASS verdict into resource-architect spawn prompt
-5. Single file edit for Slice 5 (Plan Critic CRITICAL 1 — `src/CLAUDE.md` is case-alias, not mirror)
-
-## Plan Critic findings
-
-- 1 CRITICAL (mirror invariant was phantom — same inode verified) — addressed
-- 5 MAJOR (AC-5 traceability, permissive Verify in Slice 6, useless diff in Slice 5, Slice 3 insertion point, loose Slice 2 counts) — addressed
-- 4 MINOR (tightness, checklist state, debuggability, TC cross-refs) — 2 fixed, 2 documented in Review Notes
+- `git log --oneline main..HEAD`: 7 commits (1 bootstrap + 6 slices)
+- Agent count (`ls src/agents/*.md`): **15** (was 14 after Feature #1)
+- install.sh: 3× "15 specialized", 0× "14 specialized" (exact counts match plan)
+- README.md: 1× "15 specialized", 0× "14 specialized"
+- src/claude.md: 2× "resource-architect" (Agency Roles row + Plan Critic bullet); 0× "14 agents" (FR-6.2 no-op confirmed)
+- Agency Roles table: 16 rows (header + 15 agents)
+- bootstrap-feature.md: 1× Step 3.5 (new) + 1× Step 5.5 (changelog-writer preserved)
+- planner.md: 1× "MUST delete" (MANDATORY wording), 0× permissive "may/should delete"
 
 ## Completed
 
-(bootstrap artifacts staged but not yet committed — message: `chore(core): add bootstrap documentation for resource-manager-architect`)
+- Bootstrap: PRD section #4 (243 lines, 42 FRs / 15 ACs), use cases (31 scenarios), architect review (PASS + 5 [STRUCTURAL]), QA test cases (103 TCs), plan (6 slices / 3 waves), Plan Critic (1 CRITICAL + 5 MAJOR + 4 MINOR all addressed)
+- Wave 1: 2 parallel subagents, both PASS
+- Wave 2: 2 parallel subagents, both PASS
+- Wave 3: 2 parallel subagents, both PASS
 
 ## Blockers
 
 (none)
+
+## Next
+
+- `/merge-ready` quality gates: git hygiene, docs, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- Note on pre-flight sync: merge-ready.md calls `changelog-writer` as pre-flight. SDLC repo self-skips (no `.claude/rules/changelog.md` sentinel); this applies per Feature #1 design. Skipping safely.
+- Note on bootstrap Step 3.5: this feature's own bootstrap ran BEFORE Step 3.5 existed — that's expected; each feature bootstraps at its own point in pipeline history.
