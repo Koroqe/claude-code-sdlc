@@ -101,7 +101,7 @@ When content differs, parse `CHANGELOG.md` to locate the `[Unreleased]` section 
 - If `[Unreleased]` is missing entirely from an existing `CHANGELOG.md`, insert a fresh `[Unreleased]` section immediately below the header paragraphs and above the first versioned section. Do not modify any versioned section.
 - If `CHANGELOG.md` does not exist and eligible entries exist, create it with this structure:
   1. `# Changelog` title.
-  2. A short explanatory paragraph linking to [keepachangelog.com](https://keepachangelog.com/en/1.1.0/) and stating that the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+  2. A short explanatory paragraph containing static markdown links to `https://keepachangelog.com/en/1.1.0/` and `https://semver.org/spec/v2.0.0.html` (these are written into the file as link text — the agent never fetches them per the no-network constraint).
   3. `## [Unreleased]` heading followed by the eligible entries grouped by category.
 
 Byte preservation of prior versioned sections is a hard requirement — it is how downstream projects trust this agent to run on every pipeline invocation.
