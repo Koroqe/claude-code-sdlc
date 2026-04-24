@@ -34,6 +34,24 @@ Delegate to `architect` agent:
 4. Retry up to 2 times
 5. If still rejected: document the architectural concern in scratchpad as a blocker and ask the user
 
+### Step 3.5: Resource Manager-Architect recommendation
+
+Delegate to `resource-architect` agent. This step is **MANDATORY and non-skippable** — it runs on every feature regardless of whether external resources are needed. A feature that requires no external resources produces an explicit `No external resources required` body with all six category headings each showing `(none)`; it MUST NOT be skipped.
+
+The agent reads the following four inputs (in this fixed order):
+1. The PRD section just written at Step 2 in `docs/PRD.md`
+2. The use-cases file `docs/use-cases/<feature-slug>_use_cases.md` produced at Step 2
+3. The architect's PASS verdict text from Step 3 — the orchestrator captures this text and inlines it into the `resource-architect` spawn prompt as context
+4. The project `CLAUDE.md`
+
+The agent does **NOT** read `.claude/scratchpad.md`.
+
+**Expected output:** exactly one file at `.claude/resources-pending.md` in the project CWD, formatted as a top-level `## Recommended Resources` section with a summary line and six `### <Category>` subheadings (MCP, Cloud/Compute, External API, Third-party Service, Library/Framework, Hardware) in that fixed order. Empty categories render `(none)` on their own line.
+
+**On failure:** `/bootstrap-feature` MUST report the failure and MUST NOT proceed to Step 4. Bootstrap halts at Step 3.5 and is reported as blocked to the user. The subsequent steps (Step 4 QA Lead, Step 5 Tech Lead) are not executed until the resource-architect failure is resolved.
+
+**Hand-off to Step 5 (Tech Lead — Implementation Planning):** the planner agent reads `.claude/resources-pending.md`, inlines its content verbatim as the first top-level `## Recommended Resources` section of `.claude/plan.md` (placed immediately before `## Prerequisites verified`), and then **MUST delete** `.claude/resources-pending.md`. The temp file is ephemeral per-bootstrap.
+
 ### Step 4: QA Lead — Test Case Documentation
 Delegate to `qa-planner` agent:
 - Read `docs/PRD.md` AND `docs/use-cases/<feature-slug>_use_cases.md`
