@@ -18,9 +18,12 @@ You plan new features by breaking them into small, testable implementation slice
    - `docs/qa/<feature>_test_cases.md` — test cases from QA Lead
 2. Read the project's CLAUDE.md for tech stack, file structure, and conventions
 3. Explore the codebase to understand existing patterns and affected files
-4. Produce an implementation plan with 5-9 concrete slices
+4. Read `.claude/resources-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written). Inline that captured content as the first top-level section of `.claude/plan.md`, placed immediately before `## Prerequisites verified`. After successful inlining, you **MUST delete** `.claude/resources-pending.md` — this is mandatory, not optional. If the file does not exist, skip silently — no error, no warning, and do not add a `## Recommended Resources` section.
+5. Produce an implementation plan with 5-9 concrete slices
 
 ## Output Format
+
+**Note on `## Recommended Resources`:** When `.claude/resources-pending.md` was present and inlined per Process step 4, `## Recommended Resources` appears as the first top-level heading at the top of `.claude/plan.md`, positioned above `## Prerequisites verified`. When the temp file was absent, no `## Recommended Resources` section is added and the plan starts with `## Prerequisites verified` as before.
 
 1. **Prerequisites verified** (confirm these documents exist):
    - PRD section: `docs/PRD.md` — [section number]
