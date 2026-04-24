@@ -4,7 +4,7 @@
 
 **Note:** This project contains no runtime code. All agents, commands, and rules are markdown files with YAML frontmatter. "Testing" means verifying file existence, structural correctness, content presence, cross-reference integrity, and (for installer and agent-runtime tests) observable filesystem/process behavior by running shell commands and inspecting outputs.
 
-**Format TBD markers:** Several test cases are marked `[TBD -- update after planner pins X]`. These tests are documented now so coverage is not missed, but their assertion text will need updating once the planner decides between valid alternatives that the PRD did not pin down. See the "Ambiguity Flags" summary at the end of this document for the full list.
+**Format TBD markers:** Several test cases were marked `[TBD -- update after planner pins X]`. Post-planner resolutions have been applied to TC-2.6 (field placement), TC-7.3/TC-7.4 (commit-to-PRD mapping), and TC-11.1 (output format). Remaining unresolved TBDs (TC-4.5, TC-6.5, TC-7.9, TC-11.3) are listed in the "Ambiguity Flags" summary at the end of this document.
 
 ---
 
@@ -195,18 +195,20 @@
   2. Grep for language stating `skip -- internal` MUST NOT be used as a lazy default for user-facing features
 - **Expected:** Both instructions are present.
 
-### TC-2.6: `Changelog:` field placement in PRD header block is parseable in both valid positions (architect item 2 defensive)
+### TC-2.6: `Changelog:` field placement in PRD header block -- canonical (own line below header) parses, inline placement rejected
 - **Category:** PRD Authoring
-- **Covers:** FR-3.1 (ambiguous placement -- both interpretations tested)
+- **Covers:** FR-3.1 (placement pinned -- separate line below header block)
 - **Type:** Integration
 - **Preconditions:** A test PRD file can be constructed with a four-key header plus `Changelog:`
 - **Test Steps:**
-  1. Construct PRD variant A: `Status:`, `Date:`, `Priority:`, `Related:`, `Changelog:` all in one contiguous header block (inline-with-block)
-  2. Construct PRD variant B: `Status:`, `Date:`, `Priority:`, `Related:` as the header block, then a blank line, then `Changelog:` on its own line before the subsection body
-  3. Invoke `changelog-writer` against each variant in a configured downstream project
-  4. Verify the agent's output summary correctly reports the `Changelog:` value for BOTH variants
-- **Expected:** Both placements are parseable by the agent. `[TBD -- update after planner pins placement]` -- the Tech Lead must pin ONE canonical placement in the agent spec. Once pinned, this test splits: TC-2.6-pinned (expected-parse) and TC-2.6-rejected (the now-invalid placement triggers a warning in the agent output).
-- **Edge Cases:** Flag to Tech Lead during planning.
+  1. Construct PRD variant CANONICAL: `Status:`, `Date:`, `Priority:`, `Related:` as the header block, then a blank line, then `Changelog:` on its own line before the subsection body (pinned placement per `src/agents/changelog-writer.md` Step 4 and `src/agents/prd-writer.md` Output Format)
+  2. Construct PRD variant REJECTED: `Status:`, `Date:`, `Priority:`, `Related:`, `Changelog:` all in one contiguous header block with no blank line separation (inline-with-block -- now invalid)
+  3. Invoke `changelog-writer` against the CANONICAL variant in a configured downstream project
+  4. Invoke `changelog-writer` against the REJECTED variant in the same configured downstream project
+- **Expected:**
+  - Step 3: the agent's `## Source counts` output correctly reports the parsed `Changelog:` value from the CANONICAL variant and maps commits to it
+  - Step 4: the agent does NOT parse the inline-with-block `Changelog:` value (because Step 4 of the agent spec probes only the line below the header block, not arbitrary positions). The PRD section is treated as missing a `Changelog:` field per Step 4 case (c), triggering the "missing Changelog field -- treating as skip" warning in the `## Warnings` output
+- **Edge Cases:** Pinned decision; no further ambiguity.
 
 ### TC-2.7: `prd-writer.md` enforces user-facing phrasing in `Changelog:` values
 - **Category:** PRD Authoring
@@ -623,27 +625,27 @@
   3. Invoke `changelog-writer`
 - **Expected:** `[Unreleased]` does NOT include an entry for slice 2 (commits are the source of truth per FR-2.4; scratchpad informs context but not eligibility).
 
-### TC-7.3: Commit-to-PRD-section mapping via conventional-commit scope (candidate mechanism 1)
+### TC-7.3: Commit-to-PRD-section mapping via conventional-commit scope (pinned mechanism)
 - **Category:** Commit Eligibility
-- **Covers:** FR-2.4 (mapping function; architect item 3 defensive)
+- **Covers:** FR-2.4 (pinned mapping mechanism per `src/agents/changelog-writer.md` Step 5)
 - **Type:** Integration
-- **Preconditions:** Configured downstream; PRD section whose title matches a commit scope (e.g., PRD section "Changelog Maintenance" + commit `feat(changelog): add agent`)
+- **Preconditions:** Configured downstream; PRD section whose slugified title keyword set contains a commit scope as a whole token (e.g., PRD section "Changelog Maintenance" + commit `feat(changelog): add agent`)
 - **Test Steps:**
   1. Make a commit with subject `feat(changelog): add new agent`
-  2. Ensure PRD has a section whose title contains "Changelog"
+  2. Ensure PRD has a section whose title contains "Changelog" (so "changelog" appears as a whole token in the slugified keyword set)
   3. Invoke `changelog-writer`
-- **Expected:** The agent maps the commit to the "Changelog" PRD section and includes its user-facing description in `[Unreleased]`. `[TBD -- update after planner pins mapping mechanism]` -- see TC-7.4 for the alternative candidate.
+- **Expected:** The agent maps the commit to the "Changelog" PRD section via conventional-commit scope match (per Step 5 of the agent spec) and includes that PRD section's user-facing `Changelog:` value verbatim in `[Unreleased]`. Pinned mechanism -- no alternative path.
 
-### TC-7.4: Commit-to-PRD-section mapping via explicit commit trailer (candidate mechanism 2)
+### TC-7.4: Commit trailer mechanism is NOT supported (negative assertion; rejected alternative)
 - **Category:** Commit Eligibility
-- **Covers:** FR-2.4 (mapping function; architect item 3 defensive)
+- **Covers:** FR-2.4 (negative -- rejected alternative mapping mechanism)
 - **Type:** Integration
-- **Preconditions:** Configured downstream; PRD section identified by a section number (e.g., section 3); commit uses a trailer to link explicitly
+- **Preconditions:** Configured downstream; PRD section identified by a section number (e.g., section 3); commit uses a trailer with NO scope that would match via conventional-commit scope
 - **Test Steps:**
-  1. Make a commit with body containing `PRD-Section: 3` trailer
-  2. Ensure PRD section 3 has a non-skip `Changelog:` value
+  1. Make a commit with subject `feat: implement new work` (NO scope) and body containing `PRD-Section: 3` trailer
+  2. Ensure PRD section 3 has a non-skip `Changelog:` value AND a title whose slugified keyword set does NOT include any word that could match the (empty) scope
   3. Invoke `changelog-writer`
-- **Expected:** The agent maps the commit to PRD section 3 via the trailer. `[TBD -- update after planner pins mapping mechanism]` -- the Tech Lead MUST pin ONE mapping mechanism in the `changelog-writer` agent spec. This test and TC-7.3 will be renumbered or consolidated post-decision. The ambiguity flag is documented in the summary section.
+- **Expected:** The agent does NOT parse or honor the `PRD-Section: 3` trailer (trailer mechanism rejected in favor of conventional-commit scope per agent spec Step 5). Because the commit has no scope, it is reported in the `## Source counts` output as "unmapped" and is NOT added to `[Unreleased]`. The trailer is ignored entirely.
 
 ### TC-7.5: PRD section flagged `skip -- internal` excludes ALL of its commits even after shipping (AC-16)
 - **Category:** Commit Eligibility
@@ -1050,21 +1052,21 @@
 
 ## 11. Agent Structured Output (FR-2.9)
 
-### TC-11.1: Agent output contains all 5 required summary fields
+### TC-11.1: Agent output contains all 5 required markdown headers in canonical order
 - **Category:** Self-Check Sentinel / Continuous Sync (output contract)
-- **Covers:** FR-2.9, architect item 5 (format TBD)
+- **Covers:** FR-2.9 (pinned markdown schema per `src/agents/changelog-writer.md` Step 11)
 - **Type:** Integration
 - **Preconditions:** Configured downstream; agent invoked in a scenario that exercises all fields
 - **Test Steps:**
   1. Invoke `changelog-writer`
   2. Capture the agent's return output
-  3. Verify presence of each of the 5 required fields:
-     - (a) self-check result (`configured` / `not-configured`)
-     - (b) source counts (commits read, PRD sections read)
-     - (c) computed entries per category
-     - (d) action taken (`no-op` / `created` / `rewrote`)
-     - (e) any ambiguous category choices with justification
-- **Expected:** All 5 fields appear in the return output. `[TBD -- update after planner pins output format]` -- the Tech Lead must pin JSON/YAML/markdown. Once pinned: this test becomes a schema-match check (e.g., `jq '.self_check' | jq '.source_counts' | ...` for JSON, or regex for markdown block).
+  3. Verify presence of each of the 5 required top-level markdown headers in this exact order:
+     - (a) `## Self-check` with body `configured` or `not-configured`
+     - (b) `## Source counts` with bullets for `commits read`, `commits eligible`, `commits skipped as internal`, `commits unmapped`, and `PRD sections read`
+     - (c) `## Entries per category` with bullets for `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`
+     - (d) `## Action taken` with exactly one of the six canonical tokens per TC-11.3
+     - (e) `## Warnings` with one bullet per warning or the literal `none`
+- **Expected:** All 5 markdown headers appear in the return output in the canonical order. Output format is pinned to markdown (not JSON or YAML) per agent spec Step 11. A regex/grep matcher can verify each header and its body shape.
 - **Edge Cases:** TC-11.2
 
 ### TC-11.2: Structured output includes warnings when encountered (UC-6, UC-6-EC1, UC-6-EC2)
@@ -1223,14 +1225,14 @@ NFR-1 (no runtime code), NFR-3 (installer-driven activation), NFR-4 (opus model)
 
 The following test cases are marked `[TBD -- update after planner pins X]` because the PRD is ambiguous on at least one dimension. The Tech Lead (planner) must pin ONE canonical interpretation during implementation planning; these tests will be updated or consolidated once pinned.
 
-| TBD Marker | Source Ambiguity | What Needs Pinning |
-|------------|------------------|--------------------|
-| TC-2.6 | Architect item 2 -- `Changelog:` field placement in PRD header block | Is `Changelog:` part of the contiguous header block alongside `Status:`/`Date:`/`Priority:`/`Related:`, or on its own line below? The agent must pin ONE placement; the other becomes invalid (and the prd-writer's critic should flag it) |
+| TBD Marker | Source Ambiguity | Resolution |
+|------------|------------------|------------|
+| TC-2.6 | Architect item 2 -- `Changelog:` field placement in PRD header block | RESOLVED: pinned to separate line below the header block (after one blank line following `Related:`). Inline-with-block placement is invalid and produces a "missing Changelog field" warning. See `src/agents/changelog-writer.md` Step 4 and `src/agents/prd-writer.md` Output Format. |
 | TC-4.5 | PRD -- canonical form of the `[Unreleased]` heading in a newly created file | Is it `## [Unreleased]` alone, or `## [Unreleased] - <placeholder>`? |
 | TC-6.5 | UC-3-A2 -- single-slice wave dispatch path | Does `/develop-feature` dispatch single-slice waves via standalone `/implement-slice` (agent invoked by slice) or via subagent spawn (agent invoked by orchestrator post-wave)? Both are valid per UC-3-A2 but wastes a no-op if the wrong choice is made |
-| TC-7.3, TC-7.4 | Architect item 3 -- commit-to-PRD-section mapping mechanism | Conventional-commit scope match (e.g., `feat(changelog):` -> PRD section with "Changelog" in title) OR explicit commit trailer (e.g., `PRD-Section: 3`)? One test per candidate is written; one will be removed post-decision |
+| TC-7.3, TC-7.4 | Architect item 3 -- commit-to-PRD-section mapping mechanism | RESOLVED: pinned to conventional-commit scope matching the slugified PRD section title keyword set. TC-7.4 trailer mechanism (e.g., `PRD-Section: 3`) is rejected and now serves as a negative assertion. See `src/agents/changelog-writer.md` Step 5. |
 | TC-7.9 | UC-6-EC2 -- conservative behavior for non-literal `Changelog:` values | Is `Changelog: TODO` included in `[Unreleased]` as a user-facing entry (with a warning) or excluded like `skip -- internal`? The use-case authors propose "include + warn"; prd-writer must confirm |
-| TC-11.1 | Architect item 5 -- structured output format | JSON, YAML, or markdown? All 5 required fields must appear but in what form? |
+| TC-11.1 | Architect item 5 -- structured output format | RESOLVED: pinned to markdown with exactly five top-level headers (`## Self-check`, `## Source counts`, `## Entries per category`, `## Action taken`, `## Warnings`) in that order. See `src/agents/changelog-writer.md` Step 11. |
 | TC-11.3 | Canonical action-taken tokens | Exact strings for each action state (`no-op: not configured`, `no-op: already in sync`, `action taken: created`, `action taken: rewrote`, `no-op: no eligible entries` — is "no eligible entries" the canonical form?) |
 
 ---
@@ -1239,9 +1241,9 @@ The following test cases are marked `[TBD -- update after planner pins X]` becau
 
 Where the PRD did not pin an interpretation, the following tests were written to cover BOTH valid alternatives (so coverage is not lost if the planner chooses either direction):
 
-1. **TC-2.6** -- tests BOTH placements of `Changelog:` field in PRD header block (inline-with-block vs. own-line-below)
-2. **TC-7.3 & TC-7.4** -- tests BOTH candidate commit-to-PRD-section mapping mechanisms (conventional-commit scope vs. explicit trailer)
+1. **TC-2.6** (RESOLVED) -- now asserts the pinned own-line-below placement parses and the inline-with-block placement is treated as missing field (negative assertion on the rejected alternative).
+2. **TC-7.3 & TC-7.4** (RESOLVED) -- TC-7.3 asserts the pinned conventional-commit scope mechanism. TC-7.4 asserts the rejected trailer mechanism is ignored (commits with no matching scope are "unmapped" regardless of trailer content).
 3. **TC-6.5** -- exercises BOTH single-slice-wave dispatch paths (standalone `/implement-slice` invocation OR orchestrator-only post-wave invocation); asserts final state is equivalent either way via idempotency
 4. **TC-7.9** -- tests the conservative "include + warn" behavior for malformed `Changelog:` values, flagging that prd-writer should confirm
 
-After the planner pins the canonical choice for each, these tests will be updated (renumbered or consolidated) so only the canonical behavior is asserted as expected; the rejected alternative becomes a negative assertion (e.g., "the non-pinned placement MUST be flagged as invalid by the prd-writer critic").
+Remaining unresolved ambiguities (TC-4.5, TC-6.5, TC-7.9, TC-11.3) keep their defensive-pair test shape until the planner pins their canonical choice.
