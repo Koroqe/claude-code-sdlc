@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-13 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+14 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
@@ -92,7 +92,7 @@ MERGE READY
 
 ---
 
-## The 13 Agents
+## The 14 Agents
 
 | Agent | Role |
 |-------|------|
@@ -109,6 +109,7 @@ MERGE READY
 | `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
+| `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
 
 ---
 
@@ -167,6 +168,16 @@ Creates:
 - `.claude/rules/` — architecture, security, testing constraints
 - `docs/PRD.md` — product requirements
 - `docs/qa/` and `docs/use-cases/` — test case and use case directories
+
+---
+
+## Automated CHANGELOG for downstream projects
+
+Downstream projects scaffolded with `bash install.sh --init-project` get a `CHANGELOG.md` file maintained automatically in the [Keep a Changelog](https://keepachangelog.com/) format. The `changelog-writer` agent keeps the `[Unreleased]` section in sync with the PRD, scratchpad, and git log at four lifecycle points: post-bootstrap (after `/bootstrap-feature` completes), post-commit in standalone `/implement-slice` mode, post-wave in `/develop-feature` (once per wave, not per slice), and pre-flight in `/merge-ready`.
+
+The SDLC repo itself opts out automatically: because `bash install.sh` does not install the sentinel rule file `.claude/rules/changelog.md` onto the SDLC repo, the `changelog-writer` agent detects the missing sentinel and returns `no-op: not configured` without performing any writes when invoked inside this repository.
+
+See `templates/rules/changelog.md` for the full policy, including Keep-a-Changelog category mapping, idempotency rules, and the commit-hash marker strategy used to avoid duplicate entries.
 
 ---
 
