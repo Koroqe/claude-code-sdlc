@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-14 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+15 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
@@ -92,13 +92,14 @@ MERGE READY
 
 ---
 
-## The 14 Agents
+## The 15 Agents
 
 | Agent | Role |
 |-------|------|
 | `prd-writer` | Feature requirements in `docs/PRD.md` |
 | `ba-analyst` | Use cases and scenarios in `docs/use-cases/` |
 | `architect` | Architecture review, module boundaries, `[STRUCTURAL]` fix authorizations |
+| `resource-architect` | Recommends external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap Step 3.5 — suggest-only, no installs |
 | `qa-planner` | Test cases in `docs/qa/` before any code |
 | `planner` | Breaks features into 5-9 executable slices with verification commands |
 | `security-auditor` | Vulnerability audit, auth boundaries |
@@ -178,6 +179,12 @@ Downstream projects scaffolded with `bash install.sh --init-project` get a `CHAN
 The SDLC repo itself opts out automatically: because `bash install.sh` does not install the sentinel rule file `.claude/rules/changelog.md` onto the SDLC repo, the `changelog-writer` agent detects the missing sentinel and returns `no-op: not configured` without performing any writes when invoked inside this repository.
 
 See `templates/rules/changelog.md` for the full policy, including Keep-a-Changelog category mapping, idempotency rules, and the commit-hash marker strategy used to avoid duplicate entries.
+
+---
+
+## Resource recommendation at bootstrap
+
+The `resource-architect` agent runs at Step 3.5 of `/bootstrap-feature`, immediately after the architecture review passes, and produces structured recommendations across six categories: MCP servers, cloud/compute, external APIs, third-party services, libraries/frameworks, and hardware. Each recommendation includes Category, Why, Install/activate, Cost/complexity, and Reversibility fields so downstream humans or agents can evaluate tradeoffs without re-researching. The agent is strictly **suggest-only**: it never runs `claude mcp add`, never writes to `~/.claude/settings.json`, never touches `.env` or credentials, never invokes package managers (`npm install`, `pip install`, `brew install`, etc.), and makes no network calls — all inputs are local files. When no external resources are needed, the agent still emits all six category headings with `(none)` so downstream readers can distinguish "not needed" from "not considered". The planner inlines the recommendations as a top-level `## Recommended Resources` section at the top of `.claude/plan.md` and deletes the temporary `.claude/resources-pending.md` handoff file.
 
 ---
 
