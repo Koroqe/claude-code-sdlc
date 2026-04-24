@@ -5,7 +5,7 @@ set -euo pipefail
 # Claude Code SDLC Installer
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 13 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 14 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install:
@@ -46,7 +46,7 @@ print_help() {
   cat << 'HELPEOF'
 Claude Code SDLC Installer v2.1.0
 
-Turn Claude Code into a full dev team with 13 specialized AI agents.
+Turn Claude Code into a full dev team with 14 specialized AI agents.
 
 USAGE:
   bash install.sh [OPTIONS]
@@ -59,7 +59,7 @@ OPTIONS:
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
-  agents/          13 specialized agent prompts
+  agents/          14 specialized agent prompts
   commands/        5 SDLC pipeline commands
   rules/           4 process rules
 
@@ -175,11 +175,11 @@ install_user_config() {
   echo -e "${BOLD}============================================${NC}"
   echo ""
   echo -e "  ${CYAN}Turn Claude Code into a full dev team${NC}"
-  echo -e "  13 AI agents | Documentation-first | TDD"
+  echo -e "  14 AI agents | Documentation-first | TDD"
   echo ""
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
-  echo "    agents/  (13 files — specialized agent prompts)"
+  echo "    agents/  (14 files — specialized agent prompts)"
   echo "    commands/ (5 files — SDLC pipeline commands)"
   echo "    rules/   (4 files — process rules)"
   echo ""
@@ -262,6 +262,9 @@ scaffold_project() {
 
   cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md"
   log_ok ".claude/rules/testing.md (template)"
+
+  cp "$SCRIPT_DIR/templates/rules/changelog.md" ".claude/rules/changelog.md"
+  log_ok ".claude/rules/changelog.md (template)"
 
   cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md"
   log_ok ".claude/scratchpad.md"
