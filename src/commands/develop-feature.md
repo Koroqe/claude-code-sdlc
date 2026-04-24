@@ -49,7 +49,8 @@ Report your result: PASS (with commit hash) or FAIL (with error details)."
 After all subagents complete:
 1. **Collect results** — which slices succeeded (commit hashes), which failed (errors)
 2. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
-3. **Handle failures** (per error-recovery parallel wave rules):
+3. **Changelog sync (orchestrator-only, once per wave)** — delegate to `changelog-writer` ONCE after all subagents in this wave have completed and the scratchpad is updated, BEFORE proceeding to the next wave. **This applies to ALL waves regardless of size — single-slice waves included.** The agent is idempotent per FR-2.6 and NFR-6, so redundant invocations are cheap (no-op on second call). Uniform dispatch eliminates the dispatch-contradiction risk where a single-slice subagent would receive wave context (causing `implement-slice.md` Step 5.5 to SKIP) while the orchestrator also skipped — leaving the wave without a sync. The agent is invoked with no arguments beyond CWD (per FR-4.6). Subagents within the wave (single or multi-slice) do NOT invoke the agent themselves — this is the structural prevention of the PRD 3.9 Risk 3 double-write race (per FR-4.2). A `no-op: not configured` response inside the SDLC repo is expected and treated as success. If the agent fails, log the error and proceed to the next wave — per FR-4.5 this hook is non-blocking; NFR-6 idempotency ensures the next hook invocation reconciles state.
+4. **Handle failures** (per error-recovery parallel wave rules):
    - All succeeded → proceed to next wave
    - Some failed → keep successful sibling commits (independent files), report failures, ask user: retry / continue / abort
    - All failed → report as blocker, stop

@@ -50,6 +50,9 @@ Delegate to `planner` agent:
 - Flag slices needing architect or security pre-review
 - Reference actual project files discovered during exploration
 
+### Step 5.5: Release Scribe — Initial Changelog Stub
+Delegate to `changelog-writer` agent with no arguments beyond the project CWD context (per FR-4.6). This is the first lifecycle hook — it produces an initial `[Unreleased]` stub (or, more commonly, returns `no-op: already in sync` / `no-op: no eligible entries` when the branch has no prior eligible commits). A `no-op: not configured` response is expected when running inside the SDLC repo itself and is treated as success. This hook is non-blocking per FR-4.5: if the agent fails, log the error and continue to Step 6.
+
 ### Step 6: Git Setup
 - Verify `git status` is clean
 - Create feature branch: `feat/<feature-slug>`

@@ -2,6 +2,15 @@
 
 Run a full quality gate before merge. All checks must pass.
 
+## Pre-flight: Changelog Sync (safety net — NOT a gate)
+
+Before Gate 0 runs, delegate to `changelog-writer` with no arguments beyond CWD as a silent safety-net sync (per FR-4.4). This is NOT a new quality gate — it has no pass/fail verdict, does not appear in the Gate count, and does NOT block merge readiness. The gate list (Gate 0 through Gate 8) is UNCHANGED; no `Gate 10` exists in iteration 1 per PRD 3.8 item 7 and AC-11.
+
+Behavior:
+- If the agent returns `no-op: not configured` (SDLC repo) or `no-op: already in sync` (common case — previous hooks kept content in sync), proceed silently to Gate 0 with no extra output.
+- If the agent returns `action taken: rewrote` (uncommon — e.g., PRD edited since last sync), surface the diff summary in the merge-ready output before proceeding to Gate 0.
+- If the agent fails for any reason, log the error and proceed to Gate 0 per FR-4.5. The pre-flight sync cannot fail `/merge-ready`.
+
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
 - [ ] Working tree clean (`git status`)

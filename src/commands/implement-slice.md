@@ -63,6 +63,12 @@ Delegate to `test-writer` agent:
 - Types: `feat`, `fix`, `test`, `chore`
 - Scopes: `api | ui | db | auth | core | infra`
 
+### 5.5. Changelog Sync (standalone mode only)
+
+**When running as a parallel subagent** (wave context provided in spawn prompt): SKIP this step entirely. The orchestrator handles post-wave changelog sync per FR-4.3 in `/develop-feature`. Invoking `changelog-writer` from a subagent risks a double-write race on `CHANGELOG.md` (PRD 3.9 Risk 3) and is explicitly prohibited.
+
+**When running standalone** (no wave context): immediately after the commit in Step 5 succeeds, delegate to `changelog-writer` with no arguments beyond CWD. A `no-op: not configured` response is expected when running inside the SDLC repo and is treated as success. If the agent fails (crash, timeout, Rule 3 retry exhaustion), log the error and proceed to Step 6 — per FR-4.5 the pipeline MUST continue; the next hook invocation will reconcile state (NFR-6 eventual consistency).
+
 ### 6. Update Scratchpad
 **Skip this step when running as a parallel subagent** (wave context provided in spawn prompt). The orchestrator handles scratchpad updates after collecting all wave results.
 
