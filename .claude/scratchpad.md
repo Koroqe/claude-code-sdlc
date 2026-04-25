@@ -1,6 +1,6 @@
 ## Feature: Auto-Release Pipeline (iter-3)
 ## Branch: feat/auto-release
-## Status: implementing wave 2 slice 2/7
+## Status: implementing wave 3 slices 3+4/7 (parallel)
 
 ## Plan
 
@@ -11,9 +11,9 @@
   - Inlined architect action items #1 (tag-scheme disambiguation), #2 (FR-12.7 templates wording — implicit; only src/agents/release-engineer.md touched), #4 (Bash already present in tools — narratives updated, not added)
 
 ### Wave 2 (sequential — install.sh foundation)
-- [ ] Slice 2: install.sh REPO_URL fix (Koroqe → codefather-labs) + Windows uname branch + version bump 2.1.0 → 3.0.0
+- [x] Slice 2: install.sh REPO_URL fix (Koroqe → codefather-labs) + Windows uname branch + version bump 2.1.0 → 3.0.0 — 0be97d0
   - Files: install.sh
-  - Pre-review: security-auditor (URL change migration risk + Windows path detection safety)
+  - Pre-review: security-auditor (Phase 1.5 MEDIUM: curl/wget hardening parity — applied)
 
 ### Wave 3 (parallel — workflows; disjoint files)
 - [ ] Slice 3: extend sdlc-knowledge-release.yml — windows-x64 matrix + alternation find -o operator + source tarball
@@ -130,6 +130,7 @@ New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacha
 
 ## Completed
 - Slice 1 (Wave 1 complete) — 4d2f47b — release-engineer §7 executing mode + 4-tier authority + bash whitelist + tag-scheme disambiguation; sentinel-absent path byte-identical to current main suggest-only Gate 9; all 8 Slice 1 security MUSTs (M1–M8) inlined; architect action items #1/#2/#4 inlined; file grew 446 → 554 lines (+108)
+- Slice 2 (Wave 2 complete) — 0be97d0 — install.sh REPO_URL Koroqe→codefather-labs (unblocks piped curl|bash bootstrap); VERSION 2.1.0→3.0.0 (matches major bump from §7 executing-mode flip); Windows uname branch (MINGW/MSYS/CYGWIN → windows-x64 + .exe handling end-to-end including cargo fallback); Slice 2 security MEDIUM applied (curl --max-redirs 5 --max-time 120 + wget --max-redirect=5 --timeout=120 --secure-protocol=TLSv1_2 parity with pdfium path)
 
 ## Blockers
 (none)
