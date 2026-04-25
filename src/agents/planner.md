@@ -20,7 +20,7 @@ You plan new features by breaking them into small, testable implementation slice
 3. Explore the codebase to understand existing patterns and affected files
 4. Inline temp files from upstream agents into `.claude/plan.md`. This step has three independent sub-steps that MUST be performed in the order given (Recommended Resources, then Additional Roles, then deletion).
 
-   - **4a — Recommended Resources (from `resource-architect`):** Read `.claude/resources-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written) and inline that captured content as a top-level `## Recommended Resources` section at the top of `.claude/plan.md`, positioned above `## Prerequisites verified`. If the file does not exist, skip silently — no error, no warning, and do not add a `## Recommended Resources` section. (This preserves the Feature #4 contract.)
+   - **4a — Recommended Resources + Auto-Install Results (from `resource-architect`):** Read `.claude/resources-pending.md` if it exists. If present, the file may contain TWO upstream-produced top-level sections: `## Recommended Resources` (always present in iter-1 and iter-2) and `## Auto-Install Results` (produced only by iter-2 auto-install when installable items existed and a non-headless approval flow ran). Inline BOTH sections into `.claude/plan.md` in the file's own order — `## Recommended Resources` FIRST, then `## Auto-Install Results` SECOND — capturing the full content of each verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written). Both inlined sections MUST be positioned above `## Additional Roles` (Section 5 / Step 4b) and above `## Prerequisites verified`. The absence of `## Auto-Install Results` in the temp file is NOT an error — legacy iter-1 plans, headless contexts, and runs with no installable items will not produce that section; in those cases inline only `## Recommended Resources` and continue. If the temp file itself does not exist, skip silently — no error, no warning, and do not add either section. (This preserves the Feature #4 contract and extends it for iter-2 auto-install.)
 
    - **4b — Additional Roles (from `role-planner`):** Read `.claude/roles-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written) and inline that captured content as a top-level `## Additional Roles` section in `.claude/plan.md`, positioned AFTER the previously inlined Recommended Resources section (or at the top of the plan when no prior section was inlined), and BEFORE `## Prerequisites verified`. If the file does not exist, skip silently — no error, no warning, and do not add a `## Additional Roles` section.
 
@@ -32,12 +32,13 @@ You plan new features by breaking them into small, testable implementation slice
 
 ## Output Format
 
-**Note on top-of-plan section ordering:** The generated `.claude/plan.md` MUST begin with the following top-level sections in this exact order (each upstream-sourced section is conditional on its temp file existing per Process step 4; when absent, the section is omitted and the next one moves up):
+**Note on top-of-plan section ordering:** The generated `.claude/plan.md` MUST begin with the following top-level sections in this exact order (each upstream-sourced section is conditional on its temp file existing per Process step 4; when absent, the section is omitted and the next one moves up). The two `resource-architect`-sourced sections (Recommended Resources first, Auto-Install Results second) come from the SAME temp file (`.claude/resources-pending.md`) and are inlined together in step 4a:
 
 1. `## Recommended Resources` — produced only if `.claude/resources-pending.md` existed and was inlined per Process step 4a (sourced from `resource-architect`).
-2. `## Additional Roles` — produced only if `.claude/roles-pending.md` existed and was inlined per Process step 4b (sourced from `role-planner`).
-3. `## Prerequisites verified` — always present.
-4. ... slices and remaining sections ...
+2. `## Auto-Install Results` — produced only if `.claude/resources-pending.md` existed AND it contained a `## Auto-Install Results` section (iter-2 auto-install ran with installable items in a non-headless context). Sourced from `resource-architect`. Absence is NOT an error (legacy iter-1 plans, headless runs, or no-installable-items runs omit it).
+3. `## Additional Roles` — produced only if `.claude/roles-pending.md` existed and was inlined per Process step 4b (sourced from `role-planner`).
+4. `## Prerequisites verified` — always present.
+5. ... slices and remaining sections ...
 
 1. **Prerequisites verified** (confirm these documents exist):
    - PRD section: `docs/PRD.md` — [section number]
