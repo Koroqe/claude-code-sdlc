@@ -1,32 +1,24 @@
 ## Feature: Robust PDF Extraction via pdfium-render (iter-2 of local-knowledge-base)
 ## Branch: feat/pdfium-pdf-extraction
-## Status: implementing wave 1 slice 1/5
+## Status: quality-gates (Phase 2.5 cleanup → Phase 3)
 
 ## Plan
 
-### Wave 1 (sequential — Rust crate dep + core PDF reader)
-- [ ] Slice 1: Cargo.toml dep swap (pdf-extract → pdfium-render = "0.9") + src/pdf.rs rewrite using `Pdfium::bind_to_library(<absolute-path>)` + calibre-sample.pdf fixture (≤200 KB) + new tests/pdfium_test.rs with env-var-hijack mitigation test
-  - Files: tools/sdlc-knowledge/{Cargo.toml, src/pdf.rs, src/lib.rs, tests/pdfium_test.rs [new], tests/fixtures/calibre-sample.{pdf, README.md} [new], tests/ingest_test.rs}
-  - Pre-review: architect (resolve pdfium-render API symbol pre-implementation per [MAJOR] action item) + security-auditor ([STRUCTURAL] env-var hijack mitigation)
-  - Inlines architect action items #1, #2, #3, #4
+### Wave 1 [COMPLETE]
+- [x] Slice 1: Cargo.toml dep swap + pdf.rs rewrite + calibre fixture + 7 tests — ca7c6dd
+  - 62 tests + 5 ignored (binary-dependent, await Slice 3). Forbidden-symbol grep clean. Fixture 71974 B < 200 KB, sha256 documented. All 5 security remediations + catch_unwind preserved.
 
-### Wave 2 (sequential — depends on Wave 1's main.rs/cli.rs/store.rs edits)
-- [ ] Slice 2: Add `delete --by-id <int>` subcommand + mutual-exclusion logic with positional path arg + FR-4.5 JSON shape
-  - Files: tools/sdlc-knowledge/{src/cli.rs, src/main.rs, src/store.rs, src/output.rs, tests/cli_search_e2e_test.rs}
-  - Pre-review: none (architect: DB-open path-canonicalize gate is sufficient security)
+### Wave 2 [COMPLETE]
+- [x] Slice 2: delete --by-id flag + mutual exclusion + FR-4.5 JSON shape — 70f63e6
+  - 66 tests + 5 ignored. Stderr literals byte-exact. delete_by_id_with_summary wraps BEGIN IMMEDIATE; FK CASCADE handles chunks deletion automatically.
 
-### Wave 3 (parallel — disjoint files)
-- [ ] Slice 3: install.sh `install_pdfium_binary` function — download from bblanchon/pdfium-binaries, tar `--no-same-owner --no-same-permissions`, idempotency
-  - Files: install.sh
-  - Pre-review: security-auditor (URL pinning, tar safety, archive extraction, idempotent skip)
-  - Inlines architect action item #5
-- [ ] Slice 4: GitHub Actions release workflow — pdfium download + post-build calibre fixture ingest smoke test
-  - Files: .github/workflows/sdlc-knowledge-release.yml
-  - Pre-review: none (CI-only; actionlint catches typos)
-- [ ] Slice 5: Documentation updates — knowledge-base-tool.md (replace pdf-extract limitations) + knowledge-base.md (small clarification) + RELEASING.md (caret-semver fence + fixture stress note) + README.md (Hardening row update; lines 5/35 BYTE-UNCHANGED)
-  - Files: src/rules/{knowledge-base-tool, knowledge-base}.md, tools/sdlc-knowledge/RELEASING.md, README.md
-  - Pre-review: none
-  - Inlines architect action items #3, #4
+### Wave 3 [COMPLETE] (3 parallel slices; race bundled 3+4)
+- [x] Slices 3 + 4 (bundled by parallel git race): install.sh install_pdfium_binary + GHA workflow pdfium download + calibre fixture smoke — 001142b
+  - 17 security MUSTs (M1-M17) implemented; KNOWLEDGE_PDFIUM_VERSION=chromium/7802 pinned; live smoke test on darwin-arm64 succeeded (libpdfium.dylib 7062464 B installed at canonical path; .version sentinel; idempotent on re-run)
+- [x] Slice 5: docs — 801dd59 (knowledge-base-tool.md + knowledge-base.md + RELEASING.md + README.md; lines 5/35 byte-unchanged)
+
+## Wave 3 race notes
+- Slice 4's GHA workflow was pre-staged before Slice 3's commit fired; Slice 3 commit picked up both files. Same race pattern as feat/local-knowledge-base Wave 5 (slices 7a+7b). Content correct; only history granularity lost. Not a merge blocker.
 
 ## Bootstrap artifacts produced
 - PRD §12 (lines 2693+) — 9 FR groups (45 FRs), 9 NFRs, 9 ACs, 9 risks, 6 out-of-scope items
