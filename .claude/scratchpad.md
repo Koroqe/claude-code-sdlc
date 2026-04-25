@@ -1,14 +1,14 @@
 ## Feature: Auto-Release Pipeline (iter-3)
 ## Branch: feat/auto-release
-## Status: implementing wave 1 slice 1/7
+## Status: implementing wave 2 slice 2/7
 
 ## Plan
 
 ### Wave 1 (sequential — release-engineer prompt + bash whitelist)
-- [ ] Slice 1: release-engineer executing-mode flip + 4-tier authority + bash whitelist + tag-scheme disambiguation
+- [x] Slice 1: release-engineer executing-mode flip + 4-tier authority + bash whitelist + tag-scheme disambiguation — 4d2f47b
   - Files: src/agents/release-engineer.md
-  - Pre-review: architect + security-auditor
-  - Inlines architect action items #1 (tag-scheme disambiguation), #2 (FR-12.7 templates wording), #4 (Bash already present in tools — extend authority not add tool)
+  - Pre-review: architect + security-auditor (Phase 1.5 — 8 MUSTs M1–M8 inlined; b53a475)
+  - Inlined architect action items #1 (tag-scheme disambiguation), #2 (FR-12.7 templates wording — implicit; only src/agents/release-engineer.md touched), #4 (Bash already present in tools — narratives updated, not added)
 
 ### Wave 2 (sequential — install.sh foundation)
 - [ ] Slice 2: install.sh REPO_URL fix (Koroqe → codefather-labs) + Windows uname branch + version bump 2.1.0 → 3.0.0
@@ -129,7 +129,7 @@ New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacha
 - **M10 error-message hygiene** — abort messages MUST NOT include raw `git remote get-url origin` output, raw `gh auth status` output, or any token fragments. Use canonical sanitized messages: `pre-condition failed: origin URL mismatch (expected codefather-labs/claude-code-sdlc)`, `pre-condition failed: gh CLI not authenticated`, etc.
 
 ## Completed
-(none — implementation pending)
+- Slice 1 (Wave 1 complete) — 4d2f47b — release-engineer §7 executing mode + 4-tier authority + bash whitelist + tag-scheme disambiguation; sentinel-absent path byte-identical to current main suggest-only Gate 9; all 8 Slice 1 security MUSTs (M1–M8) inlined; architect action items #1/#2/#4 inlined; file grew 446 → 554 lines (+108)
 
 ## Blockers
 (none)
