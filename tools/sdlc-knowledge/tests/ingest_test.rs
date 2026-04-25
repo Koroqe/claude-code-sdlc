@@ -89,22 +89,27 @@ fn chunker_utf8_boundary_no_panic_and_valid_strings() {
 // TC-SEC-2.1 — PDF panic containment.
 //
 // pdf::extract_via_closure_for_test exposes the catch_unwind wrapper for the
-// closure-form pdf_extract entrypoint, allowing us to inject a panicking
+// closure-form pdfium-render entrypoint, allowing us to inject a panicking
 // closure and assert that it surfaces as IngestError::PdfDecode("panic ...").
+//
+// Iter-2 update: closure signature is now `FnOnce(&[u8]) -> Result<String, String>`
+// and the panic-category message is "panic during pdfium-render extraction"
+// per FR-1.6 / FR-1.7. (The seam still exercises the same catch_unwind boundary.)
 // ---------------------------------------------------------------------------
 
 #[test]
 fn pdf_panic_is_contained_as_pdf_decode_error() {
-    let path = std::path::PathBuf::from("/tmp/synthetic-panic.pdf");
-    let result = extract_via_closure_for_test(&path, || {
-        panic!("simulated panic from pdf_extract");
+    // Use an existing fixture so the closure is reached after `std::fs::read`.
+    let path = fixtures_dir().join("sample.pdf");
+    let result = extract_via_closure_for_test(&path, |_bytes| -> Result<String, String> {
+        panic!("simulated panic from inside pdfium-render");
     });
 
     let err = result.expect_err("panicking closure must yield Err");
     let msg = format!("{err}");
     assert!(
-        msg.contains("panic during pdf_extract::extract_text"),
-        "expected PdfDecode with panic category; got: {msg}"
+        msg.contains("panic during pdfium-render extraction"),
+        "expected PdfDecode with iter-2 panic-category message; got: {msg}"
     );
 }
 

@@ -1,14 +1,41 @@
-//! PDF text extraction with two security boundaries:
-//!  1. `std::panic::catch_unwind(AssertUnwindSafe(...))` around `pdf_extract::extract_text`,
-//!     mapping any panic to `IngestError::PdfDecode("panic during pdf_extract::extract_text")`
-//!     so the per-file error boundary contains it (Phase 1.5 Security MUST #1).
-//!  2. A 50 MB byte budget on extracted text — over-budget extracts are rejected
-//!     before they hit SQLite (Phase 1.5 Security MUST #2).
+//! PDF text extraction via the `pdfium-render` Rust binding to the PDFium engine.
+//!
+//! Iter-2 replacement for the iter-1 `pdf-extract` integration. Architect
+//! STRUCTURAL action item #1 mandates the explicit-path entrypoint
+//! `Pdfium::bind_to_library(<absolute-canonicalized-path>)` — this eliminates
+//! the LD_LIBRARY_PATH / DYLD_LIBRARY_PATH hijack surface that the system-
+//! library lookup entrypoint opens. Absolute paths handed to `dlopen` /
+//! `LoadLibraryExW` are used verbatim and DO NOT consult the library-search
+//! environment variables. The forbidden-symbol grep in `tests/pdfium_test.rs`
+//! enforces that the system-lookup and statically-linked binding entrypoints
+//! are never referenced anywhere in this file.
+//!
+//! Security boundaries (preserved from iter-1, plus iter-2 additions):
+//!  1. `std::panic::catch_unwind(AssertUnwindSafe(...))` around the C++ FFI
+//!     call. Any panic from inside pdfium-render (bug, OOM, malformed PDF
+//!     reaching unhandled-edge in upstream PDFium) maps to
+//!     `IngestError::PdfDecode("panic during pdfium-render extraction")`
+//!     so the per-file boundary contains it (FR-1.6).
+//!  2. A 50 MB byte budget on extracted text — over-budget extracts are
+//!     rejected before they hit SQLite (FR-1.5).
+//!  3. (NEW iter-2) `$HOME` is required, NOT silently coerced to CWD via
+//!     `unwrap_or_default()` (security-auditor HIGH remediation #1).
+//!  4. (NEW iter-2) The pdfium library directory MUST NOT be world-writable
+//!     (security-auditor HIGH remediation #2 — TOCTOU mitigation).
+//!  5. (NEW iter-2) After canonicalization, the resolved library path MUST
+//!     start with the canonicalized expected directory prefix (security-
+//!     auditor MEDIUM remediation #3 — symlink-redirect defense in depth).
+//!  6. (NEW iter-2) Canonicalize-failure maps to FR-3.5 literal
+//!     "pdfium dynamic library not found ... install via bash install.sh --yes"
+//!     (security-auditor MEDIUM remediation #4).
 //!
 //! SQL discipline: this module never builds SQL. (Comment retained for grep audit.)
 
+use std::os::unix::fs::PermissionsExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+
+use pdfium_render::prelude::*;
 
 use crate::ingest::IngestError;
 
@@ -16,40 +43,137 @@ use crate::ingest::IngestError;
 /// `IngestError::PdfBudgetExceeded` to bound memory and downstream chunk count.
 pub const PDF_BUDGET_BYTES: usize = 50 * 1024 * 1024;
 
-/// Extract text from a PDF. Wraps `pdf_extract::extract_text` in a panic boundary
-/// and a byte-budget gate.
+/// Resolve the absolute, canonicalized directory containing the pdfium dynamic
+/// library. Reject:
+///  - missing or empty `$HOME` (security-auditor HIGH #1)
+///  - world-writable lib directory (security-auditor HIGH #2)
+///  - any canonicalization failure (mapped to FR-3.5 literal — security-auditor
+///    MEDIUM #4)
+fn resolve_pdfium_lib_dir() -> Result<PathBuf, String> {
+    // M1: REJECT empty/missing HOME explicitly. unwrap_or_default would coerce
+    // to "" and resolve a CWD-relative path.
+    let home = std::env::var("HOME")
+        .map_err(|_| "HOME env var unset; cannot resolve pdfium library path".to_string())?;
+    if home.is_empty() {
+        return Err("HOME env var empty; cannot resolve pdfium library path".to_string());
+    }
+
+    let expected_dir = PathBuf::from(home).join(".claude/tools/sdlc-knowledge/pdfium/lib");
+    if !expected_dir.exists() {
+        return Err(format!(
+            "pdfium dynamic library not found at {}; install via bash install.sh --yes",
+            expected_dir.display()
+        ));
+    }
+
+    // M2: directory-mode safety check (HIGH) — reject world-writable dirs.
+    let metadata = std::fs::metadata(&expected_dir)
+        .map_err(|e| format!("cannot stat pdfium lib dir {}: {e}", expected_dir.display()))?;
+    let mode = metadata.permissions().mode();
+    if mode & 0o002 != 0 {
+        return Err(format!(
+            "pdfium library directory {} is world-writable (mode {:o}); refusing to load",
+            expected_dir.display(),
+            mode
+        ));
+    }
+
+    // Canonicalize for symlink-safe comparison.
+    let canonical_dir = std::fs::canonicalize(&expected_dir).map_err(|e| {
+        format!(
+            "pdfium dynamic library not found at {}; install via bash install.sh --yes ({e})",
+            expected_dir.display()
+        )
+    })?;
+    Ok(canonical_dir)
+}
+
+/// Resolve the absolute, canonicalized path to the pdfium dynamic library file
+/// (libpdfium.dylib on macOS, libpdfium.so on Linux). Defends against symlink
+/// redirection by canonicalizing the resolved file path and asserting it stays
+/// under the canonical lib-dir prefix (security-auditor MEDIUM #3).
+fn resolve_pdfium_lib_path() -> Result<PathBuf, String> {
+    let dir = resolve_pdfium_lib_dir()?;
+    let candidate = Pdfium::pdfium_platform_library_name_at_path(&dir);
+    let canonical = std::fs::canonicalize(&candidate).map_err(|e| {
+        format!(
+            "pdfium dynamic library not found at {}; install via bash install.sh --yes ({e})",
+            candidate.display()
+        )
+    })?;
+    // M3: prefix-starts-with check (MEDIUM) — defense in depth.
+    if !canonical.starts_with(&dir) {
+        return Err(format!(
+            "pdfium library path {} escapes canonical install prefix {}",
+            canonical.display(),
+            dir.display()
+        ));
+    }
+    Ok(canonical)
+}
+
+/// Extract text from a PDF using pdfium-render. Wraps the C++ FFI call in a
+/// panic boundary and a byte-budget gate.
+///
+/// Public API signature is BYTE-UNCHANGED from iter-1 per FR-1.1 — callers in
+/// `ingest.rs` continue to invoke `pdf::read(&path)` with no awareness of the
+/// underlying engine swap.
 pub fn read(p: &Path) -> Result<String, IngestError> {
-    let p_buf = p.to_path_buf();
-    extract_via_closure(p_buf, |p| {
-        // pdf_extract::extract_text accepts a path; map its error type to a String
-        // so the closure return matches the byte-budget signature.
-        pdf_extract::extract_text(p).map_err(|e| e.to_string())
-    })
+    extract_via_closure(p, extract_with_pdfium)
+}
+
+/// Hot-path extraction body. Loads pdfium dynamically, opens the document from
+/// the in-memory byte slice, iterates pages, and concatenates per-page text
+/// joined by `\n`.
+fn extract_with_pdfium(bytes: &[u8]) -> Result<String, String> {
+    let lib_path = resolve_pdfium_lib_path()?;
+    let bindings = Pdfium::bind_to_library(&lib_path)
+        .map_err(|e| format!("pdfium bind_to_library: {e}"))?;
+    let pdfium = Pdfium::new(bindings);
+    let doc = pdfium
+        .load_pdf_from_byte_slice(bytes, None)
+        .map_err(|e| format!("pdfium load_pdf: {e}"))?;
+    let mut out = String::new();
+    for (i, page) in doc.pages().iter().enumerate() {
+        let text = page
+            .text()
+            .map_err(|e| format!("page {i} text: {e}"))?
+            .all();
+        out.push_str(&text);
+        out.push('\n');
+    }
+    Ok(out)
 }
 
 /// Test-only entrypoint: drive the panic-containment + byte-budget code path
-/// with an arbitrary closure. Used by TC-SEC-2.1 in `tests/ingest_test.rs` to
+/// with an arbitrary closure. Used by `tests/pdfium_test.rs` (TC-SEC-2.1) to
 /// inject a synthetic panic without depending on a panicking PDF fixture.
+///
+/// FR-1.7: signature is iter-2-revised (closure receives `&[u8]` matching the
+/// real extraction body). The iter-1 signature was `FnOnce() -> String`; this
+/// is a Slice 1 deliverable change.
+#[doc(hidden)]
 pub fn extract_via_closure_for_test<F>(p: &Path, f: F) -> Result<String, IngestError>
 where
-    F: FnOnce() -> String + std::panic::UnwindSafe,
+    F: FnOnce(&[u8]) -> Result<String, String> + std::panic::UnwindSafe,
 {
-    let p_buf = p.to_path_buf();
-    extract_via_closure(p_buf, |_| Ok(f()))
+    extract_via_closure(p, f)
 }
 
-fn extract_via_closure<F>(p_buf: PathBuf, f: F) -> Result<String, IngestError>
+fn extract_via_closure<F>(p: &Path, f: F) -> Result<String, IngestError>
 where
-    F: FnOnce(&Path) -> Result<String, String>,
+    F: FnOnce(&[u8]) -> Result<String, String> + std::panic::UnwindSafe,
 {
-    let p_for_closure = p_buf.clone();
-    let result = catch_unwind(AssertUnwindSafe(|| f(&p_for_closure)));
+    let bytes = std::fs::read(p)
+        .map_err(|e| IngestError::PdfDecode(p.to_path_buf(), format!("read: {e}")))?;
+    let p_buf = p.to_path_buf();
+    let result = catch_unwind(AssertUnwindSafe(|| f(&bytes)));
     match result {
         Ok(Ok(text)) => check_byte_budget(p_buf, text),
         Ok(Err(msg)) => Err(IngestError::PdfDecode(p_buf, msg)),
         Err(_) => Err(IngestError::PdfDecode(
             p_buf,
-            "panic during pdf_extract::extract_text".to_string(),
+            "panic during pdfium-render extraction".to_string(),
         )),
     }
 }
@@ -63,7 +187,7 @@ fn check_byte_budget(p: PathBuf, text: String) -> Result<String, IngestError> {
 }
 
 /// Test-only re-export of the byte-budget probe so unit tests can exercise it
-/// without going through pdf_extract.
+/// without invoking pdfium-render.
 pub fn check_byte_budget_for_test(p: PathBuf, text: String) -> Result<String, IngestError> {
     check_byte_budget(p, text)
 }
