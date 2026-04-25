@@ -1,9 +1,10 @@
 //! sdlc-knowledge — local knowledge base CLI for SDLC agents.
 //!
-//! Slice 1 established the binary skeleton and the path-canonicalization
-//! security backbone. Slice 2 wires the `Ingest` subcommand body. The other
-//! four subcommand bodies (`Search`, `List`, `Status`, `Delete`) remain
-//! `not yet implemented` placeholders until Slice 3.
+//! Wires `clap` argument parsing to the per-subcommand runners
+//! (`Ingest`, `Search`, `List`, `Status`, `Delete`). The path-canonicalization
+//! security backbone in `cli::resolve_project_root` runs BEFORE any subcommand
+//! body so every filesystem-touching subcommand receives a canonical project
+//! root (Phase 1.5 Security MUST #3 + #4 + #7).
 
 use clap::Parser;
 

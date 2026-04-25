@@ -5,15 +5,14 @@
 //! - (b) re-ingest sample.md → stdout `unchanged: <path>`; exit 0; no new rows.
 //! - (c) ingest mixed-format directory `tests/fixtures/` → succeeded contains md+txt+pdf.
 //! - (d) TC-AAI-4 — ingest dir with sample.md + corrupt.pdf → exit 0, sample.md
-//!       in `succeeded`, corrupt.pdf in `failed`, post-batch SQLite has sample.md
-//!       fully committed and zero rows from corrupt.pdf.
+//!   in `succeeded`, corrupt.pdf in `failed`, post-batch SQLite has sample.md
+//!   fully committed and zero rows from corrupt.pdf.
 //! - TC-SEC-2.4 — symlink-escape skip (with WARN log).
 //! - TC-SEC-2.5 — SQL-injection-shaped source_path survives parameterized writes.
 //! - TC-SEC-2.6 — concurrent reader during writer (WAL invariant).
 //! - TC-SEC-2.7 — cargo-audit gate is deferred to /merge-ready Gate 4 (#[ignore]).
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 use rusqlite::params;
 use std::fs;
 use std::path::{Path, PathBuf};

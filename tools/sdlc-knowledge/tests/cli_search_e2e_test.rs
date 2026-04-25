@@ -2,7 +2,7 @@
 //!
 //! Coverage:
 //! - (a) search "the" --top-k 5 --json → exit 0, valid JSON, len ≤ 5,
-//!       all scores > 0, scores non-strictly descending (TC-AAI-2 + TC-7.1).
+//!   all scores > 0, scores non-strictly descending (TC-AAI-2 + TC-7.1).
 //! - (b) search "xyznonexistent" --json → exit 0, [] (TC-7.2 / FR-3.4).
 //! - (c) list --json → exit 0, array of {source_path, chunk_count, ingested_at} (TC-8.1).
 //! - (d) status --json → exit 0, {schema_version:1, doc_count, chunk_count, db_path} (TC-8.2).

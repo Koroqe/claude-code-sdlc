@@ -140,7 +140,7 @@ fn validate_schema_accepts_initialized_db() {
 
 #[test]
 fn validate_schema_rejects_corrupt_db() {
-    let (_tmp, _path, mut conn) = open_temp_db();
+    let (_tmp, _path, conn) = open_temp_db();
     // Drop schema_version to simulate corrupt index.
     conn.execute("DROP TABLE schema_version", [])
         .expect("drop schema_version");
