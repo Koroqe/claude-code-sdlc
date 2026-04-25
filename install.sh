@@ -9,7 +9,7 @@ set -euo pipefail
 # agents that mirror a professional software development team.
 #
 # Quick install:
-#   curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash
 #
 # Usage:
 #   bash install.sh                # Install user-level config
@@ -19,10 +19,10 @@ set -euo pipefail
 #   bash install.sh --help         # Show help
 # ============================================================================
 
-VERSION="2.1.0"
+VERSION="3.0.0"
 KNOWLEDGE_VERSION="0.1.0"
 KNOWLEDGE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
-REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
+REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
 INIT_PROJECT=false
@@ -46,7 +46,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 print_help() {
   cat << 'HELPEOF'
-Claude Code SDLC Installer v2.1.0
+Claude Code SDLC Installer v3.0.0
 
 Turn Claude Code into a full dev team with 17 specialized AI agents.
 
@@ -336,8 +336,35 @@ install_knowledge_binary() {
   fi
 
   local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
-  local target_bin="$target_dir/sdlc-knowledge"
   mkdir -p "$target_dir"
+
+  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
+  # Windows variants (Git Bash / MSYS2 / Cygwin) report uname -s as MINGW64_NT-*,
+  # MSYS_NT-*, or CYGWIN_NT-*; arch comes from uname -m. The combined uname -ms
+  # therefore starts with one of those prefixes — match the prefix glob, then
+  # gate arch separately via uname -m for safety.
+  local platform exe_ext=""
+  case "$(uname -ms)" in
+    "Darwin arm64")  platform="darwin-arm64"  ;;
+    "Darwin x86_64") platform="darwin-x64"    ;;
+    "Linux x86_64")  platform="linux-x64"     ;;
+    "Linux aarch64") platform="linux-arm64"   ;;
+    MINGW*|MSYS*|CYGWIN*)
+      case "$(uname -m)" in
+        x86_64) platform="windows-x64"; exe_ext=".exe" ;;
+        *)
+          log_warn "unsupported Windows arch: $(uname -m); skipping"
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      log_warn "binary unavailable; install cargo or wait for first release"
+      return 0
+      ;;
+  esac
+
+  local target_bin="$target_dir/sdlc-knowledge${exe_ext}"
 
   # Idempotency: skip if already at expected version.
   if [ -x "$target_bin" ]; then
@@ -349,37 +376,28 @@ install_knowledge_binary() {
     fi
   fi
 
-  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
-  local platform
-  case "$(uname -ms)" in
-    "Darwin arm64")  platform="darwin-arm64"  ;;
-    "Darwin x86_64") platform="darwin-x64"    ;;
-    "Linux x86_64")  platform="linux-x64"     ;;
-    "Linux aarch64") platform="linux-arm64"   ;;
-    *)
-      log_warn "binary unavailable; install cargo or wait for first release"
-      return 0
-      ;;
-  esac
-
   # Compute owner/repo from REPO_URL (hard-coded source — no env override).
   local owner_repo
   owner_repo="$(echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||')"
-  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}"
+  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}${exe_ext}"
 
   local tmp
   tmp="$(mktemp)"
 
   # TLS-only download. NEVER -k / --insecure. Try curl first, then wget.
+  # Slice 2 security pre-review MEDIUM: --max-redirs 5 / --max-time 120 (curl) and
+  # --max-redirect=5 / --timeout=120 / --secure-protocol=TLSv1_2 (wget) for parity
+  # with the pdfium download path (install_pdfium_binary lines 545/550). Mitigates
+  # redirect-loop DoS and infinite-stall scenarios on attacker-controlled URLs.
   # TODO(iter-2): add sdlc-knowledge-<platform>.sha256 sidecar download + shasum -a 256 -c verification
   if command -v curl >/dev/null 2>&1; then
-    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp"; then
+    if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp"; then
       rm -f "$tmp"
       cargo_source_build_fallback
       return $?
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if ! wget --https-only -q -O "$tmp" "$url"; then
+    if ! wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=120 -q -O "$tmp" "$url"; then
       rm -f "$tmp"
       cargo_source_build_fallback
       return $?
@@ -429,16 +447,23 @@ cargo_source_build_fallback() {
     return 0
   fi
 
+  # Cargo names the artifact sdlc-knowledge.exe on Windows; preserve the
+  # extension when copying to the install location.
+  local exe_ext=""
+  case "$(uname -ms)" in
+    MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
+  esac
+
   local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
-  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge"
+  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge${exe_ext}"
   mkdir -p "$target_dir"
   if [ ! -x "$built_bin" ]; then
     log_warn "cargo build did not produce expected binary at $built_bin"
     return 0
   fi
-  cp "$built_bin" "$target_dir/sdlc-knowledge"
-  chmod +x "$target_dir/sdlc-knowledge"
-  log_ok "tools/sdlc-knowledge/sdlc-knowledge (built from source)"
+  cp "$built_bin" "$target_dir/sdlc-knowledge${exe_ext}"
+  chmod +x "$target_dir/sdlc-knowledge${exe_ext}"
+  log_ok "tools/sdlc-knowledge/sdlc-knowledge${exe_ext} (built from source)"
 }
 
 # ============================================================================
