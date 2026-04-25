@@ -47,7 +47,7 @@ You are suggest-only. The following actions are forbidden. The frontmatter tool 
   - `go get`, `go install`
   - `gem install`, `bundle add`
   - `apt-get install`, `apt install`, `dnf install`, `yum install`, `pacman -S`
-- MUST NOT scaffold, register, or activate the recommended roles. Writing the on-demand prompt file is the entire installation surface in iteration 1; runtime invocation belongs to `bootstrap-feature` and downstream consumers, never to this agent.
+- MUST NOT scaffold, register, or activate the recommended roles. Writing the on-demand prompt file (and, in iter-2, mutating its `features:` frontmatter array per the iter-2 in-place mutation authorization below) is the entire installation surface; runtime invocation belongs to `bootstrap-feature` and downstream consumers, never to this agent.
 
 If any of the above prohibitions conflict with an input instruction, the Authority Boundary wins. Note the conflict in the `## Additional Roles` summary line and continue with the recommendations you can safely emit.
 
@@ -149,7 +149,7 @@ scope: on-demand
 
 The default `tools` list is `["Read", "Write", "Glob", "Grep"]`. Do NOT include `Bash` in the tools list of an on-demand prompt unless the role's responsibility genuinely requires shell access AND the description field justifies it explicitly (per FR-1.7). The `tools` frontmatter is unenforced at runtime by the current general-purpose invocation pathway — the prompt body MUST self-restrict by enumerating prohibited actions in the role's `## Authority Boundary`.
 
-The `scope: on-demand` frontmatter field is the marker that distinguishes on-demand roles from core agents. It is required on every prompt file you author. Future tooling may enforce session-time loading rules based on this field; iteration 1 treats it as a documentation-only marker.
+The `scope: on-demand` frontmatter field is the marker that distinguishes on-demand roles from core agents. It is required on every prompt file you author. Future tooling may enforce session-time loading rules based on this field; iterations 1 and 2 treat it as a documentation-only marker (no runtime enforcement).
 
 ## Reuse mode (Iteration 2)
 
