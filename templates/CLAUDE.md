@@ -4,9 +4,9 @@ TODO: One-line description of the project.
 
 ## Project Metadata
 
-<!-- Iteration 1: the following field is reserved for future semver automation (iteration 2). In iteration 1 it is informational only and has NO runtime effect. Leave as-is or fill in if known. -->
+<!-- Iteration 2 (Section 6): consumed by `release-engineer` at /merge-ready Gate 9 to override the version-source priority order. -->
 
-- **Version source:** TODO (e.g., `package.json`, `pyproject.toml`, `templates/CLAUDE.md` itself — reserved for iteration 2)
+- **Version source:** TODO (path to your version-source file, e.g., `package.json`, `pyproject.toml`, `Cargo.toml`, or `VERSION`. Leave blank to use auto-detection per Section 6 FR-3.1: package.json -> pyproject.toml -> Cargo.toml -> VERSION -> latest git tag matching v*.*.* -> fallback 0.1.0. Both `./CLAUDE.md` and `.claude/CLAUDE.md` are checked; `./CLAUDE.md` takes precedence when both files specify the field with disagreeing values.)
 
 ## Tech Stack
 

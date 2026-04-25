@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
@@ -32,7 +32,8 @@ Claude Code out of the box:
 - **Rename safety** — 7-step protocol covering barrel files, dynamic imports, re-exports, typecheck verification
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
 - **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
-- **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- **10 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- **Release packaging** — Gate 9 of `/merge-ready` computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. Suggest-only: emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them.
 
 ---
 
@@ -92,7 +93,7 @@ MERGE READY
 
 ---
 
-## The 16 Agents
+## The 17 Agents
 
 | Agent | Role |
 |-------|------|
@@ -112,6 +113,7 @@ MERGE READY
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
 | `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
+| `release-engineer` | Packages releases at `/merge-ready` Gate 9 — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only: never runs `git push` / `git tag` / `gh release create` / `npm publish`. |
 
 ---
 
@@ -122,7 +124,7 @@ MERGE READY
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
 | `/bootstrap-feature` | Documentation phases only — PRD, use cases, architecture, QA, plan |
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
-| `/merge-ready` | All 9 quality gates |
+| `/merge-ready` | All 10 quality gates |
 | `/context-refresh` | Rebuild session context from scratchpad |
 
 ```
@@ -132,7 +134,7 @@ Claude automatically:
 1. Plans -> explores codebase -> critic review
 2. Bootstraps -> PRD, use cases, architecture, QA, executable plan
 3. Implements -> TDD slices in parallel waves (independent slices run simultaneously)
-4. Verifies -> 9 quality gates including goal-backward verification
+4. Verifies -> 10 quality gates including release packaging
 ```
 
 ---
@@ -191,7 +193,7 @@ The `resource-architect` agent runs at Step 3.5 of `/bootstrap-feature`, immedia
 
 ## On-demand role recommendations at bootstrap
 
-The 16 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 16 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 16. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
+The 17 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 17 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 17. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
 
 Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 16 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`); the Plan Critic flags collisions as MAJOR.
 
