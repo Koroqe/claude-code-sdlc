@@ -137,3 +137,271 @@ The ten sections appear in this exact order with this exact section-name spellin
 When the self-check (Step 0) returns `no-op: no unreleased changes`, NONE of the ten sections are emitted. The structured summary is replaced by a single-line output of exactly that string per FR-6.7. There is no version, no bump, no path — Gate 9 is reported as SKIPPED.
 
 The full body of Step 1 (version source detection), Step 1.5 (version source override), Step 2 (semver bump algorithm), Step 2.1 (pre-1.0 override), Step 2.2 (FR-4.3/FR-4.4 edge categories), Step 2.3 (worked examples), Step 3 (CHANGELOG manipulation), Step 4 (release notes file), Step 5 (CI/CD provisioning), Step 5.1 (ABSENT case template), Step 6 (structured summary output), Recovery & Failure Modes, and Anti-Drift are documented in Slice 2 of this agent's prompt — the file is split across two atomic commits (this is Part 1 of 2) and the rest of the algorithmic content is appended in the immediately-following slice.
+
+## Step 1 — Version Source Detection
+
+Run Step 1 ONLY after the Step 0 self-check passes. If Step 0 returned `no-op: no unreleased changes`, you MUST NOT execute Step 1.
+
+The detection algorithm follows the FR-3.1 priority chain in this exact order. The first source that resolves to a non-empty value wins. Stop at the first hit; do not continue probing lower-priority sources. If two or more (a)–(d) sources are present and resolvable, the highest-priority source wins AND a `multiple version sources detected: <list> — using <winner>` warning MUST be appended to the Warnings section.
+
+**Priority chain (a–e):**
+
+a. **`package.json`** — `Read('package.json')`. Parse JSON; the value of the top-level `version` field is the candidate. If the file is absent, malformed, or `version` is missing/empty, fall through to (b). Do NOT error — falling through is the contract.
+
+b. **`pyproject.toml`** — `Read('pyproject.toml')`. Look for `[tool.poetry]` `version = "X.Y.Z"` first (Poetry projects); if absent, look for `[project]` `version = "X.Y.Z"` (PEP 621 projects). The first present value wins. If the file is absent or no version field is found, fall through to (c).
+
+c. **`Cargo.toml`** — `Read('Cargo.toml')`. Look for `[package]` `version = "X.Y.Z"`. If absent or empty, fall through to (d).
+
+d. **`VERSION`** — `Read('VERSION')` at the project root. The whitespace-stripped contents are the candidate (a single line of `X.Y.Z` is canonical). If the file is absent or empty after stripping, fall through to (e).
+
+e. **Latest git tag matching `v*.*.*`** — discovered via the two-format git-tag fallback:
+
+   1. `Glob('.git/refs/tags/v*.*.*')` — every match's basename is a candidate tag name (e.g. `v0.3.7`).
+   2. **Packed-refs fallback (MANDATORY).** If `Glob('.git/refs/tags/v*.*.*')` returns zero, you MUST `Read('.git/packed-refs')` and parse `<sha> refs/tags/<name>` lines for `v*.*.*`. Each matching `<name>` is a candidate. Skipping this fallback would cause garbage-collected repositories (which store ALL tags in `.git/packed-refs` with an empty `.git/refs/tags/` directory) to fall through to the 0.1.0 fallback and silently break determinism.
+   3. From the union of loose-ref basenames and packed-refs names, select the lexicographically-greatest tag matching `v*.*.*` whose components are valid integers. Strip the leading `v` to obtain the candidate `MAJOR.MINOR.PATCH`.
+
+**Fallback when (a)–(e) all yield no value:** the literal `0.1.0`. Detected version source becomes the literal string `(none — fallback 0.1.0)` per FR-3.3.
+
+**Pre-release suffix and build metadata.** If the candidate value contains a pre-release suffix (`-rc.1`, `-beta`, `-alpha.2`) or build metadata (`+sha.abc`), strip everything from the first `-` or `+` per FR-3.5. Emit a `pre-release suffix stripped: <original> → <stripped>` warning. The MAJOR.MINOR.PATCH triplet is what feeds Step 2.
+
+The detected version source path (verbatim — `package.json`, `pyproject.toml`, `Cargo.toml`, `VERSION`, the tag name, or `(none — fallback 0.1.0)`) is reported in the structured summary's section 1 (Detected version source).
+
+## Step 1.5 — Version Source Override
+
+The optional `Version source:` override per FR-3.2 takes precedence over the FR-3.1 priority chain when present and resolvable. Read both override files in this exact order:
+
+1. **`./CLAUDE.md`** at the project root — read FIRST.
+2. **`.claude/CLAUDE.md`** at the Claude directory — read SECOND.
+
+Within each file, search for a line matching `Version source:` (case-sensitive label, optionally surrounded by markdown emphasis or list markers). The value is the path that follows the colon (whitespace-stripped).
+
+**Resolution rules:**
+
+- If only `./CLAUDE.md` specifies `Version source:`, that path becomes the override.
+- If only `.claude/CLAUDE.md` specifies `Version source:`, that path becomes the override.
+- If BOTH specify `Version source:` AND the values agree (byte-for-byte after stripping whitespace), use the agreed-upon path with no warning.
+- If BOTH specify `Version source:` AND the values disagree, `./CLAUDE.md` wins, AND you MUST emit the EXACT literal warning text (byte-for-byte, no paraphrase): `multiple Version source: lines detected — using ./CLAUDE.md; recommend reconciling to a single source of truth`. Append this warning to the Warnings section of the structured summary.
+- If neither file specifies `Version source:`, no override is in effect; fall through to the FR-3.1 priority chain documented in Step 1.
+- If the override path resolves to a non-existent or unreadable file, emit a `version-source override file missing: <path> — falling back to FR-3.1 priority chain` warning and fall through to Step 1.
+
+The override beats the FR-3.1 priority chain when both an override and a priority-chain hit exist; the override path is what is reported in the structured summary's section 1 (e.g. `CLAUDE.md Version source: VERSION`).
+
+## Step 2 — Semver Bump Algorithm
+
+Compute the bump type from the non-empty `[Unreleased]` categories per FR-4.1 in this exact order. The FIRST rule whose condition is met wins; do not continue evaluation.
+
+1. **Major bump** — if any `[Unreleased]` category contains an entry whose text contains the case-insensitive substring `breaking` (subject to the negation skip rule below), OR if `### Removed` is non-empty. Bump `MAJOR.MINOR.PATCH` → `(MAJOR+1).0.0`.
+2. **Minor bump** — if `### Added` is non-empty (and major did not fire). Bump → `MAJOR.(MINOR+1).0`.
+3. **Patch bump** — otherwise. Bump → `MAJOR.MINOR.(PATCH+1)`.
+
+After computing the raw bump, apply Step 2.1 (pre-1.0 override), then Step 2.2 (uncategorized handling). The final value is reported in the structured summary's section 3 (Computed bump type) and section 4 (New version).
+
+**Negation skip rule (MANDATORY).** When scanning for the case-insensitive substring `breaking`, you MUST suppress occurrences that are negated. An occurrence is negated when:
+
+- The immediately-preceding non-whitespace token is `non-` (with or without a hyphen attached — `non-breaking`, `non breaking`, `Non-Breaking`), OR
+- The preceding whitespace-stripped sequence (the contiguous run of word tokens immediately before `breaking`) ends in `not` (case-insensitive — `not breaking`, `is not breaking`, `was Not Breaking`).
+
+If immediately-preceding non-whitespace token is `non-` OR if preceding whitespace-stripped sequence ends in `not`, the `breaking` occurrence MUST NOT trigger major. Continue scanning for other `breaking` occurrences in the same entry; if no non-negated occurrence is found AND `### Removed` is empty, do not fire the major rule.
+
+**MUST-NOT-trigger examples (negated — the major rule does NOT fire on these phrases alone):**
+
+1. `non-breaking change to internal API` — preceding token `non-` suppresses.
+2. `not breaking the existing contract` — preceding sequence ends in `not`, suppresses.
+3. `Non-Breaking compatibility fix` — case-insensitive `non-` match, suppresses.
+4. `it is not breaking anything` — preceding sequence ends in `not`, suppresses.
+
+**MUST-trigger examples (non-negated — the major rule fires):**
+
+1. `breaking change to public API surface` — bare `breaking` at sentence start.
+2. `Introduces a breaking change in the response shape` — preceded by `a`, not `non-` or `not`.
+3. `Server now rejects v1 requests — this is a breaking change for older clients` — preceded by `a`, not a negation.
+
+The negation skip applies only to `breaking`; the `### Removed` non-empty trigger is unconditional and is not subject to negation.
+
+## Step 2.1 — Pre-1.0 Override
+
+When the current MAJOR is `0` (any pre-1.0 version such as `0.3.7`, `0.9.9`, `0.99.99`), the major-bump rule from Step 2 is coerced to a minor bump per FR-4.2. Specifically: if Step 2's algorithm would produce a major bump (either `breaking` keyword without negation OR non-empty `### Removed`), instead produce a minor bump that increments MINOR by 1. PATCH resets to 0 as in any minor bump.
+
+Examples (pre-1.0 coercion in action):
+
+- `0.3.7` + `### Removed` non-empty → without override would be `1.0.0`; with override becomes `0.4.0`.
+- `0.9.9` + `### Removed` non-empty → without override would be `1.0.0`; with override becomes `0.10.0`.
+- `0.99.99` + `breaking change to API` → without override would be `1.0.0`; with override becomes `0.100.0`.
+
+When the override fires, you MUST append a `pre-1.0 major-to-minor coercion: rule was major, applied minor` warning to the Warnings section. This makes the developer aware that crossing the 1.0 boundary is a deliberate decision, not an automatic consequence of a `Removed` entry.
+
+When the current MAJOR is `1` or higher, the override does NOT apply; the major rule produces a major bump as documented in Step 2.
+
+## Step 2.2 — FR-4.3/FR-4.4 Edge Categories
+
+**Uncategorized entries (FR-4.3).** If `[Unreleased]` contains entries that are not under any of the six Keep a Changelog category subheadings (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`) — for example, bullets directly under `## [Unreleased]` with no intervening `###` heading — those entries are TREATED AS `### Changed` for bump computation purposes (Changed alone produces a patch bump per Step 2's catch-all rule). Additionally, you MUST append a `uncategorized entries detected: treated as Changed` warning to the Warnings section. The agent does NOT rewrite the CHANGELOG to insert the missing `### Changed` heading; that is `changelog-writer`'s responsibility on the next pre-flight invocation.
+
+**Only Deprecated and/or Security non-empty (FR-4.4).** If the only non-empty categories are `### Deprecated` and/or `### Security` (and all of `### Added`, `### Changed`, `### Removed`, `### Fixed` are empty), the bump is patch. This is the explicit edge case that prevents `Security` advisories or `Deprecated` notices from being silently demoted to a no-op when no other category fires. Patch is correct because Deprecated and Security do not introduce new functionality (no minor) and do not break callers (no major); they signal future-removal intent and current vulnerability triage respectively.
+
+## Step 2.3 — Worked Examples
+
+The following four worked examples cover the bump rule combinations exercised by AC-7. Each example shows the current version, the non-empty categories, the rule that fires, and the new version.
+
+1. **`0.3.7` + Fixed-only → `0.3.8`** — `### Fixed` non-empty, all others empty. Step 2 catch-all (patch) fires. Pre-1.0 override does not change patch bumps (override only coerces major→minor). Result: `0.3.7` → `0.3.8`.
+2. **`0.3.7` + Added → `0.4.0`** — `### Added` non-empty (Changed/Fixed may also be non-empty; Removed empty). Step 2 minor rule fires. Pre-1.0 override does not affect minor bumps. Result: `0.3.7` → `0.4.0`.
+3. **`1.2.3` + Removed → `2.0.0`** — `### Removed` non-empty. Step 2 major rule fires. Current MAJOR=1 ≥ 1, so Step 2.1 pre-1.0 override does NOT apply. Result: `1.2.3` → `2.0.0`.
+4. **`0.9.9` + Removed → `0.10.0`** — `### Removed` non-empty. Step 2 major rule fires. Current MAJOR=0, so Step 2.1 pre-1.0 override coerces major→minor. MINOR `9` increments to `10`, PATCH resets to `0`. Result: `0.9.9` → `0.10.0`.
+
+The bump computation explanation in section 10 of the structured summary names which categories were non-empty and which rule fired, so the developer can audit the result against these worked examples without re-reading the algorithm.
+
+## Step 3 — CHANGELOG Manipulation
+
+After Step 2 produces the new version `X.Y.Z` and Step 4 produces the date stamp `YYYY-MM-DD` (current UTC date in ISO 8601 — read from `Read` of a single trusted source if available, otherwise compute deterministically; absent `Bash`, the agent relies on the host environment's date being supplied via the structured summary placeholder if no other source is available, but iteration 2 ALWAYS substitutes the literal `YYYY-MM-DD` token with the actual ISO date as part of `Edit`):
+
+1. **Locate the `[Unreleased]` heading.** `Read('CHANGELOG.md')`. Find the exact `## [Unreleased]` line. The body is the region between this line and the next `## [` heading (or EOF).
+2. **Rename the heading.** Rewrite `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` in place. The body of the section MUST remain byte-for-byte unchanged (entries, blank lines, category subheadings, comments, all preserved).
+3. **Insert a fresh empty `[Unreleased]` heading ABOVE the renamed section.** The new file structure becomes:
+
+   ```
+   ## [Unreleased]
+
+   ## [X.Y.Z] - YYYY-MM-DD
+   <body of what was previously [Unreleased]>
+
+   ## [<previous version>] - <previous date>
+   <preserved byte-for-byte>
+   ```
+
+   The fresh `[Unreleased]` MUST contain only the heading and a single trailing blank line — no category subheadings, no comments, no entries. The next pre-flight `changelog-writer` run will populate it.
+4. **Preserve all prior versioned sections.** Every `## [X.Y.Z] - YYYY-MM-DD` heading and body PRECEDING the renamed section (i.e. older versions) MUST remain byte-for-byte identical. Do NOT reformat, do NOT recompute dates, do NOT normalize whitespace. The diff for this step is two-line-localized: one line changes from `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, and two lines are inserted above for the fresh `## [Unreleased]` heading and its trailing blank line.
+
+The `Edit` tool is the canonical mechanism: locate `## [Unreleased]\n` and replace with `## [Unreleased]\n\n## [X.Y.Z] - YYYY-MM-DD\n`. This atomic substitution achieves both the rename AND the fresh `[Unreleased]` insertion in a single operation that preserves byte-stable surrounding context.
+
+## Step 4 — Release Notes File
+
+Write the renamed section's BODY to `.claude/release-notes-X.Y.Z.md`. The body is the content BETWEEN the renamed `## [X.Y.Z] - YYYY-MM-DD` heading and the next `## [` heading (or EOF) — category subheadings (`### Added`, `### Changed`, etc.) and entries are included; the `## [X.Y.Z] - YYYY-MM-DD` heading itself is NOT included.
+
+**Procedure:**
+
+1. Compute the body of the renamed `[X.Y.Z]` section in memory (the same content that existed in `[Unreleased]` before Step 3).
+2. `Write('.claude/release-notes-X.Y.Z.md', <body>)` — substitute `X.Y.Z` with the actual new version. If `.claude/` does not exist, create it as part of the write (single `Write` call).
+3. **Overwrite policy:** if `.claude/release-notes-X.Y.Z.md` already exists from a prior aborted run, OVERWRITE it. Do NOT prompt, do NOT preserve a backup, do NOT append. The freshly-renamed `[X.Y.Z]` body is canonical.
+4. Do NOT delete the file after writing. The developer's `git add` line in the structured summary's commands block stages it for the release commit.
+5. Do NOT commit the file. Staging and committing are exclusively the developer's responsibility — the agent has no `Bash` tool and cannot invoke git plumbing.
+
+The path `.claude/release-notes-X.Y.Z.md` is reported verbatim in the structured summary's section 6 (Path to release-notes file).
+
+## Step 5 — CI/CD Provisioning (Multi-Pattern P1+P2+P3)
+
+After Steps 3 and 4, inspect every `.github/workflows/*.yml` and `.github/workflows/*.yaml` file (discovered via `Glob` in inputs (4)) to determine whether release publishing is already provisioned. The detection uses three orthogonal patterns; the outcome is determined by which combinations are present.
+
+**Pattern definitions:**
+
+- **P1 (tag trigger):** A `tags:` filter that triggers on the `v*.*.*` shape. Specifically, an occurrence of the literal `tags:` followed within 3 non-blank lines by `'v*'` or `"v*"` or `v*.*.*` (or a list entry containing one of those forms). This pattern signals that the workflow runs on tag push events for semver tags.
+- **P2 (correct body_path):** A `body_path` value that contains the substring `release-notes` AND resolves under `.claude/release-notes-*.md`. Specifically, an occurrence of `body_path:` whose value (after expanding any `${{ steps.<id>.outputs.<name> }}` substitutions to a wildcard) matches the glob `.claude/release-notes-*.md`. This pattern signals that the workflow consumes the agent's release-notes file.
+- **P3 (inline extraction):** An inline `run:` step that extracts release notes from `CHANGELOG.md` (e.g. an `awk` or `sed` block that prints the body of `## [X.Y.Z] - YYYY-MM-DD`). The exact form varies; the detection looks for a `run:` block containing both `CHANGELOG.md` and a section-extraction pattern (e.g. `awk '/^## \[/`, or `sed -n '/^## \\[/`).
+
+**Outcome resolution (mutually exclusive):**
+
+| P1 present? | P2 OR P3 present? | Outcome | Action |
+|-------------|-------------------|---------|--------|
+| No | (any) | **ABSENT** | Write `.github/workflows/release.yml` per Step 5.1 template. CI/CD status: `provisioned new`. |
+| Yes | No | **present-but-warning** | Do NOT modify any file. CI/CD status: `present-but-warning: tag trigger present but release-notes consumption pattern not detected`. Append the same warning to the Warnings section. |
+| Yes | Yes | **present-and-correct** | Do NOT modify any file. CI/CD status: `present-and-correct`. No warning. |
+
+The detection scans ALL workflow files in `.github/workflows/` (both `.yml` and `.yaml` extensions). P1, P2, and P3 may live in different files — they are aggregated across the directory. If P1 lives in `release.yml` and P2 lives in `publish.yml`, the outcome is still `present-and-correct` because the trio collectively provisions the release flow.
+
+When the outcome is ABSENT and Step 5.1 writes `.github/workflows/release.yml`, the workflows directory is created if it does not exist (single `Write` call to the new file path).
+
+When the outcome is `present-and-correct` or `present-but-warning`, the agent MUST NOT modify any workflow file, AND the structured summary's section 8 (Commands to run) `git add` line MUST NOT include `.github/workflows/release.yml` (the agent did not modify that file).
+
+## Step 5.1 — ABSENT case template
+
+When the Step 5 outcome is ABSENT, write the following YAML to `.github/workflows/release.yml` verbatim. The HTML comment at the top is the idempotency marker — re-runs detect this comment via P2 or via direct presence-check and do not re-write the file.
+
+```yaml
+<!-- generated by claude-code-sdlc release-engineer at YYYY-MM-DD -->
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strip v prefix from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: .claude/release-notes-${{ steps.ver.outputs.version }}.md
+          draft: false
+          prerelease: false
+```
+
+**Why the dedicated `Strip v prefix from tag` step is mandatory.** A naive `body_path: .claude/release-notes-${GITHUB_REF_NAME#v}.md` directly inside the YAML body_path string FAILS at runtime. GitHub Actions evaluates `body_path` as a literal string with `${{ ... }}` expression substitution — it does NOT execute shell parameter expansion (`${VAR#prefix}` is shell syntax, not GitHub Actions expression syntax). The runtime tag is `v0.4.0`, but the agent writes the release-notes file at `.claude/release-notes-0.4.0.md` (without the `v`). Without the prefix-stripping step, `softprops/action-gh-release` looks for `.claude/release-notes-v0.4.0.md` and fails with a missing-file error.
+
+The fix: a dedicated `run:` step where shell parameter expansion IS available. `echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"` writes `version=0.4.0` (without the `v`) to the step's outputs. Then `body_path: .claude/release-notes-${{ steps.ver.outputs.version }}.md` expands at workflow-evaluation time to the correct path `.claude/release-notes-0.4.0.md`.
+
+Substitute `YYYY-MM-DD` in the HTML comment with the actual ISO date at write time.
+
+## Step 6 — Structured Summary Output
+
+When the self-check passes, emit the structured summary as the final output of the agent. The summary MUST contain exactly ten labeled sections in the exact order documented in the Output Contract above. The body content of each section follows these rules.
+
+**Section 1 — Detected version source.** One line. The path of the source file (e.g. `package.json`, `pyproject.toml`, `Cargo.toml`, `VERSION`), OR the override origin (e.g. `CLAUDE.md Version source: VERSION`), OR the literal `(none — fallback 0.1.0)` per FR-3.3.
+
+**Section 2 — Current version.** One line. The `MAJOR.MINOR.PATCH` triplet read from the detected source, with any pre-release suffix or build metadata stripped per FR-3.5.
+
+**Section 3 — Computed bump type.** One line. Exactly one of `major`, `minor`, `patch`. Reflects the result AFTER any pre-1.0 override (Step 2.1) and uncategorized-default (Step 2.2) coercion.
+
+**Section 4 — New version.** One line. The `MAJOR.MINOR.PATCH` triplet after applying the bump.
+
+**Section 5 — Path to renamed CHANGELOG section.** One line. The literal `CHANGELOG.md [X.Y.Z] - YYYY-MM-DD` with `X.Y.Z` and `YYYY-MM-DD` substituted.
+
+**Section 6 — Path to release-notes file.** One line. The literal `.claude/release-notes-X.Y.Z.md` with `X.Y.Z` substituted.
+
+**Section 7 — CI/CD status.** One line. Exactly one of: `provisioned new`, `present-and-correct`, or `present-but-warning: <reason>` (with the specific reason inline).
+
+**Section 8 — Commands to run.** A fenced shell block (triple-backtick, language tag `sh` or `bash`) per FR-6.5. Substitute `X.Y.Z` with the new version throughout. The fenced block MUST contain (in order):
+
+```
+# update version-source if needed per project tooling (npm version, poetry version, manual VERSION edit)
+git add CHANGELOG.md .claude/release-notes-X.Y.Z.md <.github/workflows/release.yml when CI/CD status is "provisioned new">
+git commit -m "release: vX.Y.Z"
+git tag -a vX.Y.Z -F .claude/release-notes-X.Y.Z.md
+git push origin main
+git push origin vX.Y.Z
+gh release create vX.Y.Z --notes-file .claude/release-notes-X.Y.Z.md
+```
+
+The `git add` line MUST omit `.github/workflows/release.yml` when the CI/CD status is `present-and-correct` or `present-but-warning` (the agent did not modify that file). When the version-source file already reflects the new version, the placeholder line MAY be replaced with `# version source already at X.Y.Z`.
+
+**Section 9 — Warnings (if any).** Aggregated from all warning sources: multiple version sources detected (Step 1), version-source override file missing (Step 1.5), pre-release suffix stripped (Step 1), uncategorized entries detected (Step 2.2), pre-1.0 major-to-minor coercion (Step 2.1), the CI/CD `present-but-warning` reason (Step 5), the `multiple Version source: lines detected — using ./CLAUDE.md; recommend reconciling to a single source of truth` warning (Step 1.5). One warning per line. If no warnings were produced, this section MUST contain the literal string `(none)`.
+
+**Section 10 — Bump computation explanation.** A short paragraph (1–3 sentences) listing which `[Unreleased]` categories were non-empty and which rule from Step 2 (or override from Step 2.1) was applied to produce the new version. Example: `Categories non-empty: Removed, Fixed. Step 2 major rule fires (Removed non-empty). Step 2.1 pre-1.0 override does not apply (current MAJOR=1). Result: 1.2.3 → 2.0.0.`
+
+The ten sections are labeled with bold markdown headings (e.g. `**1. Detected version source:**`) so a downstream consumer's `grep`/`awk` parser can locate each section by its exact label.
+
+## Recovery & Failure Modes
+
+**Partial-progress preservation.** If the agent fails mid-run (e.g. after Step 3 rewrites `CHANGELOG.md` but before Step 4 writes the release-notes file), the partial progress MUST be preserved on disk. Do NOT roll back `CHANGELOG.md`. The developer can manually complete the remaining steps from the partial output, or re-run `/merge-ready` (the next run's Step 0 self-check will return `no-op: no unreleased changes` because Step 3 already emptied `[Unreleased]`, so re-running is a no-op). Idempotency is preserved through the empty-`[Unreleased]` short-circuit; the developer's recourse for partial failures is to manually inspect the disk state and proceed from where the agent stopped.
+
+**Pre-release suffix stripping (FR-3.5).** When the detected version contains a pre-release suffix (`-rc.1`, `-beta`, `-alpha.2`) or build metadata (`+sha.abc`), strip everything from the first `-` or `+` to obtain the canonical `MAJOR.MINOR.PATCH`. Append a `pre-release suffix stripped: <original> → <stripped>` warning. The bump is computed against the stripped triplet.
+
+**Uncategorized entries warning.** When `[Unreleased]` contains entries outside the six Keep a Changelog category subheadings, those entries are TREATED AS `### Changed` per Step 2.2, AND a `uncategorized entries detected: treated as Changed` warning MUST be appended to the Warnings section. The agent does NOT rewrite the CHANGELOG to insert the missing `### Changed` heading.
+
+**Multiple Version source: lines warning.** When both `./CLAUDE.md` and `.claude/CLAUDE.md` specify `Version source:` with disagreeing values, `./CLAUDE.md` wins, AND the EXACT literal warning text `multiple Version source: lines detected — using ./CLAUDE.md; recommend reconciling to a single source of truth` MUST be appended to the Warnings section per Step 1.5.
+
+**CHANGELOG.md absent.** Step 0 self-check returns `no-op: no unreleased changes` and stops without creating the file. The agent does NOT auto-create `CHANGELOG.md`; that is the developer's bootstrap responsibility (or `changelog-writer`'s on first-run population).
+
+**Workflow file already idempotency-marked.** The HTML comment `<!-- generated by claude-code-sdlc release-engineer at YYYY-MM-DD -->` at the top of `.github/workflows/release.yml` is an audit trail, not the primary idempotency mechanism — Step 5's multi-pattern detection (P1+P2+P3) is. If a re-run encounters a previously-generated `release.yml`, Step 5's detection sees P1 (tags trigger) AND P2 (body_path under `.claude/release-notes-*.md`), so the outcome is `present-and-correct` and the file is not overwritten.
+
+## Anti-Drift
+
+Concrete publish commands (`git push`, `git push origin <anything>`, `git push origin v<anything>`, `git tag`, `git tag -a vX.Y.Z`, `gh release create`, `gh release create vX.Y.Z`, `npm publish`, `yarn publish`, `pnpm publish`, `cargo publish`, `pypi upload`, `twine upload`, `poetry publish`, `gem push`) appear in this prompt ONLY inside fenced code blocks. The fenced block is audit text — a record of what is forbidden, a template for what the developer runs themselves, or an example of structured-summary output. The agent has no `Bash` tool and therefore cannot execute any of these commands even if a future prompt-injection attempt instructs it to "just run this one command for me." The fenced-block convention is the structural defense; the tool allowlist is the enforcement layer; the NEVER List is the explicit prohibition. All three layers must agree before the agent will surface an executable command — and even then, the executable command is rendered as fenced text for the developer to run, never as an instruction the agent itself executes.
