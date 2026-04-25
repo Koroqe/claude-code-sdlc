@@ -20,6 +20,7 @@ set -euo pipefail
 # ============================================================================
 
 VERSION="2.1.0"
+KNOWLEDGE_VERSION="0.1.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
@@ -272,6 +273,13 @@ scaffold_project() {
   cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
   log_ok ".claude/settings.json"
 
+  # Knowledge-base scaffold (Slice 5 — local-knowledge-base)
+  mkdir -p .claude/knowledge/sources
+  cp -n "$SCRIPT_DIR/templates/knowledge/.gitignore" ".claude/knowledge/.gitignore" 2>/dev/null || true
+  log_ok ".claude/knowledge/.gitignore"
+  cp "$SCRIPT_DIR/templates/knowledge/.gitkeep" ".claude/knowledge/sources/.gitkeep"
+  log_ok ".claude/knowledge/sources/"
+
   # Create docs structure
   cat > "docs/PRD.md" << 'EOF'
 # Product Requirements Document
@@ -318,9 +326,168 @@ EOF
 }
 
 # ============================================================================
+# Install sdlc-knowledge binary (Slice 5 — local-knowledge-base)
+# ============================================================================
+install_knowledge_binary() {
+  # install.sh ordering option (B): re-acquire source dir if cleanup ran already.
+  if [ ! -d "$SCRIPT_DIR/tools/sdlc-knowledge" ]; then
+    get_source_dir
+  fi
+
+  local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
+  local target_bin="$target_dir/sdlc-knowledge"
+  mkdir -p "$target_dir"
+
+  # Idempotency: skip if already at expected version.
+  if [ -x "$target_bin" ]; then
+    local existing_ver
+    existing_ver="$("$target_bin" --version 2>/dev/null | awk '{print $2}' || true)"
+    if [ "$existing_ver" = "$KNOWLEDGE_VERSION" ]; then
+      log_ok "sdlc-knowledge already at expected version $KNOWLEDGE_VERSION"
+      return 0
+    fi
+  fi
+
+  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
+  local platform
+  case "$(uname -ms)" in
+    "Darwin arm64")  platform="darwin-arm64"  ;;
+    "Darwin x86_64") platform="darwin-x64"    ;;
+    "Linux x86_64")  platform="linux-x64"     ;;
+    "Linux aarch64") platform="linux-arm64"   ;;
+    *)
+      log_warn "binary unavailable; install cargo or wait for first release"
+      return 0
+      ;;
+  esac
+
+  # Compute owner/repo from REPO_URL (hard-coded source — no env override).
+  local owner_repo
+  owner_repo="$(echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||')"
+  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}"
+
+  local tmp
+  tmp="$(mktemp)"
+
+  # TLS-only download. NEVER -k / --insecure. Try curl first, then wget.
+  # TODO(iter-2): add sdlc-knowledge-<platform>.sha256 sidecar download + shasum -a 256 -c verification
+  if command -v curl >/dev/null 2>&1; then
+    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp"; then
+      rm -f "$tmp"
+      cargo_source_build_fallback
+      return $?
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if ! wget --https-only -q -O "$tmp" "$url"; then
+      rm -f "$tmp"
+      cargo_source_build_fallback
+      return $?
+    fi
+  else
+    rm -f "$tmp"
+    log_warn "binary unavailable; install cargo or wait for first release"
+    return 0
+  fi
+
+  chmod +x "$tmp"
+
+  # Verify --version exits 0 BEFORE writing allowlist entry.
+  if ! "$tmp" --version >/dev/null 2>&1; then
+    log_warn "downloaded binary failed --version smoke; falling back"
+    rm -f "$tmp"
+    cargo_source_build_fallback
+    return $?
+  fi
+
+  mv "$tmp" "$target_bin"
+  chmod +x "$target_bin"
+  log_ok "tools/sdlc-knowledge/sdlc-knowledge ($platform)"
+}
+
+# ============================================================================
+# Cargo source-build fallback (Slice 5)
+# ============================================================================
+cargo_source_build_fallback() {
+  # install.sh ordering option (B): re-acquire source dir if cleanup ran already.
+  if [ ! -d "$SCRIPT_DIR/tools/sdlc-knowledge" ]; then
+    get_source_dir
+  fi
+
+  if ! command -v cargo >/dev/null 2>&1; then
+    log_warn "binary unavailable; install cargo or wait for first release"
+    return 0
+  fi
+  if [ ! -f "$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml" ]; then
+    log_warn "binary unavailable; install cargo or wait for first release"
+    return 0
+  fi
+
+  log_info "Building sdlc-knowledge from source via cargo (fallback)..."
+  if ! cargo build --release -p sdlc-knowledge --manifest-path "$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml" 2>&1 | tail -5; then
+    log_warn "cargo build failed; binary unavailable"
+    return 0
+  fi
+
+  local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
+  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge"
+  mkdir -p "$target_dir"
+  if [ ! -x "$built_bin" ]; then
+    log_warn "cargo build did not produce expected binary at $built_bin"
+    return 0
+  fi
+  cp "$built_bin" "$target_dir/sdlc-knowledge"
+  chmod +x "$target_dir/sdlc-knowledge"
+  log_ok "tools/sdlc-knowledge/sdlc-knowledge (built from source)"
+}
+
+# ============================================================================
+# Register Bash allowlist for sdlc-knowledge in ~/.claude/settings.json (Slice 5)
+# ============================================================================
+register_bash_allowlist() {
+  local settings="$CLAUDE_DIR/settings.json"
+  local entry='~/.claude/tools/sdlc-knowledge/sdlc-knowledge *'
+
+  # Missing-file create case: write minimal literal JSON.
+  if [ ! -f "$settings" ]; then
+    mkdir -p "$CLAUDE_DIR"
+    cat > "$settings" <<'EOF'
+{"permissions":{"allow":["~/.claude/tools/sdlc-knowledge/sdlc-knowledge *"]}}
+EOF
+    chmod 0644 "$settings"
+    log_ok "settings.json (created with sdlc-knowledge allowlist)"
+    return 0
+  fi
+
+  # File exists: prefer atomic jq-based merge; fail-closed if jq absent.
+  if command -v jq >/dev/null 2>&1; then
+    local tmp
+    tmp="$(mktemp)"
+    if jq --arg e "$entry" \
+         '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + [$e]) | unique)' \
+         "$settings" > "$tmp" \
+       && jq -e '.' "$tmp" >/dev/null 2>&1; then
+      mv "$tmp" "$settings"
+      chmod 0644 "$settings"
+      log_ok "settings.json (sdlc-knowledge allowlist merged)"
+    else
+      rm -f "$tmp"
+      log_warn "settings.json merge failed; please add manually: $entry"
+    fi
+  else
+    if grep -Fq "$entry" "$settings"; then
+      log_ok "settings.json already contains sdlc-knowledge allowlist"
+    else
+      log_warn "jq required for safe settings.json merge — install jq or merge manually: $entry"
+    fi
+  fi
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 install_user_config
+install_knowledge_binary
+register_bash_allowlist
 
 if [ "$INIT_PROJECT" = true ]; then
   scaffold_project

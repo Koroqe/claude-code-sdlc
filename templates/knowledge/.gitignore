@@ -1,0 +1,4 @@
+sources/
+index.db
+index.db-shm
+index.db-wal
