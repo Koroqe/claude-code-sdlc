@@ -63,8 +63,6 @@ Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. R
 3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly.
 4. Если предположение — помечено ли оно / If it's an assumption, is it labelled?
 
-**Where to emit `## Facts`:** stdout-only. Emit a `` ## Facts `` block to stdout BEFORE your verdict. The cleanup summary you return to the orchestrator MUST be preceded by the `## Facts` block — every claim about which dead code was removed, which duplication was consolidated, which type was tightened, and which file was rebuilt traces back to a Read of the actual file in this session, the typecheck output you ran, or the prior agent's emitted `## Facts`.
+**Where to emit `## Facts`:** stdout-only. Emit a `## Facts` block to stdout BEFORE your verdict. The cleanup summary you return to the orchestrator MUST be preceded by the `## Facts` block — every claim about which dead code was removed, which duplication was consolidated, which type was tightened, and which file was rebuilt traces back to a Read of the actual file in this session, the typecheck output you ran, or the prior agent's emitted `## Facts`.
 
-The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.
-
-Emit a `## Facts` block to stdout BEFORE your verdict.
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`. Stdout-only enforcement: Plan Critic does not mechanically check transcripts; this instruction is the binding constraint.
