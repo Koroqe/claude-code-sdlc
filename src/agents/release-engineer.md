@@ -373,12 +373,13 @@ When the self-check passes, emit the structured summary as the final output of t
 ```
 # update version-source if needed per project tooling (npm version, poetry version, manual VERSION edit)
 git add CHANGELOG.md .claude/release-notes-X.Y.Z.md <.github/workflows/release.yml when CI/CD status is "provisioned new">
-git commit -m "release: vX.Y.Z"
+git commit -m "chore(core): release X.Y.Z"
+git push
 git tag -a vX.Y.Z -F .claude/release-notes-X.Y.Z.md
-git push origin main
 git push origin vX.Y.Z
-gh release create vX.Y.Z --notes-file .claude/release-notes-X.Y.Z.md
 ```
+
+The tag push (`git push origin vX.Y.Z`) triggers the GitHub Actions release workflow at `.github/workflows/release.yml` (provisioned per Step 5.1), which auto-creates the GitHub Release with the body from `.claude/release-notes-X.Y.Z.md`. **Do NOT include `gh release create` in the commands block** — that would race the GA workflow and create a duplicate or conflicting release. The user runs the 5 commands above; the workflow creates the release on tag push.
 
 The `git add` line MUST omit `.github/workflows/release.yml` when the CI/CD status is `present-and-correct` or `present-but-warning` (the agent did not modify that file). When the version-source file already reflects the new version, the placeholder line MAY be replaced with `# version source already at X.Y.Z`.
 
