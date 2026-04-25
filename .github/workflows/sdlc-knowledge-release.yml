@@ -28,7 +28,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 1 — actionlint self-check.
   # Gates the matrix: if the workflow file itself is malformed, do not waste
-  # 4 runners building binaries.
+  # 5 runners building binaries (4 GA + 1 Windows best-effort per iter-3).
   # ---------------------------------------------------------------------------
   lint:
     name: actionlint
@@ -49,7 +49,12 @@ jobs:
   #   - darwin-x64   → macos-13
   #   - linux-x64    → ubuntu-latest
   #   - linux-arm64  → ubuntu-22.04-arm
-  # Windows is deferred to iter-2 per RELEASING.md follow-ups.
+  #   - windows-x64  → windows-latest
+  # TODO(iter-3.1): Windows build deferred if pdf.rs unix-only imports prevent
+  # compilation; iter-3.1 will gate pdf.rs cfg(unix) attributes. The matrix
+  # entry is defined now so fail-fast: false lets other platforms succeed even
+  # if Windows fails to compile due to `std::os::unix::fs::PermissionsExt`
+  # usage in `tools/sdlc-knowledge/src/pdf.rs:34-77`.
   # ---------------------------------------------------------------------------
   build:
     name: build (${{ matrix.platform }})
@@ -73,6 +78,9 @@ jobs:
           - platform: linux-arm64
             runs-on: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+          - platform: windows-x64
+            runs-on: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,6 +105,7 @@ jobs:
             darwin-x64)     echo "asset=pdfium-mac-x64.tgz" >> "$GITHUB_OUTPUT" ;;
             linux-x64)      echo "asset=pdfium-linux-x64.tgz" >> "$GITHUB_OUTPUT" ;;
             linux-arm64)    echo "asset=pdfium-linux-arm64.tgz" >> "$GITHUB_OUTPUT" ;;
+            windows-x64)    echo "asset=pdfium-win-x64.tgz" >> "$GITHUB_OUTPUT" ;;
             *)              echo "ERROR: unknown platform ${{ matrix.platform }}" >&2; exit 1 ;;
           esac
 
@@ -112,7 +121,11 @@ jobs:
             -o /tmp/pdfium.tgz
           mkdir -p /tmp/pdfium-staging
           tar --no-same-owner --no-same-permissions -xzf /tmp/pdfium.tgz -C /tmp/pdfium-staging
-          find /tmp/pdfium-staging -maxdepth 3 -name 'libpdfium*' -type f -exec cp {} "$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/" \;
+          # Architect action item #3 — grouped alternation: bblanchon Windows
+          # archives ship `pdfium.dll` (no `lib` prefix per MSFT convention)
+          # while Linux/macOS ship `libpdfium.{so,dylib}`. The `\( ... \)` are
+          # find's grouping parens (escaped for the shell).
+          find /tmp/pdfium-staging -maxdepth 3 \( -name 'libpdfium*' -o -name 'pdfium*' \) -type f -exec cp {} "$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/" \;
           ls -la "$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/"
 
       - name: Cargo build (release)
@@ -125,13 +138,19 @@ jobs:
       - name: Assert binary size <= 10 MB (NFR-1.1)
         shell: bash
         run: |
-          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge"
+          # Windows Cargo emits `sdlc-knowledge.exe`; unix targets emit `sdlc-knowledge`.
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXT=".exe"
+          fi
+          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge${EXT}"
           if [ ! -f "$BIN" ]; then
             echo "ERROR: binary not found at $BIN"
             exit 1
           fi
-          # Portable size lookup: BSD stat (macOS) uses -f%z, GNU stat uses -c%s.
-          size=$(stat -f%z "$BIN" 2>/dev/null || stat -c%s "$BIN")
+          # Portable size lookup: BSD stat (macOS) uses -f%z, GNU stat uses -c%s,
+          # Windows Git Bash has neither — fall back to `wc -c`.
+          size=$(stat -f%z "$BIN" 2>/dev/null || stat -c%s "$BIN" 2>/dev/null || wc -c < "$BIN")
           echo "Binary size: $size bytes"
           # 10485760 = 10 * 1024 * 1024 (NFR-1.1 budget).
           test "$size" -le 10485760
@@ -139,7 +158,11 @@ jobs:
       - name: Smoke test (--version exits 0)
         shell: bash
         run: |
-          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge"
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXT=".exe"
+          fi
+          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge${EXT}"
           "$BIN" --version
 
       # -----------------------------------------------------------------------
@@ -152,7 +175,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/sdlc-smoke/.claude/knowledge
-          BIN="$GITHUB_WORKSPACE/tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge"
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXT=".exe"
+          fi
+          BIN="$GITHUB_WORKSPACE/tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge${EXT}"
           "$BIN" --version
           # ingest the calibre fixture from a writable cwd
           cd /tmp/sdlc-smoke
@@ -163,22 +190,35 @@ jobs:
       - name: Stage release artifact
         shell: bash
         run: |
-          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge"
+          # Windows Cargo emits `sdlc-knowledge.exe`; the staged artifact name
+          # also carries `.exe` so users can run it without renaming.
+          SRC_EXT=""
+          DST_EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            SRC_EXT=".exe"
+            DST_EXT=".exe"
+          fi
+          BIN="tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge${SRC_EXT}"
           mkdir -p dist
-          cp "$BIN" "dist/sdlc-knowledge-${{ matrix.platform }}"
+          cp "$BIN" "dist/sdlc-knowledge-${{ matrix.platform }}${DST_EXT}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sdlc-knowledge-${{ matrix.platform }}
-          path: dist/sdlc-knowledge-${{ matrix.platform }}
+          path: dist/sdlc-knowledge-${{ matrix.platform }}${{ matrix.platform == 'windows-x64' && '.exe' || '' }}
           if-no-files-found: error
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # Job 3 — cut GitHub Release with all 4 binaries attached.
+  # Job 3 — cut GitHub Release with all 5 binaries + source tarball attached.
   # Runs only when the workflow was triggered by a `sdlc-knowledge-v*` tag
   # (workflow_dispatch runs are build-verification-only — no release).
+  #
+  # The source tarball is built here (not in the matrix) because it is
+  # platform-independent — `git archive` honors `.gitattributes` `export-ignore`
+  # to strip `.claude/`, `docs/qa/`, `docs/use-cases/`, `books/` (see commit
+  # 7e4789c).
   # ---------------------------------------------------------------------------
   release:
     name: release
@@ -188,6 +228,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout (full history for git archive)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -197,6 +242,24 @@ jobs:
         shell: bash
         run: |
           ls -laR dist/
+
+      - name: Build source tarball
+        id: source-tarball
+        shell: bash
+        run: |
+          # Strip the `sdlc-knowledge-v` prefix from the tag to derive VERSION.
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#sdlc-knowledge-v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          ARCHIVE="claude-code-sdlc-${VERSION}-source.tar.gz"
+          # `.gitattributes` (commit 7e4789c) drives `export-ignore` so
+          # `.claude/`, `docs/qa/`, `docs/use-cases/`, `books/` are stripped.
+          git archive --format=tar.gz \
+            --prefix="claude-code-sdlc-${VERSION}/" \
+            -o "${ARCHIVE}" \
+            HEAD
+          ls -la "${ARCHIVE}"
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -210,4 +273,6 @@ jobs:
             dist/sdlc-knowledge-darwin-x64/sdlc-knowledge-darwin-x64
             dist/sdlc-knowledge-linux-x64/sdlc-knowledge-linux-x64
             dist/sdlc-knowledge-linux-arm64/sdlc-knowledge-linux-arm64
+            dist/sdlc-knowledge-windows-x64/sdlc-knowledge-windows-x64.exe
+            claude-code-sdlc-${{ steps.source-tarball.outputs.version }}-source.tar.gz
           fail_on_unmatched_files: true

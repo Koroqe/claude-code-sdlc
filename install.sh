@@ -9,7 +9,7 @@ set -euo pipefail
 # agents that mirror a professional software development team.
 #
 # Quick install:
-#   curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash
 #
 # Usage:
 #   bash install.sh                # Install user-level config
@@ -19,16 +19,17 @@ set -euo pipefail
 #   bash install.sh --help         # Show help
 # ============================================================================
 
-VERSION="2.1.0"
+VERSION="3.0.0"
 KNOWLEDGE_VERSION="0.1.0"
 KNOWLEDGE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
-REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
+REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
 INIT_PROJECT=false
 AUTO_YES=false
 LOCAL_MODE=false
 SCRIPT_DIR=""
+BOOTSTRAP_RELEASE_VERSION=""
 
 # Colors
 RED='\033[0;31m'
@@ -46,7 +47,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 print_help() {
   cat << 'HELPEOF'
-Claude Code SDLC Installer v2.1.0
+Claude Code SDLC Installer v3.0.0
 
 Turn Claude Code into a full dev team with 17 specialized AI agents.
 
@@ -54,10 +55,15 @@ USAGE:
   bash install.sh [OPTIONS]
 
 OPTIONS:
-  --init-project   Scaffold .claude/ template + docs/ in current directory
-  --yes            Skip confirmation prompts
-  --local          Use local checkout instead of cloning from GitHub
-  --help           Show this help message
+  --init-project              Scaffold .claude/ template + docs/ in current directory
+  --yes                       Skip confirmation prompts
+  --local                     Use local checkout instead of cloning from GitHub
+  --bootstrap-release X.Y.Z   (Maintainer-only) Push the FIRST sdlc-knowledge-vX.Y.Z
+                              tag to origin to trigger the binary-release workflow.
+                              Runs a 7-part pre-condition gate, prompts default-deny,
+                              and never uses --force. Set AUTO_RELEASE=1 to skip
+                              the prompt in CI/headless contexts.
+  --help                      Show this help message
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
@@ -103,6 +109,15 @@ while [[ $# -gt 0 ]]; do
     --init-project) INIT_PROJECT=true; shift ;;
     --yes) AUTO_YES=true; shift ;;
     --local) LOCAL_MODE=true; shift ;;
+    --bootstrap-release)
+      shift
+      if [ $# -eq 0 ]; then
+        log_error "--bootstrap-release requires a version argument (e.g. 0.2.0)"
+        exit 2
+      fi
+      BOOTSTRAP_RELEASE_VERSION="$1"
+      shift
+      ;;
     --help|-h) print_help; exit 0 ;;
     *) log_error "Unknown option: $1"; print_help; exit 1 ;;
   esac
@@ -268,6 +283,21 @@ scaffold_project() {
   cp "$SCRIPT_DIR/templates/rules/changelog.md" ".claude/rules/changelog.md"
   log_ok ".claude/rules/changelog.md (template)"
 
+  cp "$SCRIPT_DIR/templates/rules/auto-release.md" ".claude/rules/auto-release.md"
+  log_ok ".claude/rules/auto-release.md (template — release-engineer Gate 9 executing mode)"
+
+  # Pre-push hook (advisory) — install only if .git/hooks exists.
+  # The hook is opt-out per project: `rm .git/hooks/pre-push` after install.
+  if [ -d .git/hooks ]; then
+    if [ -f .git/hooks/pre-push ]; then
+      log_warn ".git/hooks/pre-push already exists — skipping (preserve user's existing hook)"
+    else
+      cp "$SCRIPT_DIR/templates/hooks/pre-push" ".git/hooks/pre-push"
+      chmod +x .git/hooks/pre-push
+      log_ok ".git/hooks/pre-push (advisory — warns when CHANGELOG [Unreleased] is non-empty at push)"
+    fi
+  fi
+
   cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md"
   log_ok ".claude/scratchpad.md"
 
@@ -324,6 +354,12 @@ EOF
   echo "    4. Fill in .claude/rules/testing.md"
   echo "    5. Start a Claude Code session and describe a feature"
   echo ""
+  echo "  Auto-release (opt-out):"
+  echo "    .claude/rules/auto-release.md activates release-engineer Gate 9"
+  echo "    executing mode. Gate 9 will create and push release tags during"
+  echo "    /merge-ready (Sensitive-tier prompts default-deny [y/N], or set"
+  echo "    AUTO_RELEASE=1 to auto-confirm). To opt out: remove that file."
+  echo ""
 }
 
 # ============================================================================
@@ -336,8 +372,35 @@ install_knowledge_binary() {
   fi
 
   local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
-  local target_bin="$target_dir/sdlc-knowledge"
   mkdir -p "$target_dir"
+
+  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
+  # Windows variants (Git Bash / MSYS2 / Cygwin) report uname -s as MINGW64_NT-*,
+  # MSYS_NT-*, or CYGWIN_NT-*; arch comes from uname -m. The combined uname -ms
+  # therefore starts with one of those prefixes — match the prefix glob, then
+  # gate arch separately via uname -m for safety.
+  local platform exe_ext=""
+  case "$(uname -ms)" in
+    "Darwin arm64")  platform="darwin-arm64"  ;;
+    "Darwin x86_64") platform="darwin-x64"    ;;
+    "Linux x86_64")  platform="linux-x64"     ;;
+    "Linux aarch64") platform="linux-arm64"   ;;
+    MINGW*|MSYS*|CYGWIN*)
+      case "$(uname -m)" in
+        x86_64) platform="windows-x64"; exe_ext=".exe" ;;
+        *)
+          log_warn "unsupported Windows arch: $(uname -m); skipping"
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      log_warn "binary unavailable; install cargo or wait for first release"
+      return 0
+      ;;
+  esac
+
+  local target_bin="$target_dir/sdlc-knowledge${exe_ext}"
 
   # Idempotency: skip if already at expected version.
   if [ -x "$target_bin" ]; then
@@ -349,37 +412,28 @@ install_knowledge_binary() {
     fi
   fi
 
-  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
-  local platform
-  case "$(uname -ms)" in
-    "Darwin arm64")  platform="darwin-arm64"  ;;
-    "Darwin x86_64") platform="darwin-x64"    ;;
-    "Linux x86_64")  platform="linux-x64"     ;;
-    "Linux aarch64") platform="linux-arm64"   ;;
-    *)
-      log_warn "binary unavailable; install cargo or wait for first release"
-      return 0
-      ;;
-  esac
-
   # Compute owner/repo from REPO_URL (hard-coded source — no env override).
   local owner_repo
   owner_repo="$(echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||')"
-  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}"
+  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}${exe_ext}"
 
   local tmp
   tmp="$(mktemp)"
 
   # TLS-only download. NEVER -k / --insecure. Try curl first, then wget.
+  # Slice 2 security pre-review MEDIUM: --max-redirs 5 / --max-time 120 (curl) and
+  # --max-redirect=5 / --timeout=120 / --secure-protocol=TLSv1_2 (wget) for parity
+  # with the pdfium download path (install_pdfium_binary lines 545/550). Mitigates
+  # redirect-loop DoS and infinite-stall scenarios on attacker-controlled URLs.
   # TODO(iter-2): add sdlc-knowledge-<platform>.sha256 sidecar download + shasum -a 256 -c verification
   if command -v curl >/dev/null 2>&1; then
-    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp"; then
+    if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp"; then
       rm -f "$tmp"
       cargo_source_build_fallback
       return $?
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if ! wget --https-only -q -O "$tmp" "$url"; then
+    if ! wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=120 -q -O "$tmp" "$url"; then
       rm -f "$tmp"
       cargo_source_build_fallback
       return $?
@@ -429,16 +483,57 @@ cargo_source_build_fallback() {
     return 0
   fi
 
+  # Cargo names the artifact sdlc-knowledge.exe on Windows; preserve the
+  # extension when copying to the install location.
+  local exe_ext=""
+  case "$(uname -ms)" in
+    MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
+  esac
+
   local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
-  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge"
+  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge${exe_ext}"
   mkdir -p "$target_dir"
   if [ ! -x "$built_bin" ]; then
     log_warn "cargo build did not produce expected binary at $built_bin"
     return 0
   fi
-  cp "$built_bin" "$target_dir/sdlc-knowledge"
-  chmod +x "$target_dir/sdlc-knowledge"
-  log_ok "tools/sdlc-knowledge/sdlc-knowledge (built from source)"
+  cp "$built_bin" "$target_dir/sdlc-knowledge${exe_ext}"
+  chmod +x "$target_dir/sdlc-knowledge${exe_ext}"
+  log_ok "tools/sdlc-knowledge/sdlc-knowledge${exe_ext} (built from source)"
+}
+
+# ============================================================================
+# Internal helper: jq-based merge of allow-list entries into ~/.claude/settings.json.
+#
+# Args: variadic — one or more allow-list entry strings.
+# Pre-condition: settings.json MUST exist (callers create it if absent so they
+# can preserve their per-call missing-file log message).
+# Pre-condition: jq MUST be on PATH (callers gate on `command -v jq` so they
+# can emit per-call jq-absent guidance).
+#
+# Returns 0 on successful atomic merge; 1 if jq merge or validation failed.
+# Caller is responsible for log_ok / log_warn — this helper is silent so the
+# two register_*_bash_allowlist functions retain their distinct user-facing
+# success messages ("created with sdlc-knowledge allowlist" /
+# "release-engineer §7 allowlist merged — 11 entries").
+# ============================================================================
+_jq_merge_allow_entries() {
+  local settings="$CLAUDE_DIR/settings.json"
+  local tmp json_entries
+  tmp="$(mktemp)"
+  json_entries=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+
+  if jq --argjson new "$json_entries" \
+       '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + $new) | unique)' \
+       "$settings" > "$tmp" \
+     && jq -e '.' "$tmp" >/dev/null 2>&1; then
+    mv "$tmp" "$settings"
+    chmod 0644 "$settings"
+    return 0
+  else
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 # ============================================================================
@@ -461,17 +556,9 @@ EOF
 
   # File exists: prefer atomic jq-based merge; fail-closed if jq absent.
   if command -v jq >/dev/null 2>&1; then
-    local tmp
-    tmp="$(mktemp)"
-    if jq --arg e "$entry" \
-         '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + [$e]) | unique)' \
-         "$settings" > "$tmp" \
-       && jq -e '.' "$tmp" >/dev/null 2>&1; then
-      mv "$tmp" "$settings"
-      chmod 0644 "$settings"
+    if _jq_merge_allow_entries "$entry"; then
       log_ok "settings.json (sdlc-knowledge allowlist merged)"
     else
-      rm -f "$tmp"
       log_warn "settings.json merge failed; please add manually: $entry"
     fi
   else
@@ -481,6 +568,222 @@ EOF
       log_warn "jq required for safe settings.json merge — install jq or merge manually: $entry"
     fi
   fi
+}
+
+# ============================================================================
+# Register Bash allowlist for release-engineer §7 executing-mode commands
+# (Slice 6 — auto-release). Adds entries that mirror the §7 anchored-regex
+# whitelist in src/agents/release-engineer.md so a /merge-ready run does
+# not block on per-command permission prompts. Forbidden tier (npm publish,
+# cargo publish, gh release create, --force) is enforced by the agent
+# prompt body, NOT by this allowlist — these entries grant only the
+# Trivial / Moderate / Sensitive surface.
+# ============================================================================
+register_release_bash_allowlist() {
+  local settings="$CLAUDE_DIR/settings.json"
+
+  local entries=(
+    "git add CHANGELOG.md *"
+    "git commit -m chore(core): release *"
+    "git merge-base HEAD origin/main"
+    "git diff --name-only *"
+    "git ls-remote --tags origin *"
+    "git tag -a v* -F *"
+    "git tag -a sdlc-knowledge-v* -F *"
+    "git tag -d v*"
+    "git tag -d sdlc-knowledge-v*"
+    "git push origin v*"
+    "git push origin sdlc-knowledge-v*"
+  )
+
+  if [ ! -f "$settings" ]; then
+    mkdir -p "$CLAUDE_DIR"
+    echo '{"permissions":{"allow":[]}}' > "$settings"
+    chmod 0644 "$settings"
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq required for release allowlist merge — install jq or merge manually:"
+    for e in "${entries[@]}"; do
+      log_warn "  $e"
+    done
+    return 0
+  fi
+
+  if _jq_merge_allow_entries "${entries[@]}"; then
+    log_ok "settings.json (release-engineer §7 allowlist merged — 11 entries)"
+  else
+    log_warn "settings.json release allowlist merge failed; please add manually"
+  fi
+}
+
+# ============================================================================
+# Bootstrap a sdlc-knowledge release tag (Slice 6 — auto-release).
+# Maintainer-only one-shot: pushes the FIRST sdlc-knowledge-v<X.Y.Z> tag
+# to origin so the binary-release workflow has a tag to publish against.
+#
+# 10 security MUSTs (Phase 1.5 security pre-review):
+#   M1  opt-in flag (--bootstrap-release, no short alias)
+#   M2  7-part pre-condition gate
+#   M3  argument sanitization regex ^[0-9]+\.[0-9]+\.[0-9]+$
+#   M4  prompt with literal [y/N], default-deny
+#   M5  headless contract layered on top of pre-conditions (AUTO_RELEASE=1
+#       OR non-TTY skips prompt only; pre-conditions still run)
+#   M6  atomic rollback on push failure (git tag -d)
+#   M7  idempotency (existing remote tag → exit 0)
+#   M8  NEVER --force / --force-with-lease
+#   M9  [BOOTSTRAP] audit-trail logging before each git command
+#   M10 error-message hygiene (no raw git/gh output, no token fragments)
+# ============================================================================
+bootstrap_release() {
+  local version="$1"
+
+  # M3 — argument sanitization. Strict semver-only (no v-prefix, no
+  # pre-release suffix, no whitespace, no metadata).
+  if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    log_error "--bootstrap-release: invalid version (expected MAJOR.MINOR.PATCH, e.g. 0.2.0)"
+    exit 2
+  fi
+
+  local tag="sdlc-knowledge-v${version}"
+  local notes_file=".claude/release-notes-${version}.md"
+
+  log_info "[BOOTSTRAP] target tag: $tag"
+
+  # Bootstrap requires a real checkout of the repo (LOCAL_MODE). Implicitly
+  # set it so SCRIPT_DIR resolves to the script's repo root rather than a
+  # fresh git clone (which would not track the user's origin properly).
+  LOCAL_MODE=true
+  get_source_dir
+
+  # ---------- M2 — 7-part pre-condition gate ----------
+
+  # Pre-condition 1/7: clean working tree
+  if [ -n "$(git -C "$SCRIPT_DIR" status --porcelain 2>/dev/null)" ]; then
+    log_error "pre-condition failed: working tree not clean"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 1/7 — clean working tree"
+
+  # Pre-condition 2/7: on main branch
+  local branch
+  branch=$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  if [ "$branch" != "main" ]; then
+    log_error "pre-condition failed: not on main branch"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 2/7 — on main branch"
+
+  # Pre-condition 3/7: origin matches codefather-labs/claude-code-sdlc.
+  # M10 — never echo the raw origin URL (it could leak embedded tokens
+  # in HTTPS-with-credentials forms); use a canonical sanitized message.
+  local origin_url
+  origin_url=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || true)
+  if ! printf '%s' "$origin_url" | grep -Eq '^https://github\.com/codefather-labs/claude-code-sdlc(\.git)?$'; then
+    log_error "pre-condition failed: origin URL mismatch (expected codefather-labs/claude-code-sdlc)"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 3/7 — origin URL matches"
+
+  # Pre-condition 4/7: Cargo.toml version matches the argument.
+  local cargo_toml="$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml"
+  if [ ! -f "$cargo_toml" ]; then
+    log_error "pre-condition failed: tools/sdlc-knowledge/Cargo.toml not found"
+    exit 2
+  fi
+  local cargo_version
+  cargo_version=$(awk -F'"' '/^version = "/{print $2; exit}' "$cargo_toml")
+  if [ "$cargo_version" != "$version" ]; then
+    log_error "pre-condition failed: Cargo.toml version ($cargo_version) does not match --bootstrap-release argument ($version)"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 4/7 — Cargo.toml version matches"
+
+  # Pre-condition 5/7: no existing tag (local OR remote). M7 — if the tag
+  # already exists on origin, treat as idempotent success; otherwise fail
+  # (a local-only tag without remote is a partial-failure state requiring
+  # manual reconciliation).
+  if git -C "$SCRIPT_DIR" tag -l "$tag" 2>/dev/null | grep -qx "$tag"; then
+    if git -C "$SCRIPT_DIR" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null | grep -q "$tag"; then
+      log_ok "[BOOTSTRAP] tag $tag already exists local + remote; nothing to do"
+      return 0
+    fi
+    log_error "pre-condition failed: local tag $tag exists but not on origin (manual reconciliation needed)"
+    exit 2
+  fi
+  if git -C "$SCRIPT_DIR" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null | grep -q "$tag"; then
+    log_ok "[BOOTSTRAP] tag $tag already exists on origin; nothing to do"
+    return 0
+  fi
+  log_ok "[BOOTSTRAP] precond 5/7 — tag $tag does not exist"
+
+  # Pre-condition 6/7: gh CLI authenticated. M10 — never echo the raw
+  # gh auth status output (it includes account names + scopes which
+  # constitute identity disclosure).
+  if ! command -v gh >/dev/null 2>&1; then
+    log_error "pre-condition failed: gh CLI not installed"
+    exit 2
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    log_error "pre-condition failed: gh CLI not authenticated"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 6/7 — gh CLI authenticated"
+
+  # Pre-condition 7/7: release-notes file exists and is non-empty.
+  if [ ! -s "$SCRIPT_DIR/$notes_file" ]; then
+    log_error "pre-condition failed: $notes_file does not exist or is empty"
+    exit 2
+  fi
+  log_ok "[BOOTSTRAP] precond 7/7 — $notes_file present and non-empty"
+
+  # ---------- M4 + M5 — confirmation prompt with headless override ----------
+  # M5 — pre-conditions ALREADY ran; only the prompt is skipped in headless.
+  if [ "${AUTO_RELEASE:-0}" != "1" ] && [ -t 0 ]; then
+    echo -e "${YELLOW}Push tag ${tag} to origin? [y/N]${NC}"
+    read -r reply
+    case "$reply" in
+      y|Y) ;;
+      *)
+        log_info "[BOOTSTRAP] aborted by user"
+        exit 0
+        ;;
+    esac
+  else
+    log_info "[BOOTSTRAP] headless mode (AUTO_RELEASE=1 or non-TTY) — auto-confirming push"
+  fi
+
+  # ---------- M9 + M8 — annotated tag (NO --force, NO --force-with-lease) ----------
+  # Capture git's structured stderr (e.g. "fatal: tag 'x' already exists",
+  # "! [rejected] non-fast-forward", "fatal: Authentication failed") so the
+  # operator gets actionable diagnostic context. Git's stderr does not
+  # contain identity-bearing fields like origin URL or auth tokens, so
+  # M10 hygiene (which scopes to `git remote get-url` and `gh auth status`
+  # raw output) is preserved.
+  local err
+  err=$(mktemp)
+  log_info "[BOOTSTRAP] running: git tag -a $tag -F $notes_file"
+  if ! git -C "$SCRIPT_DIR" tag -a "$tag" -F "$SCRIPT_DIR/$notes_file" 2>"$err"; then
+    log_error "[BOOTSTRAP] git tag -a failed: $(head -1 "$err")"
+    rm -f "$err"
+    exit 1
+  fi
+
+  # ---------- M9 + M8 — push (NO --force) ----------
+  log_info "[BOOTSTRAP] running: git push origin $tag"
+  if ! git -C "$SCRIPT_DIR" push origin "$tag" 2>"$err"; then
+    # M6 — atomic rollback: delete local tag so re-runs don't trip
+    # pre-condition #5's "local-only tag" branch.
+    log_error "[BOOTSTRAP] git push failed: $(head -1 "$err"); rolling back local tag"
+    git -C "$SCRIPT_DIR" tag -d "$tag" >/dev/null 2>&1 || true
+    log_warn "[BOOTSTRAP] rollback: tag $tag deleted (local)"
+    rm -f "$err"
+    exit 1
+  fi
+  rm -f "$err"
+
+  log_ok "[BOOTSTRAP] tag $tag pushed to origin; GitHub Actions release workflow triggered"
+  log_info "[BOOTSTRAP] check progress at: https://github.com/codefather-labs/claude-code-sdlc/actions"
 }
 
 # ============================================================================
@@ -615,9 +918,20 @@ install_pdfium_binary() {
 # ============================================================================
 # Main
 # ============================================================================
+
+# Short-circuit: --bootstrap-release runs the maintainer-only one-shot path
+# and exits before any user-config install. This is intentional — bootstrap
+# is for cutting a release tag from a repo checkout, not for installing the
+# SDLC harness on a user's machine.
+if [ -n "$BOOTSTRAP_RELEASE_VERSION" ]; then
+  bootstrap_release "$BOOTSTRAP_RELEASE_VERSION"
+  exit 0
+fi
+
 install_user_config
 install_knowledge_binary
 register_bash_allowlist
+register_release_bash_allowlist
 install_pdfium_binary
 
 if [ "$INIT_PROJECT" = true ]; then

@@ -5,7 +5,7 @@
 17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-3.0.0-green.svg)]()
 
 ---
 
@@ -33,20 +33,20 @@ Claude Code out of the box:
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
 - **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
 - **10 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
-- **Release packaging** — Gate 9 of `/merge-ready` computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. Suggest-only: emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them.
+- **Release packaging** — Gate 9 of `/merge-ready` computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. **Two modes:** suggest-only by default (emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them) — and an opt-in **executing mode** that activates when `<project>/.claude/rules/auto-release.md` is present. In executing mode Gate 9 runs whitelisted git commands itself with 4-tier authority (Trivial/Moderate auto-execute, Sensitive `git push origin <tag>` prompts default-deny `[y/N]` or auto-confirms with `AUTO_RELEASE=1`, Forbidden `npm publish` / `cargo publish` / `gh release create` / `--force` always refused). Anchored-regex bash whitelist with metacharacter pre-rejection. Sentinel-absent behavior is byte-identical to suggest-only.
 
 ---
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash
 ```
 
 Or locally:
 
 ```bash
-git clone https://github.com/Koroqe/claude-code-sdlc.git
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
 cd claude-code-sdlc
 bash install.sh --yes
 ```
@@ -113,7 +113,7 @@ MERGE READY
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
 | `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
-| `release-engineer` | Packages releases at `/merge-ready` Gate 9 — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only: never runs `git push` / `git tag` / `gh release create` / `npm publish`. |
+| `release-engineer` | Packages releases at `/merge-ready` Gate 9 — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only by default; opt-in executing mode (`.claude/rules/auto-release.md`) runs whitelisted git commands itself per the §7 4-tier authority dispatch — `npm publish` / `cargo publish` / `gh release create` / `--force` always refused. |
 
 ---
 
