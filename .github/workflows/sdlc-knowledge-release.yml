@@ -180,16 +180,21 @@ jobs:
       - name: Smoke test calibre fixture extraction
         shell: bash
         run: |
-          mkdir -p /tmp/sdlc-smoke/.claude/knowledge
+          # The Slice-1 path-traversal protection (cli::resolve_project_root)
+          # rejects ingest paths outside the resolved project-root. To
+          # exercise the fixture cleanly, COPY it into the smoke-test
+          # project-root first, then ingest by relative name.
+          SMOKE_DIR="${RUNNER_TEMP:-/tmp}/sdlc-smoke"
+          mkdir -p "$SMOKE_DIR/.claude/knowledge"
+          cp "$GITHUB_WORKSPACE/tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf" "$SMOKE_DIR/"
           EXT=""
           if [ "${{ runner.os }}" = "Windows" ]; then
             EXT=".exe"
           fi
           BIN="$GITHUB_WORKSPACE/tools/sdlc-knowledge/target/${{ matrix.target }}/release/sdlc-knowledge${EXT}"
           "$BIN" --version
-          # ingest the calibre fixture from a writable cwd
-          cd /tmp/sdlc-smoke
-          OUT=$("$BIN" ingest "$GITHUB_WORKSPACE/tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf" --json)
+          cd "$SMOKE_DIR"
+          OUT=$("$BIN" ingest calibre-sample.pdf --json)
           echo "$OUT"
           echo "$OUT" | jq -e '.succeeded_count >= 1' >/dev/null
 
