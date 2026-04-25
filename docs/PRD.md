@@ -2690,3 +2690,283 @@ Not applicable. This project is a collection of markdown prompt files with no gr
 - **Open Question #3 — `release-engineer` Gate 9 coupling to binary releases.** RESOLVED — out of scope for iter-1 per 11.7 item 5. Iter-1 keeps Gate 9 unchanged; the maintainer manually cuts `sdlc-knowledge-v<X.Y.Z>` tags ad-hoc per `tools/sdlc-knowledge/RELEASING.md`.
 - **Open Question #4 — `resource-architect` auto-recommendation behavior.** RESOLVED — out of scope for iter-1 per 11.7 item 3. Iter-1 only adds the `## Knowledge Base (when present)` activation block to `resource-architect`. Auto-recommend behavior on detecting domain PDFs is iter-2 PRD scope.
 - **Open Question #5 — Per-project `sources/` directory `.gitignored` by default?** RESOLVED for iter-1: `templates/knowledge/.gitignore` ships with `sources/`, `index.db`, `index.db-shm`, `index.db-wal` excluded by default per FR-9.1. Teams that want to track shared compliance docs in git opt in by removing entries from the per-project `.gitignore`.
+
+---
+
+## 12. Robust PDF Extraction via pdfium-render
+
+**Status:** [IN DEVELOPMENT]
+**Date:** 2026-04-25
+**Priority:** High
+**Related:** Section 11 (Local Knowledge Base for SDLC Agents — iter-2 of the same feature; replaces the iter-1 PDF reader implementation while preserving CLI surface, citation format, agent activation contract, schema, and storage layer byte-for-byte), Section 9 (Cognitive Self-Check Protocol — `## Facts` discipline applies to this section's PRD/use-case/plan/review artifacts), Section 3 (FR-3: PRD Changelog Field — this section includes the field per that contract), Section 6 (Release Engineer — Gate 9 release-packaging logic UNCHANGED in iter-2; the matrix CI workflow gains a pdfium availability smoke step but does not change Gate 9 behavior)
+
+Changelog: PDF documents that previously failed to index — including ebooks converted by calibre and other PDFs with composite CID fonts — are now indexed correctly so SDLC agents can cite their content.
+
+### 12.1 Overview
+
+Section 11 (iter-1) shipped a working `sdlc-knowledge` CLI with PDF extraction backed by the pure-Rust `pdf-extract = "0.7"` crate. Live testing on a 9-book ML/AI corpus surfaced two categorical extraction failures that the per-file panic boundary contained but could not repair:
+
+1. **CID-font failures.** Calibre-converted ebooks (calibre 3.32.0 emits PDFs with `/Type0` composite CID fonts and `/ToUnicode` CMaps) yield near-zero usable text from `pdf-extract`. A specific 484 KB / 308-page calibre-PDF produced **27 whitespace-only chunks** under iter-1; the same PDF re-converted to Markdown via `pypdf` produced **1212 well-formed chunks**, and a BM25 round-trip on the phrase `"LSTM 22 ms random forest"` returned chunk_id 17236 with score 30.62 — proving the data is recoverable, just not by `pdf-extract`.
+2. **Hard panics.** One book in the corpus triggered an internal panic in `pdf-extract` that was contained by the iter-1 `catch_unwind` boundary but produced zero indexed text from that file.
+
+**Solution.** Replace `pdf-extract = "0.7"` with `pdfium-render = "0.9"` — a Rust binding to Google's PDFium engine. PDFium is the production PDF renderer shipped in Chrome/Chromium to billions of users and handles every weird PDF on the open web (CID fonts, multi-column layouts, encrypted documents with empty passwords, malformed cross-reference tables, mixed-encoding annotations).
+
+**Why pdfium-render specifically.**
+- **Correctness.** PDFium parses every font dictionary type (`/Type0`, `/Type1`, `/Type3`, `/TrueType`, `/CIDFontType0`, `/CIDFontType2`) and resolves `/ToUnicode` CMaps natively — the exact failure category that broke iter-1.
+- **License compatibility.** `pdfium-render` is dual-licensed MIT OR Apache-2.0 and PDFium upstream is BSD-3 — both fully compatible with this repo's MIT license. The most prominent alternative, the `mupdf` Rust binding, is AGPL-3.0 and would force the entire SDLC repo to AGPL.
+- **Distribution shape.** `pdfium-render` dynamically loads a prebuilt PDFium shared library (`libpdfium.dylib` / `libpdfium.so`). The community project `bblanchon/pdfium-binaries` (MIT) publishes signed prebuilt binaries on every PDFium upstream release for the four iter-1 platforms (darwin-arm64, darwin-x64, linux-x64, linux-arm64) plus several others.
+- **Failure isolation.** When the dynamic library cannot be loaded (binary missing, ABI mismatch, sandbox), the failure is scoped to PDF ingest — Markdown and plain-text ingest paths continue working.
+
+**Companion fix.** The iter-1 `delete <source-path>` subcommand canonicalizes the supplied path through `resolve_project_root`, which means a source file whose canonicalization differs from the value stored in `documents.source_path` (e.g., a stale row from a renamed source dir, or a row left behind by an aborted iter-1 ingest) cannot be removed without manual SQL surgery. Iter-2 adds `delete --by-id <int>` that bypasses the path-canonicalization gate and operates directly on the integer primary key — the project-root gate at DB-open time remains the single security boundary.
+
+**Invariants preserved.** The five subcommands (`ingest`, `search`, `list`, `status`, `delete`), the `--project-root` security gate, the JSON output shape, the `knowledge-base:` citation literal, the FTS5 + WAL schema, the agent activation block in 12 thinking agents, the cognitive-self-check rule, the 17-agent count, the 10-gate count, and the README taglines are ALL byte-unchanged in iter-2.
+
+### 12.2 User Stories
+
+1. **As an ML engineer dropping calibre-converted ebooks into `<project>/.claude/knowledge/sources/`**, I want every page of every ebook indexed at full text fidelity so the BM25 search returns the chapter I cited from memory, instead of empty chunks that force me to re-convert the PDF to Markdown by hand.
+
+2. **As an SDLC user testing the corpus**, I want to remove a source by its integer id without fighting path canonicalization rules, so I can clean up rows left behind by aborted ingests or renamed source files in one command.
+
+3. **As a maintainer of an SDLC-using project on a platform where the prebuilt PDFium binary is unavailable or fails to load (sandboxed CI, exotic ARM variant, missing glibc version)**, I want PDF ingest to fail per-file with a clear actionable error while Markdown and plain-text ingest of the same batch continue to succeed, so a single platform-specific failure does not block the rest of the corpus from indexing.
+
+### 12.3 Functional Requirements
+
+#### FR-1: pdfium-render Integration
+
+The PDF reader is replaced with a `pdfium-render`-backed implementation that loads PDFium dynamically, opens documents, iterates pages, and concatenates extracted text.
+
+1. **FR-1.1:** `tools/sdlc-knowledge/src/pdf.rs` MUST be rewritten to use `pdfium-render = "0.9"` (minor-version pinned). The public function signature `pub fn read(p: &Path) -> Result<String, IngestError>` MUST be byte-unchanged so callers in `ingest.rs` are not modified.
+2. **FR-1.2:** The new implementation MUST instantiate a single `Pdfium` engine handle per process via `Pdfium::bind_to_system_library()` (or the equivalent path-resolver entrypoint that searches platform-standard library locations). Engine bind failure MUST surface as `IngestError::PdfDecode` with a message of the form `pdfium dynamic library not found at <searched paths>; install via bash install.sh --yes`. The binding MUST NOT panic on missing-library errors.
+3. **FR-1.3:** Document open MUST use `Pdfium::load_pdf_from_byte_slice` reading the file via `std::fs::read` so the security boundary remains "the binary opens files passed by the canonicalized project-root gate, never via path strings handed directly to native code". Password-protected documents MUST attempt the empty-password path first; on failure, surface `IngestError::PdfDecode` with `password-protected; not supported in iter-2` and continue the batch.
+4. **FR-1.4:** Page iteration MUST use the documented `PdfDocument::pages().iter()` API, extracting text per page via the page-text accessor. Per-page text MUST be concatenated with a single `\n` separator into the document-level string.
+5. **FR-1.5:** The 50 MB byte budget (`PDF_BUDGET_BYTES`) and the `check_byte_budget` gate MUST be preserved byte-for-byte from iter-1 — the budget applies to the concatenated extracted text, not to the source bytes. Budget violations continue to surface as `IngestError::PdfBudgetExceeded`.
+6. **FR-1.6:** The `catch_unwind` panic boundary MUST be retained around all `pdfium-render` calls. Although PDFium is engineered for hostile input, the `catch_unwind` is defense-in-depth for any panic surfacing through FFI from native code.
+7. **FR-1.7:** The unit-test seam `extract_via_closure_for_test` MUST be retained with an unchanged signature so existing TC-SEC-2.1 (synthetic panic injection) continues to pass without test-file changes.
+
+#### FR-2: pdf-extract Removal
+
+The `pdf-extract` dependency is removed entirely; no shim, no fallback path, no transitive include via `Cargo.lock`.
+
+1. **FR-2.1:** `tools/sdlc-knowledge/Cargo.toml` MUST replace the line `pdf-extract = "0.7"` with `pdfium-render = "0.9"` (minor-version pinned with no patch-version float across the `0.9.x` range). No other dependency lines change.
+2. **FR-2.2:** `cargo tree -p pdf-extract` MUST return exit code 1 (`error: package ID specification 'pdf-extract' did not match any packages`) after this section ships, confirming the dep is fully removed (not just unreferenced).
+3. **FR-2.3:** All comments, doc-strings, and module-level prose in `tools/sdlc-knowledge/src/pdf.rs` MUST be updated to reference `pdfium-render` and `pdfium`. Any string `pdf_extract` MUST NOT appear in the file. The comment block at lines 1-8 of iter-1 `pdf.rs` is rewritten verbatim to describe the pdfium-render integration.
+4. **FR-2.4:** The `IngestError::PdfDecode` variant message format MAY change to include a pdfium-specific reason string, but the variant identity MUST be preserved so downstream `impl Display for IngestError` and per-file error printing in `ingest.rs` is byte-unchanged.
+
+#### FR-3: install.sh PDFium Binary Download
+
+`install.sh` gains a per-platform PDFium binary download step that places the shared library where `pdfium-render` can find it at runtime.
+
+1. **FR-3.1:** `install.sh` MUST detect the host platform via `uname -ms` and download the matching prebuilt PDFium archive from `bblanchon/pdfium-binaries` GitHub Releases. The four iter-2 platform-to-asset mappings are: darwin-arm64 → `pdfium-mac-arm64.tgz`, darwin-x64 → `pdfium-mac-x64.tgz`, linux-x64 → `pdfium-linux-x64.tgz`, linux-arm64 → `pdfium-linux-arm64.tgz`. Windows remains OUT OF SCOPE per 12.7.
+2. **FR-3.2:** The downloaded archive MUST be extracted to `~/.claude/tools/sdlc-knowledge/pdfium/` (sibling directory to the `sdlc-knowledge` binary) with the canonical layout `pdfium/lib/libpdfium.{dylib|so}` per platform. Re-running `install.sh` when the library is already present at the expected version MUST be a no-op (idempotent install).
+3. **FR-3.3:** The PDFium release tag pinned by `install.sh` MUST be a single literal version string (e.g., `chromium/6996`) declared in one place at the top of `install.sh` and substituted into the download URL. Updating PDFium versions is a single-line edit.
+4. **FR-3.4:** `pdfium-render`'s library-path resolver MUST locate the extracted library. `install.sh` MUST set up the resolver path via the documented mechanism (typically `LD_LIBRARY_PATH` on Linux and `DYLD_LIBRARY_PATH` on macOS, or by extracting directly to the system library directory if the resolver searches there). The chosen mechanism MUST be one that is reversible by removing the `~/.claude/tools/sdlc-knowledge/pdfium/` directory.
+5. **FR-3.5:** When the PDFium download fails (network outage, GitHub Releases asset moved, sha256 mismatch in iter-3) `install.sh` MUST log a clear warning of the form `pdfium binary unavailable; PDF ingest will fail until pdfium is installed; markdown/text ingest unaffected` and continue. install.sh MUST NOT abort the rest of the install on this condition (graceful degradation, mirrors §11 FR-8.5).
+6. **FR-3.6:** The same `SCRIPT_DIR` cleanup ordering concern documented in §11 Slice 5 applies — `install.sh` MUST re-invoke `get_source_dir` after any `cd` that could shift `SCRIPT_DIR`, before resolving the PDFium archive path. Failure to do so was a source of breakage in §11 iter-1 commits.
+7. **FR-3.7:** Re-running `install.sh --yes` on a host where PDFium is already installed and the `chromium/<version>` tag matches MUST be a no-op (no re-download, no re-extract, idempotent).
+
+#### FR-4: `delete --by-id <int>` Subcommand
+
+A companion fix that adds a path-canonicalization-free deletion path keyed by integer primary key.
+
+1. **FR-4.1:** The `delete` subcommand gains a mutually exclusive flag pair: existing `<source-path>` positional argument vs new `--by-id <int>` flag. Exactly one MUST be supplied; supplying both MUST exit 2 with the literal stderr message `error: --by-id and <source-path> are mutually exclusive`.
+2. **FR-4.2:** `--by-id <int>` MUST accept any non-negative `i64` and resolve to the row in `documents` whose primary key equals the supplied integer. Non-existent ids MUST exit 1 with the literal stderr message `error: no document with id <int>` and NOT touch the database.
+3. **FR-4.3:** `--by-id <int>` MUST NOT pass through `resolve_project_root` for the supplied id — the project-root canonicalization gate at DB-open time (already required for any subcommand) is sufficient because the SQLite database file itself is the security boundary, not the path stored in the `documents.source_path` column.
+4. **FR-4.4:** Deletion via `--by-id` MUST be transactional — the `documents` row, all dependent `chunks` rows, and the FTS5 trigger-cascaded `chunks_fts` rows MUST be removed in one `BEGIN IMMEDIATE` … `COMMIT` block.
+5. **FR-4.5:** `--json` output MUST include the integer id deleted, the source_path that was stored under that id (for audit), and the count of chunks removed: `{"deleted_id": <int>, "source_path": "<string>", "chunks_removed": <int>}`.
+
+#### FR-5: Backward Compatibility — pdfium Absent
+
+When the PDFium dynamic library cannot be loaded, PDF ingest fails per-file with a clear error while Markdown and plain-text ingest continue.
+
+1. **FR-5.1:** `sdlc-knowledge ingest <dir>` on a directory containing `.md`, `.txt`, and `.pdf` files when PDFium is absent MUST process the `.md` and `.txt` files normally and emit one `IngestError::PdfDecode("pdfium dynamic library not found ...")` per `.pdf` file. The batch exit code MUST be 0 if at least one file succeeded, mirroring §11 FR-2.6's per-file error boundary.
+2. **FR-5.2:** A single `.pdf` file passed directly to `sdlc-knowledge ingest <file>.pdf` when PDFium is absent MUST exit 1 with the same per-file error printed to stderr (no batch context to fall back on).
+3. **FR-5.3:** The CLI surface, the `index.db` schema, and the FTS5 + BM25 ranking remain unchanged when PDFium is absent — search and management subcommands work normally over previously-indexed content.
+
+#### FR-6: Test Fixture — Calibre-Sample PDF
+
+A small calibre-converted PDF is vendored into the repo to exercise the CID-font failure mode that broke iter-1.
+
+1. **FR-6.1:** A new fixture at `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` MUST be added. The fixture MUST be a calibre-converted ebook excerpt small enough to vendor in git (≤ 100 KB, target 30 KB), generated by running calibre 3.x or later on a public-domain text source so license compatibility is unambiguous.
+2. **FR-6.2:** A new integration test in `tools/sdlc-knowledge/tests/` MUST ingest the fixture and assert:
+   - The fixture produces ≥ `(file_size_kb / 2)` chunks (i.e., chunks/MB ratio ≥ 50, per NFR-4 below).
+   - At least one chunk contains a non-whitespace alphabetic word ≥ 5 characters (proves CID decoding worked).
+   - Re-ingest is a no-op (`unchanged: <path>` per §11 FR-2.5).
+3. **FR-6.3:** The fixture MUST be committed alongside a `tools/sdlc-knowledge/tests/fixtures/calibre-sample.README.md` documenting (a) the source text's public-domain provenance, (b) the calibre version used to convert, (c) the SHA-256 of the committed file. This is documentation, not enforcement — but it gives the next maintainer the recipe for regenerating the fixture.
+
+#### FR-7: GitHub Actions Release Workflow Update
+
+The cross-platform release pipeline introduced in §11 FR-11 gains a PDFium presence smoke step.
+
+1. **FR-7.1:** `.github/workflows/sdlc-knowledge-release.yml` MUST add a step that runs `install.sh --yes`'s PDFium download path before `cargo build --release` so the matrix CI verifies the per-platform PDFium archive download succeeds. The smoke step's done-condition is that the extracted `libpdfium.{dylib|so}` exists and is non-zero size at the expected path.
+2. **FR-7.2:** A second smoke step MUST run `sdlc-knowledge ingest tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` after build and assert exit 0 and ≥ 1 chunk indexed. This catches dynamic-load regressions on the matrix runners.
+3. **FR-7.3:** The build matrix labels (`macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`) and the trigger pattern (`sdlc-knowledge-v*` tags) are UNCHANGED from §11 FR-11.1. Iter-2 only adds steps; it does not change the matrix shape.
+4. **FR-7.4:** The Gate 9 release-engineer agent's behavior remains UNCHANGED — the maintainer continues to cut tags manually per `tools/sdlc-knowledge/RELEASING.md`. Iter-2 does NOT couple Gate 9 to the binary release pipeline (consistent with §11 FR-12.4).
+
+#### FR-8: Documentation Updates
+
+Four documentation surfaces gain pdfium-aware content.
+
+1. **FR-8.1:** `~/.claude/rules/knowledge-base-tool.md` MUST be UPDATED. The "Known limitations of pdf-extract" section is REPLACED with a "PDF extraction via PDFium" section noting (a) PDFium handles CID fonts, multi-column layouts, password-protected (empty password) PDFs natively; (b) scanned PDFs without a text layer still need OCR pre-processing — that limitation is intrinsic to image-only PDFs, not the extractor; (c) PDFium dynamic library availability is required and install.sh handles per-platform download.
+2. **FR-8.2:** `~/.claude/rules/knowledge-base.md` MUST be UPDATED to remove the "Known limitations of pdf-extract" section in favor of a "PDFium availability" section. The CLI invocation contract, citation format, activation sentinel, fallback behavior, and application scope sections remain BYTE-UNCHANGED.
+3. **FR-8.3:** `tools/sdlc-knowledge/RELEASING.md` MUST gain a new section "PDFium binary versioning" documenting the `chromium/<version>` tag pinning policy, how to bump the pinned version (single-line edit per FR-3.3), and the `bblanchon/pdfium-binaries` source.
+4. **FR-8.4:** `README.md` MUST gain ONE new row in the existing Hardening table referencing the iter-2 robust PDF extraction. The README taglines at lines 5 and 35 MUST be BYTE-UNCHANGED (consistent with §11 FR-12.1 / FR-12.2).
+
+#### FR-9: Invariants Enforced
+
+Iter-2 is a drop-in PDF reader replacement plus one CLI flag and one binary download. Everything else stays put.
+
+1. **FR-9.1:** The five `sdlc-knowledge` subcommands (`ingest`, `search`, `list`, `status`, `delete`) plus `--version` remain BYTE-UNCHANGED in their public surface. Iter-2's only addition is the `--by-id <int>` flag on `delete`; the existing positional-path form is preserved.
+2. **FR-9.2:** The `knowledge-base:` citation literal format `knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes` is BYTE-UNCHANGED.
+3. **FR-9.3:** The `## Knowledge Base (when present)` activation block in the 12 thinking agents is BYTE-UNCHANGED.
+4. **FR-9.4:** The 17-agent count and 10-gate count are BYTE-UNCHANGED. `ls src/agents/*.md | wc -l` returns 17. `grep -Fxc "10 quality gates" README.md` returns ≥ 1.
+5. **FR-9.5:** The cognitive-self-check rule file `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED.
+6. **FR-9.6:** The five executor agents (`test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer`) are BYTE-UNCHANGED — iter-2 makes no agent-prompt edits except the documentation surfaces enumerated in FR-8.
+7. **FR-9.7:** The FTS5 + WAL schema is BYTE-UNCHANGED. The `documents`, `chunks`, `chunks_fts`, `schema_version` tables retain their iter-1 column shape; the `chunks.embedding BLOB` column reservation for iter-3 hybrid search remains intact.
+
+### 12.4 Non-Functional Requirements
+
+1. **NFR-1: Binary size budget.** The compiled `sdlc-knowledge` binary MUST remain ≤ 10 MB after `strip = true` and `lto = true` (UNCHANGED from §11 NFR-1.1). `pdfium-render` itself is small — the heavy bytes ship in the separate dynamic library, not the binary.
+2. **NFR-2: PDFium dylib budget.** The extracted `libpdfium.{dylib|so}` SHOULD add 10–15 MB sibling to the binary, bringing total per-platform install footprint to ≤ 25 MB across the four supported platforms. This is reported in the install summary.
+3. **NFR-3: Extraction latency.** A 5 MB PDF MUST be ingested in ≤ 60 s on a 2024-class laptop (UNCHANGED from §11 AC-4 / NFR-1.3). PDFium is significantly faster than `pdf-extract` on equivalent input, so the budget is conservative.
+4. **NFR-4: Chunks-per-MB ratio (empirical quality proxy).** For calibre-converted PDFs, `chunks_count / file_size_mb` MUST be ≥ 50 after iter-2. The same metric on iter-1 averaged ~2 chunks/MB on calibre PDFs (the failure mode); pypdf-as-Markdown achieves ~2500 chunks/MB on the same input. Iter-2 MUST close at least 95% of that gap.
+5. **NFR-5: Fault isolation.** PDFium dynamic-load failure MUST be isolated to the PDF subcommand path. Markdown ingest, plain-text ingest, search, list, status, and delete MUST work normally with PDFium absent (per FR-5).
+6. **NFR-6: Deterministic page-text concatenation.** Iterating pages and concatenating page-text with `\n` MUST produce byte-identical output across runs on the same input — `pdfium-render`'s page iteration is documented as deterministic. This is load-bearing for the `(source_path, mtime, sha256)` idempotency check from §11 FR-2.5: if extraction were non-deterministic, every re-ingest would re-chunk.
+7. **NFR-7: Cross-platform support unchanged.** The four iter-1 platforms (darwin-arm64, darwin-x64, linux-x64, linux-arm64) remain supported in iter-2. Windows remains OUT OF SCOPE.
+8. **NFR-8: License compatibility.** All new and modified dependencies MUST be license-compatible with this repo's MIT license. Specifically: `pdfium-render` is MIT OR Apache-2.0, PDFium upstream is BSD-3, `bblanchon/pdfium-binaries` is MIT. The AGPL-3.0 `mupdf` Rust binding is REJECTED on license-incompatibility grounds.
+9. **NFR-9: Version bump.** This feature triggers a minor version bump on the `sdlc-knowledge` crate (0.1.0 → 0.2.0) — replacement of a runtime dependency is additive in the SemVer sense (no breaking changes to the binary's CLI surface). The SDLC repo's tagline version bump is handled separately by the release-engineer at Gate 9.
+
+### 12.5 Acceptance Criteria
+
+1. **AC-1: pdfium-render dependency swap clean.** `cargo tree -p pdfium-render` returns a single matched package at version `0.9.x`. `cargo tree -p pdf-extract` returns exit 1 (`did not match any packages`).
+2. **AC-2: Calibre PDF round-trips correctly.** `sdlc-knowledge ingest tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` produces ≥ 1 row in `documents` and ≥ `(file_size_kb / 20)` rows in `chunks` (chunks-per-MB ≥ 50 per NFR-4). At least one chunk MUST contain a non-whitespace alphabetic word ≥ 5 characters.
+3. **AC-3: Re-ingest is a no-op.** Running the AC-2 invocation a second time logs `unchanged: <path>` and exits 0 with no new rows in `documents` or `chunks` (per §11 FR-2.5, unchanged in iter-2).
+4. **AC-4: Search round-trip on calibre fixture.** After AC-2 ingest, `sdlc-knowledge search "<phrase from the fixture>" --top-k 5 --json --project-root <tmpdir>` returns a non-empty JSON array whose first element's `source` field is the fixture path and whose `score` is positive (BM25 larger-is-better convention from §11).
+5. **AC-5: install.sh PDFium download per-platform.** `bash install.sh --yes` on each of the four supported platforms produces `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib|so}` of non-zero size within 90 s. Re-running `install.sh --yes` on a host where the library is already present at the pinned `chromium/<version>` tag is a no-op (no re-download, exit 0).
+6. **AC-6: PDFium absent — graceful degradation.** With PDFium removed (`rm -rf ~/.claude/tools/sdlc-knowledge/pdfium/`), `sdlc-knowledge ingest <dir-with-md-and-pdf>` processes `.md` files normally, prints one per-file `pdfium dynamic library not found` error per `.pdf` file, and exits 0 if at least one file succeeded. `panicked at` MUST NOT appear in stderr.
+7. **AC-7: `delete --by-id` works.** `sdlc-knowledge delete --by-id <existing-id> --json` returns `{"deleted_id": <int>, "source_path": "<string>", "chunks_removed": <int>}` with exit 0; the `documents` row, all dependent `chunks` rows, and FTS5 entries are removed. `sdlc-knowledge delete --by-id <nonexistent-id>` exits 1 with `error: no document with id <int>` and DOES NOT touch the database.
+8. **AC-8: `delete --by-id` and `<source-path>` mutual exclusion.** `sdlc-knowledge delete --by-id 5 some/path.pdf` exits 2 with `error: --by-id and <source-path> are mutually exclusive`.
+9. **AC-9: GitHub Actions matrix smoke passes.** The `.github/workflows/sdlc-knowledge-release.yml` matrix run on a `sdlc-knowledge-v*` tag completes the new PDFium download + calibre fixture ingest smoke steps with exit 0 on all four platform jobs.
+
+### 12.6 Risks and Dependencies
+
+1. **R-1: PDFium dynamic-library hijack via env var or symlink.** `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` are user-controllable, and a malicious shared library named `libpdfium.so` placed earlier on the resolver path could be loaded by `pdfium-render` instead of the install.sh-fetched binary. Mitigation: security-auditor pre-reviews Slice 1 (PDF reader rewrite) and Slice 3 (install.sh changes); the install.sh extraction path is constrained to `~/.claude/tools/sdlc-knowledge/pdfium/` and the resolver mechanism chosen MUST favor explicit-path APIs over environment-variable lookup where `pdfium-render` exposes both.
+2. **R-2: PDFium binary download URL stability.** `bblanchon/pdfium-binaries` is a community project. Asset filenames could change between PDFium upstream releases. Mitigation: pin a specific `chromium/<version>` tag in install.sh per FR-3.3; sha256 verification of the downloaded archive is DEFERRED to iter-3 — same posture as the iter-1 `sdlc-knowledge` binary download (which also lacks sha256 verification per §11 FR-8.1, deferred to a later iteration).
+3. **R-3: Cross-platform .dylib/.so naming variance.** Darwin uses `libpdfium.dylib`; Linux uses `libpdfium.so`. `pdfium-render`'s path resolver handles both, but the install.sh extraction step MUST verify the correct filename per platform exists post-extract. Mitigation: FR-7.1 smoke step asserts the extracted file exists with the platform-specific name on each matrix runner.
+4. **R-4: bblanchon/pdfium-binaries release cadence / abandonment.** If the community project goes dormant, future PDFium upstream versions will not have prebuilt binaries. Fallback path: build PDFium from upstream source via `gn`/`ninja` (Google's build system) — multi-hour build, multi-GB toolchain. OUT OF SCOPE for iter-2; documented as a known fallback in `RELEASING.md` per FR-8.3.
+5. **R-5: Existing chunk-count regression.** Re-ingesting currently-working PDFs (the 7 of 9 books that succeeded under iter-1) with PDFium will produce DIFFERENT chunk counts because the extractor differs — page-text concatenation may include or exclude headers/footers, hyphenation handling differs, ligature decoding differs. Mitigation: NFR-4's chunks/MB ≥ 50 floor catches catastrophic regression while allowing normal extractor variance; the iter-2 corpus re-ingest is a one-time event documented in `RELEASING.md`.
+6. **R-6: install.sh ordering — SCRIPT_DIR cleanup pattern.** `install.sh` already exhibited a SCRIPT_DIR shift bug in §11 Slice 5 that required `get_source_dir` re-invocation after each `cd`. The PDFium download path adds another `cd` (into `~/.claude/tools/sdlc-knowledge/pdfium/`) and MUST follow the same re-invocation pattern. Mitigation: FR-3.6 documents the constraint; the Slice 3 done-condition includes a regression test that runs `install.sh --yes` from an arbitrary cwd and asserts no SCRIPT_DIR-related errors.
+7. **R-7: pdfium-render API stability.** `pdfium-render` is at v0.9.x — pre-1.0, so SemVer guarantees are weaker than for stable crates. Mitigation: pin minor version (`0.9` in `Cargo.toml` per FR-2.1); a major-version bump (0.10, 1.0) requires a follow-up PRD section to vet API changes.
+8. **R-8: Dynamic loading on hardened CI runners.** Some CI runners (sandboxed Linux containers, restrictive macOS notarization paths) may refuse to load the PDFium dylib with no clear error. Mitigation: the FR-7.2 smoke step exercises load-on-CI; if a matrix runner fails, the workflow fails fast with a known signature rather than producing silent zero-chunk PDFs.
+9. **R-9: Calibre-fixture license provenance.** A vendored `calibre-sample.pdf` MUST be derived from a public-domain or permissively-licensed source. Mitigation: FR-6.3 documents provenance in a sibling README; Project Gutenberg or similar public-domain sources are the canonical pick.
+10. **Dependency: Section 11 (Local Knowledge Base for SDLC Agents — iter-1).** This section is iter-2 of §11 and depends on §11 having shipped (binary at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`, schema at `<project>/.claude/knowledge/index.db`, agent activation blocks in 12 thinking agents). If §11 has not shipped at iter-2 implementation time, iter-2 cannot start.
+11. **Dependency: Section 9 (Cognitive Self-Check Protocol).** This PRD section's `## Facts` block schema, the `### External contracts` citation discipline for `pdfium-render` / `bblanchon/pdfium-binaries`, and the Plan Critic enforcement all depend on Section 9 being live. Section 9 shipped on or before 2026-04-25 per the merge commit history.
+12. **Dependency: Section 6 (Release Engineer).** Gate 9 release-packaging logic remains UNCHANGED in iter-2 per FR-7.4. The `release-engineer` agent's behavior is unaffected by this section.
+13. **Dependency: Section 3 (FR-3 PRD Changelog Field).** This PRD section includes a `Changelog:` field per the contract.
+
+### 12.7 Out of Scope (iter-2)
+
+The following items are explicitly deferred to a future iteration (e.g., iter-3 hybrid search PRD section or a dedicated PDFium-hardening section) and MUST NOT be implemented as part of iter-2:
+
+1. **sha256 verification of the downloaded PDFium archive.** Iter-2 trusts GitHub Releases TLS + the `bblanchon/pdfium-binaries` repository chain; explicit sha256 pinning of each platform asset is iter-3 scope (mirrors §11 iter-1's sdlc-knowledge binary sha256 deferral).
+2. **OCR for scanned PDFs.** Image-only PDFs without an embedded text layer still produce empty extraction under PDFium — that limitation is intrinsic to image-only input, not the extractor. OCR pre-processing (e.g., `ocrmypdf`) is a future scope item.
+3. **Windows binary support.** `bblanchon/pdfium-binaries` ships Windows assets, but `install.sh` is bash-only and Windows install is OUT OF SCOPE per §11 NFR-1.4.
+4. **PDFium build from upstream source.** When `bblanchon/pdfium-binaries` is unavailable for a platform, the fallback is to install PDFium via the host package manager or build from upstream — both are out of scope for iter-2 automation.
+5. **Hybrid lexical + semantic search via sqlite-vec.** The iter-1 `chunks.embedding BLOB` column reservation remains intact; vector search is iter-3 scope.
+6. **Coupling Gate 9 release-engineer to the binary release pipeline.** Iter-2 keeps Gate 9 unchanged. The maintainer continues to cut `sdlc-knowledge-v<X.Y.Z>` tags manually.
+
+These items are listed explicitly so the Plan Critic does not flag their absence as an iter-2 gap.
+
+### 12.8 Affected Endpoints / Schema / UI
+
+#### Affected Endpoints
+
+Not applicable. This project has no HTTP API. The CLI subcommand surface is UNCHANGED from §11 FR-1.2 except for the addition of the `--by-id <int>` flag on `delete` (FR-4.1).
+
+#### Schema Changes
+
+NONE. The four iter-1 tables (`documents`, `chunks`, `chunks_fts`, `schema_version`) and the FTS5 + WAL configuration are BYTE-UNCHANGED. The `chunks.embedding BLOB` column reservation for iter-3 hybrid search remains intact. No migration is required — iter-1 indexes opened by iter-2 binaries continue to work without conversion.
+
+#### UI Changes
+
+Not applicable. This project is a collection of markdown prompt files and a CLI; no graphical user interface.
+
+#### New Files
+
+| File | Purpose | Related Requirements |
+|------|---------|---------------------|
+| `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` | Calibre-converted ebook excerpt fixture (≤ 100 KB, ~30 KB target) exercising the iter-1 CID-font failure mode. | FR-6.1, FR-6.2, AC-2 |
+| `tools/sdlc-knowledge/tests/fixtures/calibre-sample.README.md` | Provenance documentation for the calibre fixture (source text, calibre version, sha256). | FR-6.3 |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `tools/sdlc-knowledge/Cargo.toml` | Replace `pdf-extract = "0.7"` with `pdfium-render = "0.9"`. Bump crate version `0.1.0` → `0.2.0`. | FR-2.1, NFR-9 |
+| `tools/sdlc-knowledge/src/pdf.rs` | Rewrite the entire module to use `pdfium-render`; preserve `pub fn read` signature, `PDF_BUDGET_BYTES`, `check_byte_budget`, `extract_via_closure_for_test`, and the `catch_unwind` panic boundary. | FR-1.1 through FR-1.7, FR-2.3, FR-2.4 |
+| `tools/sdlc-knowledge/src/cli.rs` | Add the `--by-id <int>` flag on `delete`; enforce mutual exclusion with `<source-path>`. | FR-4.1, FR-4.2 |
+| `tools/sdlc-knowledge/src/main.rs` | Wire the new `--by-id` branch into the `delete` subcommand handler. | FR-4.1 through FR-4.5 |
+| `tools/sdlc-knowledge/src/store.rs` | Add `delete_by_id(conn, id) -> Result<DeleteByIdSummary, _>` invoked under `BEGIN IMMEDIATE`; existing `delete_by_path` is untouched. | FR-4.4, FR-4.5 |
+| `install.sh` | Add per-platform PDFium archive download, extraction to `~/.claude/tools/sdlc-knowledge/pdfium/lib/`, library-resolver path setup, idempotency check, and the `chromium/<version>` pinned tag. Honor the SCRIPT_DIR re-invocation pattern. | FR-3.1 through FR-3.7 |
+| `.github/workflows/sdlc-knowledge-release.yml` | Add PDFium download smoke step and calibre-fixture ingest smoke step in the matrix; trigger pattern and matrix labels UNCHANGED. | FR-7.1, FR-7.2, FR-7.3 |
+| `tools/sdlc-knowledge/RELEASING.md` | Document `chromium/<version>` tag pinning, PDFium binary versioning policy, and the build-from-source fallback as a known iter-3 path. | FR-8.3, R-4 |
+| `~/.claude/rules/knowledge-base-tool.md` | Replace the `## Known limitations of pdf-extract` section with `## PDF extraction via PDFium`. | FR-8.1 |
+| `~/.claude/rules/knowledge-base.md` | Replace the `## Known limitations of pdf-extract` section with `## PDFium availability`. CLI invocation contract, citation format, activation sentinel, fallback behavior, and application scope sections BYTE-UNCHANGED. | FR-8.2 |
+| `README.md` | Add ONE row to the existing Hardening table for iter-2 robust PDF extraction. README taglines at lines 5 and 35 BYTE-UNCHANGED. | FR-8.4, FR-9.4 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `tools/sdlc-knowledge/src/ingest.rs` | The `pdf::read` signature is preserved (FR-1.1); the chunker, idempotency, and per-file error boundary are unchanged. |
+| `tools/sdlc-knowledge/src/text.rs` | Markdown and plain-text readers are unaffected by the PDF reader replacement. |
+| `tools/sdlc-knowledge/src/store.rs` schema | Tables and FTS5 triggers are byte-unchanged (FR-9.7). Only the new `delete_by_id` function is added. |
+| `tools/sdlc-knowledge/src/migrations.rs` | No new schema version. v1 migration unchanged. |
+| `tools/sdlc-knowledge/src/search.rs` | Search behavior is unaffected by the ingest-side reader replacement. |
+| `tools/sdlc-knowledge/src/output.rs` | Output formats unchanged except the new `delete --by-id` JSON shape; serialization helpers are reused. |
+| All 12 thinking agent prompt files | Activation block is BYTE-UNCHANGED (FR-9.3). |
+| All 5 executor agent prompt files | UNCHANGED per FR-9.6. |
+| `src/rules/cognitive-self-check.md` | BYTE-UNCHANGED per FR-9.5. |
+| `src/rules/git.md`, `src/rules/scratchpad.md`, `src/rules/error-recovery.md`, `src/rules/tool-limitations.md` | Independent rules, unaffected. |
+| `templates/knowledge/.gitignore`, `templates/knowledge/.gitkeep` | Per-project scaffold, unaffected. |
+| `src/commands/*.md` | All six slash commands unaffected. The `/knowledge-ingest` command continues to invoke the binary with unchanged flags. |
+| `src/claude.md` | Plan Critic UNCHANGED. The existing `### External contracts` heuristic continues to cover `pdfium-render` and `bblanchon/pdfium-binaries` citations. |
+| `docs/PRD.md` Sections 1-11 | Unchanged. Iter-2 appends Section 12 only. |
+
+## Facts
+
+### Verified facts
+
+- The PRD file `/Users/aleksandra/Documents/claude-code-sdlc/docs/PRD.md` ends at line 2692 immediately before Section 12 is appended; the last existing section before this addition is Section 11 ("Local Knowledge Base for SDLC Agents") — verified by `wc -l` and Read of the file's final lines in the current session.
+- The current `tools/sdlc-knowledge/src/pdf.rs` module is 70 lines, uses `pdf_extract::extract_text` at line 26, wraps it in `catch_unwind(AssertUnwindSafe(...))` at line 46, enforces a 50 MB byte budget via `PDF_BUDGET_BYTES = 50 * 1024 * 1024` at line 17, and exposes `extract_via_closure_for_test` for synthetic-panic test injection at lines 33-39 — verified by Read of the entire file in the current session.
+- The current `tools/sdlc-knowledge/Cargo.toml` declares `pdf-extract = "0.7"` at line 16 and `sdlc-knowledge` crate version `0.1.0` at line 3, with `[profile.release]` flags `strip = true`, `lto = true`, `codegen-units = 1`, `opt-level = 3` at lines 34-38 — verified by Read of the entire file in the current session.
+- §11's CLI surface (five subcommands plus `--version`), citation format literal, agent activation block (12 thinking agents), and 17-agent / 10-gate invariants are documented at PRD lines 2380-2386, 2523, 2430-2434, and 2493-2494 respectively — verified by Read of those line ranges in the current session.
+- §11 Risk #2 (PDF extraction quality) at PRD line 2531 already flagged `pdf-extract` as the iter-1 default with `lopdf` as a deferred fallback and explicit architect Step 3 picks-one rationale — confirming this iter-2 PRD section's premise is the resolution of that pre-flagged risk; verified by Read of the line in the current session.
+- Knowledge-base status at task start: `doc_count: 8`, `chunk_count: 17030`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `sdlc-knowledge status --json` in the current session.
+
+### External contracts
+
+- **`pdfium-render` crate v0.9** — symbol: `pdfium_render::Pdfium::bind_to_system_library`, `pdfium_render::PdfDocument::pages`, page-level text accessor, `Pdfium::load_pdf_from_byte_slice` — license: MIT OR Apache-2.0 — repo: `ajrcarey/pdfium-render` — source: crates.io API response in this session (current latest in 0.9.x line; updated 2026-03-30; 234,919 recent downloads) — verified: yes (license + repo + version line confirmed via crates.io this session). Risk: pre-1.0 SemVer; minor-version pin in Cargo.toml mitigates.
+- **`pdf-extract` crate v0.7** — symbol: `pdf_extract::extract_text(path: &Path) -> Result<String, _>` — source: `tools/sdlc-knowledge/Cargo.toml:16` and `tools/sdlc-knowledge/src/pdf.rs:26` — verified: yes (currently in repo; being removed in iter-2 per FR-2.1 / FR-2.2). The two failure modes documented in 12.1 (CID font / `/Type0` decoding gaps; hard panic on one corpus book) are EMPIRICAL findings from the live 9-book test referenced in the user task, not assumptions about the crate.
+- **`bblanchon/pdfium-binaries` GitHub project** — symbol: GitHub Releases assets `pdfium-mac-arm64.tgz`, `pdfium-mac-x64.tgz`, `pdfium-linux-x64.tgz`, `pdfium-linux-arm64.tgz`; tag scheme `chromium/<int>` — license: MIT — source: architect's iter-2 recommendation per the user task — verified: **no — assumption**. Risk: asset filename or tag scheme could differ from the architect's recollection. Verification path: Slice 3 (install.sh integration) opens the actual GitHub Releases page during implementation and pins the exact asset URLs and tag value; any mismatch fails Slice 3's done-condition (the FR-3.1 platform mapping must be exact).
+- **PDFium upstream (Google)** — symbol: PDFium engine; the production renderer in Chromium — license: BSD-3 — source: well-known industry artifact, NOT opened in this session — verified: **no — assumption**. Risk: license claim in 12.1 is widely-cited industry fact but not reverified this session against PDFium's `LICENSE` file. Verification path: code-reviewer pass at the merge-ready gate confirms the LICENSE statement against an upstream copy when the iter-2 implementation slice lands.
+- **`pdfium-render` library-path resolver** — symbol: `Pdfium::bind_to_system_library`, `Pdfium::bind_to_library` (path-explicit variant), platform-specific search behavior on `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` / system library paths — source: `pdfium-render` README/docs (NOT opened in this session) — verified: **no — assumption**. Risk: the resolver mechanism the iter-2 install.sh integrates with could differ from this PRD's description (FR-3.4 mentions both env-var-based and direct-extract options precisely because the exact API has not been verified). Verification path: architect Step 3 (pre-Slice-1) opens `pdfium-render` docs and selects the explicit API; Slice 1 done-condition includes a working PDF round-trip on the dev laptop.
+- **GitHub Actions runner labels for the iter-2 release pipeline — `macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`** — source: §11 FR-11.1 — verified: yes (inherited from §11 which shipped the workflow file). Iter-2 does not change the matrix shape per FR-7.3.
+- **knowledge-base CLI for §12 authoring** — symbol: `sdlc-knowledge status --json`, `sdlc-knowledge search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes (status returned 8 docs / 17030 chunks; three searches on "PDF parsing crate Rust pdfium", "CID font ToUnicode CMap composite encoding", "calibre ebook PDF text extraction" each returned `[]` — zero hits across all queries; corpus is ML/AI domain with no PDF-internals literature).
+
+### Assumptions
+
+- **`pdfium-render = "0.9"` minor-version pin is the right granularity.** Risk: a 0.9.x → 0.10 bump could land mid-iter-2 with API breakage; if minor-pin is too loose, the build breaks on `cargo update`. How to verify: architect Step 3 selects the exact pin (`0.9` vs `=0.9.x`) before Slice 1 ships; CI catches build breakage early.
+- **PDFium dynamic library extracts cleanly to `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib|so}` with the right name per platform.** Risk: archive layout from `bblanchon/pdfium-binaries` may differ from this assumed structure. How to verify: Slice 3 done-condition asserts the post-extract path exists with the expected filename per FR-3.2 and FR-3.4.
+- **Calibre 3.x or later is available to a SDLC contributor for fixture regeneration.** Risk: the fixture is committed once and re-generated rarely, but if the fixture corrupts or upstream calibre changes its emission, regeneration requires the right calibre version. How to verify: FR-6.3 documents the calibre version used; the next maintainer can install that version on demand.
+- **The `mupdf` Rust binding's AGPL-3.0 license is incompatible with this repo's MIT and would force whole-repo AGPL.** Risk: low — AGPL incompatibility with MIT downstream redistribution is well-documented. How to verify: not load-bearing for iter-2 because the decision is to NOT use mupdf; the assertion only justifies the rejection.
+- **Iter-2 chunks/MB ≥ 50 floor (NFR-4) is achievable on calibre PDFs without further tuning.** Risk: the empirical baseline (~2 chunks/MB on iter-1 calibre PDFs) and the pypdf-Markdown reference (~2500 chunks/MB) are from a 9-book ML/AI corpus; the 50-floor may be too tight or too loose for other calibre-PDF families. How to verify: AC-2 exercises the floor on the vendored fixture; if real-world calibre PDFs cluster below 50, iter-3 tunes the floor.
+- **The `delete --by-id` JSON shape `{"deleted_id", "source_path", "chunks_removed"}` is consistent with §11's existing `delete <path>` JSON output.** Risk: if §11's `delete <path>` already emits a different shape, iter-2 should match it. How to verify: read `tools/sdlc-knowledge/src/output.rs` during Slice 4 (CLI surface) and align field names exactly. NOT verified in this session — Slice 4 must reconcile.
+
+### Open questions
+
+- **Knowledge-base searches on `"PDF parsing crate Rust pdfium"`, `"CID font ToUnicode CMap composite encoding"`, and `"calibre ebook PDF text extraction"` returned zero hits each (corpus is ML/AI literature, not PDF-internals or document-conversion).** Per the knowledge-base mandate this is a documented negative result, not a silent skip. Action: consider adding a PDFium / PDF-internals reference (e.g., the PDF 1.7 specification, the PDFium developer wiki) to the `<project>/.claude/knowledge/sources/` corpus if iter-3 work continues to depend on PDF-format reasoning. No action required for iter-2 — the source-of-truth for iter-2 contracts is `pdfium-render`'s own docs and `bblanchon/pdfium-binaries`'s GitHub Releases page, both of which are external-contracts items above.
+- **Open Question #1 — Exact `pdfium-render` library-path API.** `bind_to_system_library` vs `bind_to_library(path: &Path)` vs `bind_to_statically_linked_library` (feature-gated). RESOLUTION: architect Step 3 picks ONE with cited rationale before Slice 1 ships. Iter-2 default (per FR-1.2) is `bind_to_system_library` with install.sh placing `libpdfium.{dylib|so}` on the resolver path; if the architect prefers explicit-path binding, FR-1.2 and FR-3.4 are tightened accordingly during planning.
+- **Open Question #2 — Calibre fixture content.** The fixture must reproduce the iter-1 CID-font failure (calibre 3.32.0 emits `/Type0` composite CID fonts) on a small, public-domain text source. RESOLUTION: planner picks a Project Gutenberg excerpt during Slice 6 implementation; FR-6.3 documents the choice. NOT load-bearing for the PRD; load-bearing for the test asset.
+- **Open Question #3 — sha256 verification of the PDFium download.** RESOLVED — DEFERRED to iter-3 per 12.7 item 1 (mirrors §11 iter-1's sdlc-knowledge binary sha256 deferral).
+- **Open Question #4 — Windows binary support.** RESOLVED — OUT OF SCOPE per 12.7 item 3 (consistent with §11 NFR-1.4).
+- **Open Question #5 — Coupling Gate 9 release-engineer to the PDFium binary version bump.** RESOLVED — OUT OF SCOPE per 12.7 item 6 (consistent with §11 FR-12.4).
