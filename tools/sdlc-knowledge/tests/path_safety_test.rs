@@ -71,15 +71,14 @@ fn test_cwd_is_symlink_no_false_reject() {
     // Path through the /tmp alias (not /private/tmp).
     let tmp_path = tmp_under_var.path();
 
-    // Use a still-placeholder subcommand (`search`) to prove the path-resolve gate did
-    // NOT reject (it would have exited 2). Slice 2 made `ingest` functional, so we
-    // probe via `search` to keep this assertion behavioural.
+    // Use `search` to prove the path-resolve gate did NOT reject (it would have
+    // exited 2). Post-Slice-3 the search succeeds against an empty project and
+    // returns exit 0 with `[]` (json) / `no results` (human).
     bin()
         .current_dir(tmp_path)
         .args(["search", "x", "--project-root", "."])
         .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
+        .success();
 }
 
 // ---------------------------------------------------------------------------
@@ -112,12 +111,12 @@ fn test_trailing_slash_normalization() {
     let tmp = tempfile::tempdir().expect("tempdir");
 
     for arg in [".", "./"] {
+        // Post-Slice-3: path gate accepts both forms; search returns empty exit 0.
         bin()
             .current_dir(tmp.path())
             .args(["search", "x", "--project-root", arg])
             .assert()
-            .code(1)
-            .stderr(predicate::str::contains("not yet implemented"));
+            .success();
     }
 }
 
@@ -140,7 +139,7 @@ fn test_symlink_loop() {
 #[test]
 fn test_project_root_equal_to_cwd() {
     // Pass canonicalized cwd as absolute project-root; expect the path-gate
-    // accepts it (placeholder still returns exit 1 with "not yet implemented").
+    // accepts it. Post-Slice-3 the search returns empty exit 0.
     let tmp = tempfile::tempdir().expect("tempdir");
     let canonical = fs::canonicalize(tmp.path()).expect("canonicalize tmp");
 
@@ -151,24 +150,26 @@ fn test_project_root_equal_to_cwd() {
         .arg("--project-root")
         .arg(&canonical)
         .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
+        .success();
 }
 
 #[test]
 fn test_project_root_is_regular_file() {
     // Helper is path-scope only; does not reject a regular file.
-    // Subcommands validate dir-ness in their own bodies (deferred to later slices).
+    // The downstream subcommand will fail when it tries to use the file as a
+    // project root (it will try to mkdir `<file>/.claude/knowledge` and fail
+    // → AC-7 corrupt-index message + exit 1). What matters here is that the
+    // canonicalize gate did NOT reject — i.e. exit code is NOT 2.
     let tmp = tempfile::tempdir().expect("tempdir");
     let file = tmp.path().join("file.txt");
     fs::write(&file, b"hello").expect("write file");
 
-    bin()
+    let assert = bin()
         .current_dir(tmp.path())
         .args(["search", "x", "--project-root", "file.txt"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
+        .assert();
+    let code = assert.get_output().status.code().unwrap_or(-1);
+    assert_ne!(code, 2, "path canonicalize gate must NOT reject a regular file");
 }
 
 #[test]
@@ -211,44 +212,17 @@ fn test_no_panic_on_eacces() {
 }
 
 #[test]
-fn test_placeholder_smoke() {
-    // Each placeholder subcommand exits 1 with stderr "not yet implemented".
-    // NOTE: `ingest` was implemented in Slice 2 so it is no longer a placeholder.
-    // We retain the smoke probe for the four remaining placeholder subcommands
-    // (search/list/status/delete) — those are reactivated in Slice 3.
+fn test_subcommand_smoke_post_slice_3() {
+    // Post-Slice-3 all four read subcommands work against a brand-new project:
+    //   - search/list return exit 0 with empty results
+    //   - status returns exit 0 with doc_count=0, chunk_count=0
+    //   - delete <int-id> returns exit 0 (zero rows affected)
     let tmp = tempfile::tempdir().expect("tempdir");
 
-    // search
-    bin()
-        .current_dir(tmp.path())
-        .args(["search", "hello"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
-
-    // list
-    bin()
-        .current_dir(tmp.path())
-        .args(["list"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
-
-    // status
-    bin()
-        .current_dir(tmp.path())
-        .args(["status"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
-
-    // delete (positional source-id required)
-    bin()
-        .current_dir(tmp.path())
-        .args(["delete", "abc123"])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
+    bin().current_dir(tmp.path()).args(["search", "hello"]).assert().success();
+    bin().current_dir(tmp.path()).args(["list"]).assert().success();
+    bin().current_dir(tmp.path()).args(["status"]).assert().success();
+    bin().current_dir(tmp.path()).args(["delete", "1"]).assert().success();
 }
 
 // ---------------------------------------------------------------------------

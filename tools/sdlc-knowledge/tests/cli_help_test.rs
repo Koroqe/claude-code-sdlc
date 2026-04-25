@@ -1,14 +1,13 @@
-//! TDD tests for Slice 1: CLI help/version contract.
+//! TDD tests for Slice 1/2/3: CLI help/version + smoke contract.
 //!
 //! Coverage:
 //! - TC-1: `sdlc-knowledge --help` succeeds (exit 0); stdout lists all 5 subcommands.
 //! - TC-2: `sdlc-knowledge --version` exits 0; stdout matches `sdlc-knowledge X.Y.Z` semver shape.
-//! - TC-3: placeholder smoke — `sdlc-knowledge search <q>` exits 1 with `not yet implemented`
-//!   (the `search` subcommand body remains a placeholder until Slice 3; `ingest` was
-//!   implemented in Slice 2 so we can no longer use it as a placeholder probe).
+//! - TC-3: smoke — `sdlc-knowledge search <q>` against a brand-new project (no ingest yet)
+//!   exits 0 with an empty result. As of Slice 3 the placeholder bodies are gone; the
+//!   first run on a clean project creates an empty-but-valid DB and the search yields `[]`.
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 
 fn bin() -> Command {
     Command::cargo_bin("sdlc-knowledge").expect("binary built")
@@ -58,16 +57,18 @@ fn version_prints_semver_shape() {
 }
 
 #[test]
-fn placeholder_subcommand_exits_one_with_not_yet_implemented() {
-    // We must run from a tempdir so resolve_project_root succeeds for the default case.
-    // Use `search` since `ingest` is now implemented as of Slice 2; `search` is still a
-    // placeholder that stderr-prints "not yet implemented".
+fn search_on_fresh_project_returns_empty_array() {
+    // As of Slice 3, all 4 read subcommands are implemented and a brand-new
+    // project (no ingest yet) returns an empty-but-valid result without
+    // tripping the corrupt-index gate. This is the post-Slice-3 replacement
+    // for the old "placeholder exits 1" smoke probe.
     let tmp = tempfile::tempdir().expect("tempdir");
 
-    bin()
+    let assert = bin()
         .current_dir(tmp.path())
-        .args(["search", "anything"])
+        .args(["search", "anything", "--json"])
         .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
+    assert_eq!(stdout.trim(), "[]");
 }

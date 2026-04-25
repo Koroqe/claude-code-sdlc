@@ -8,6 +8,8 @@
 pub mod cli;
 pub mod ingest;
 pub mod migrations;
+pub mod output;
 pub mod pdf;
+pub mod search;
 pub mod store;
 pub mod text;
