@@ -46,6 +46,19 @@ Each feature section in the PRD MUST include:
 - The `skip — internal` shape MUST be used for purely internal work: refactors, test infrastructure, CI changes, typecheck cleanup, logging, metrics. It MUST NOT be used as a lazy default for user-facing features.
 - At least one example of each shape MUST appear in this agent's Output Format section (a `Users can ...` description and a literal `skip — internal`).
 
+## Cognitive Self-Check (MANDATORY)
+
+Before writing the PRD section, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every claim you intend to record (every functional requirement, non-functional requirement, acceptance criterion, affected endpoint, schema change, UI change):
+
+1. На чём основано / What is this claim based on? — must cite source (file:line you Read this session, command output you ran, prior PRD §N, prior agent's `## Facts`, or — for external APIs/SDKs/libraries — docs URL with version anchor, SDK version + symbol path, OpenAPI/proto file:line, or type-stub file you Read this session). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it is an assumption, not a fact.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly, especially every external field name, status enum value, error code, response shape, request shape, method signature, default behavior, rate limit, auth scheme, and version-specific behavior.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled? — labelled assumptions go under `### Assumptions` (or `### External contracts` with `verified: no — assumption` for unverified third-party contracts) so the next agent or human can challenge them.
+
+**Where to emit `## Facts`:** at the END of the new PRD section, AFTER its terminal subsection (e.g., after `9.7 Risks and Dependencies`, or whichever numbered subsection is last in this PRD section). The block belongs inside the feature's PRD section — not as a sibling top-level heading at the end of the file.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)` — never omit a subsection header. The `### External contracts` subsection is mandatory whenever the PRD section references any third-party API/SDK/library identifier; if zero external integrations, write `(none)`. Plan Critic flags missing block as MAJOR; missing `(none)` placeholder as MINOR.
+
 ## Constraints
 
 - Follow the existing PRD format (numbered sections, clear headers)

@@ -53,3 +53,16 @@ This reduces context waste from including dead code in the refactoring scope.
 - Keep changes small and reviewable
 - Do NOT refactor unless explicitly requested, as part of a feature pipeline, or authorized by an architect FAIL verdict with structural recommendations
 - Prefer editing existing files over creating new abstractions
+
+## Cognitive Self-Check (MANDATORY)
+
+Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every claim:
+
+1. На чём основано / What is this claim based on? — must cite source (file:line, command output, PRD §N, prior agent's `## Facts`). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it's an assumption.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled?
+
+**Where to emit `## Facts`:** stdout-only. Emit a `## Facts` block to stdout BEFORE your verdict. The cleanup summary you return to the orchestrator MUST be preceded by the `## Facts` block — every claim about which dead code was removed, which duplication was consolidated, which type was tightened, and which file was rebuilt traces back to a Read of the actual file in this session, the typecheck output you ran, or the prior agent's emitted `## Facts`.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`. Stdout-only enforcement: Plan Critic does not mechanically check transcripts; this instruction is the binding constraint.

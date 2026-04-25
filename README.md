@@ -155,6 +155,7 @@ Claude automatically:
 | Code compiles but feature is disconnected | 4-level goal-backward verification: existence, stubs, wiring, data flow |
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
+| Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
 
 ---
 
@@ -262,6 +263,20 @@ The array tracks **which features own each on-demand role**. The `<project-name>
 - **Add agents** — create a new `.md` with YAML frontmatter (`name`, `description`, `tools`, `model`)
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
 - **Fork and reinstall** — edit in `src/agents/`, run `bash install.sh --local --yes`
+
+---
+
+## Cognitive self-check at authoring time
+
+Thinking agents in the SDLC pipeline can build verdicts on memory of similar systems instead of evidence about the actual system in front of them — hallucinated API field names, fabricated status enums, "remembered" PRD requirements that drifted, file behavior recalled from earlier in the conversation. The cognitive-self-check rule (`src/rules/cognitive-self-check.md`) forces a fact-vs-assumption discipline before output.
+
+Every thinking agent runs a 4-question protocol — what is this claim based on? did I verify it in this session? what am I assuming without proof? if it's an assumption, is it labelled? — and emits a mandatory `## Facts` block with four subsections: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. The block makes evidence auditable: a downstream agent or human reviewer can challenge any claim against its cited source. Memory of training-data is explicitly NOT a valid source.
+
+The rule applies to **12 thinking agents** (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, code-reviewer, verifier, refactor-cleaner, resource-architect, role-planner, release-engineer). The **5 executor agents** (test-writer, build-runner, e2e-runner, doc-updater, changelog-writer) are exempt — they execute deterministic specs and don't make discretionary claims that need fact-checking.
+
+**Enforcement split:** Plan Critic mechanically enforces the rule on **file-based artifacts** (PRD sections, use-case files, QA test-case files, plan.md, resources-pending.md, roles-pending.md, release-notes files) — missing block is a MAJOR finding, vague external-contract citation is a MINOR finding. **Stdout-only agents** (architect, security-auditor, code-reviewer, verifier, refactor-cleaner) emit `## Facts` to stdout via their own prompt instructions, since Plan Critic cannot read transcript content.
+
+**Backward compatibility:** the rule applies to artifacts produced on or after the rule's merge date. Pre-existing PRD sections, use-case files, and plans authored before that date are EXEMPT — there is no retroactive backfill. See `src/rules/cognitive-self-check.md` `## Backward Compatibility` for the date-guard mechanics.
 
 ---
 

@@ -74,6 +74,19 @@ You analyze feature requirements and document comprehensive use cases that becom
 - **Auth scenarios**: Unauthenticated, wrong role, expired tokens, admin vs regular user
 - **Data integrity**: What happens to database state, ledger consistency, partial failures
 
+## Cognitive Self-Check (MANDATORY)
+
+Before writing the use-cases file, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every use-case claim you intend to record (every actor, precondition, trigger, primary/alternative/error flow step, postcondition, edge case, and data requirement):
+
+1. На чём основано / What is this claim based on? — must cite source (PRD §N you read this session, file:line you Read this session, prior use-case file you Read this session, prior agent's `## Facts`, or — for external APIs/SDKs/libraries referenced in any flow — docs URL with version anchor, SDK version + symbol path, OpenAPI/proto file:line, or type-stub file you Read this session). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it is an assumption, not a fact.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly, especially every external field name, status enum value, error code, response shape, request shape, method signature, default behavior, rate limit, auth scheme, and version-specific behavior referenced in any use-case step.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled? — labelled assumptions go under `### Assumptions` (or `### External contracts` with `verified: no — assumption` for unverified third-party contracts) so the next agent or human can challenge them.
+
+**Where to emit `## Facts`:** at the END of `docs/use-cases/<feature>_use_cases.md`, AFTER the last use-case scenario (after the final `UC-N` block, including all of its alternative/error/edge-case subsections). The block is a sibling top-level heading following the final use-case.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)` — never omit a subsection header. The `### External contracts` subsection is mandatory whenever any use case references a third-party API/SDK/library identifier; if zero external integrations, write `(none)`. Plan Critic flags missing block as MAJOR; missing `(none)` placeholder as MINOR.
+
 ## Constraints
 
 - MUST run after PRD is written (read from `docs/PRD.md`)

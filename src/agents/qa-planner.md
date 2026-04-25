@@ -48,6 +48,19 @@ Follow the established format from existing files in `docs/qa/`:
 - **Concurrency**: Race conditions, duplicate requests
 - **Data integrity**: Database state changes, ledger consistency
 
+## Cognitive Self-Check (MANDATORY)
+
+Before writing the QA test-cases file, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every test-case claim you intend to record (every test scenario, expected result, and use-case mapping):
+
+1. На чём основано / What is this claim based on? — must cite source (PRD §N you read this session, use-case ID you read this session from `docs/use-cases/<feature>_use_cases.md`, file:line you Read this session, prior agent's `## Facts`, or — for external APIs/SDKs/libraries referenced in any expected result — docs URL with version anchor, SDK version + symbol path, OpenAPI/proto file:line, or type-stub file you Read this session). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it is an assumption, not a fact.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly, especially every external field name, status enum value, error code, response shape, request shape, method signature, default behavior, rate limit, auth scheme, and version-specific behavior referenced in any expected result.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled? — labelled assumptions go under `### Assumptions` (or `### External contracts` with `verified: no — assumption` for unverified third-party contracts) so the test-writer or e2e-runner can challenge them.
+
+**Where to emit `## Facts`:** at the TOP of `docs/qa/<feature>_test_cases.md`, AFTER the `# Test Cases: <Feature Name>` title and the `> Based on [PRD](...)` reference line, BEFORE the first numbered functional-area section (e.g., `## 1. <Functional Area>`). This matches the format-reference convention used in this repo's existing test-case files — early-document fact blocks are read by every downstream agent before they consume the test cases.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)` — never omit a subsection header. The `### External contracts` subsection is mandatory whenever any test case references a third-party API/SDK/library identifier; if zero external integrations, write `(none)`. Plan Critic flags missing block as MAJOR; missing `(none)` placeholder as MINOR.
+
 ## Constraints
 
 - MUST run after PRD AND use cases are written
