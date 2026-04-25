@@ -8,7 +8,7 @@ TODO: One-line description of the project.
 
 - **Version source:** TODO (path to your version-source file, e.g., `package.json`, `pyproject.toml`, `Cargo.toml`, or `VERSION`. Leave blank to use auto-detection per Section 6 FR-3.1: package.json -> pyproject.toml -> Cargo.toml -> VERSION -> latest git tag matching v*.*.* -> fallback 0.1.0. Both `./CLAUDE.md` and `.claude/CLAUDE.md` are checked; `./CLAUDE.md` takes precedence when both files specify the field with disagreeing values.)
 
-<!-- Iteration 2 (Section 4) dead metadata: this field is reserved for iter-3 of resource-architect and is NOT consumed by iter-2 at runtime. Projects omitting this OPTIONAL field receive iter-2 default behavior (full 4-tier auto-install flow). Reserved for future iter-3 consumption to enable per-project resource preference overrides. -->
+<!-- Iteration 2 (Section 7) dead metadata: this field is reserved for iter-3 of resource-architect and is NOT consumed by iter-2 at runtime. Projects omitting this OPTIONAL field receive iter-2 default behavior (full 4-tier auto-install flow). Reserved for future iter-3 consumption to enable per-project resource preference overrides. -->
 
 - **Resource preferences:** TODO (optional. Reserved for iter-3 of resource-architect. Permitted informal subset values include: `deny-Moderate`, `deny-Sensitive`, `deny-MCP-installs`. Iter-2 does NOT consume this field at runtime. This field is OPTIONAL — projects omitting it receive iter-2 default behavior.)
 
