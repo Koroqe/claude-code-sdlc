@@ -75,6 +75,12 @@ User-driven (agents NEVER mutate the index):
 - **`sdlc-knowledge delete <source-id>`** — remove a stale source. The FTS5 trigger cascades chunk deletion.
 - **`sdlc-knowledge status --json`** — return `{schema_version, doc_count, chunk_count, db_path}` for quick health check.
 
+## PDF extraction backend
+
+PDF text extraction uses the `pdfium-render` v0.9 Rust crate (a binding to Chrome's PDFium engine). Unlike the iter-1 `pdf-extract` backend, `pdfium-render` correctly handles CID fonts, calibre-converted PDFs, multi-column layouts, and scanned PDFs with an embedded text layer — these are no longer best-effort failure modes.
+
+The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` / `libpdfium.dll`) is loaded at runtime; it is NOT statically linked. The library is installed by `bash install.sh --yes` at `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`. If the library is absent at PDF ingest time, the per-document load fails gracefully with a clear error and the ingest continues with the remaining sources — markdown and plain-text ingest are unaffected. Encrypted/password-protected PDFs return clear errors and are skipped.
+
 ## What this tool is NOT
 
 - **NOT a vector database.** No embeddings, no semantic similarity. Queries match on lexical tokens. If a search returns weak results, reformulate with different terminology rather than trusting fuzzy semantic intent.
@@ -90,7 +96,7 @@ When the binary `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is missing or no
 
 ## See also
 
-- `~/.claude/rules/knowledge-base.md` — CLI invocation contract, citation literal-format, fallback behavior, pdf-extract limitations
+- `~/.claude/rules/knowledge-base.md` — CLI invocation contract, citation literal-format, fallback behavior, pdfium-render coverage notes
 - `~/.claude/commands/knowledge-ingest.md` — `/knowledge-ingest <path>` slash command spec
 - `~/.claude/rules/cognitive-self-check.md` — how `### External contracts` citations are checked; the four-question protocol agents run before each decision
 
@@ -107,7 +113,7 @@ When the binary `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is missing or no
 
 - **`sdlc-knowledge` binary v0.1.0** — symbol: subcommands `ingest / search / list / status / delete`; CLI flags `--project-root <PATH>`, `--top-k <N>`, `--json`; security backbone `cli::resolve_project_root` rejects path-traversal with exit 2 and literal stderr — verified: yes (live-tested in this session over the books corpus).
 - **SQLite FTS5 + `bm25()` function** — symbol: `CREATE VIRTUAL TABLE chunks_fts USING fts5(text, content='chunks', content_rowid='id')`; ranking via `bm25(chunks_fts)` (returns negative-better, code negates to positive-better) — verified: yes (live queries returned positive descending scores).
-- **`pdf-extract` crate v0.7** — symbol: `pdf_extract::extract_text(path: &Path) -> Result<String, _>` — verified: yes (live-tested over an ML/AI book corpus; 7 of 9 books succeeded, 1 panicked and was contained by the `catch_unwind` boundary, 1 was scanned and yielded near-zero chunks per the documented `pdf-extract` limitation).
+- **`pdfium-render` crate v0.9** — symbol: `Pdfium::bind_to_library` plus `load_pdf_from_byte_slice`, `pages()`, `text()` — verified: yes (Slice 1 of pdfium-pdf-extraction wires the binding via explicit-path load against `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`; CID fonts, calibre-converted PDFs, multi-column layouts, and scanned PDFs with embedded text layer all extract correctly per TC-AAI-5 reverification).
 
 ### Assumptions
 

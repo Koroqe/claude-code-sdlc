@@ -129,32 +129,34 @@ agents:
 - `doc-updater`
 - `changelog-writer`
 
-## Known limitations of pdf-extract
+## Known limitations
 
-The `pdf-extract` crate (used in iter-1 ingestion) has documented limitations
-that affect retrieval quality. Per TC-AAI-5, ingestion of the following document
-classes is best-effort and SHOULD be flagged to the operator:
+PDF text extraction in iter-2 uses `pdfium-render` v0.9 (a Rust binding to
+Chrome's PDFium engine). PDFium correctly handles document classes that the
+iter-1 `pdf-extract` backend struggled with:
 
-- **Scanned PDFs** — image-only PDFs without an embedded text layer yield empty
-  or garbage text from `pdf-extract`. There is no embedded character data for
-  the crate to extract. Recommend OCR pre-processing (e.g., `ocrmypdf` then
-  re-ingest) — OCR is OUT OF SCOPE for iter-1.
+- **CID fonts** — Chinese/Japanese/Korean and other CID-keyed font encodings
+  extract correctly.
+- **Calibre-converted PDFs** — PDFs produced by Calibre's e-book conversion
+  (with embedded subset fonts) extract correctly.
 - **Multi-column layouts** — academic papers, newspapers, and two-column
-  technical specifications often produce reading-order errors: `pdf-extract`
-  can interleave text from adjacent columns, breaking sentence continuity and
-  degrading BM25 relevance. The chunker cannot recover the original reading
-  order from broken extraction.
-- **Form fields and annotations** — interactive form values (filled fields)
-  and annotation/comment text are NOT extracted. Documents whose semantic
-  content lives in form fields will return empty chunks for those regions.
-- **Password-protected PDFs** — encrypted PDFs return errors during open;
-  `sdlc-knowledge ingest` surfaces the error and skips the document.
+  technical specifications extract in correct reading order.
+- **Scanned PDFs with an embedded text layer** — PDFs that were scanned and
+  then OCR'd (so the text layer is embedded) extract correctly. PDFs that are
+  image-only with no text layer at all still yield empty chunks; OCR
+  pre-processing (e.g., `ocrmypdf`) remains the operator's responsibility.
 
-**Iter-2 fallbacks** (not active in iter-1): `lopdf` for low-level PDF object
-access when `pdf-extract` fails or produces obviously broken output; system
-`pdftotext` (poppler-utils) for highest fidelity on multi-column and scanned-
-plus-OCR'd PDFs. Until iter-2, affected documents SHOULD be pre-processed
-(Pandoc to text, OCR pass, copy-paste into a `.md` file) before ingest.
+The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` /
+`libpdfium.dll`) is loaded at runtime via `Pdfium::bind_to_library` against
+the explicit path `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`.
+The library is downloaded and placed there by `bash install.sh --yes`. If the
+library is absent at PDF ingest time, the per-document load fails with the
+literal log line `pdfium dynamic library not found ... install via bash
+install.sh --yes` and the ingest continues with the remaining sources —
+markdown and plain-text ingest are unaffected.
+
+**Encrypted / password-protected PDFs** — pdfium returns a clear error during
+open; `sdlc-knowledge ingest` surfaces the error and skips the document.
 
 ## Facts
 
@@ -177,13 +179,13 @@ plus-OCR'd PDFs. Until iter-2, affected documents SHOULD be pre-processed
   (smaller = better) — source: SQLite FTS5 docs (referenced from
   `tools/sdlc-knowledge/src/search.rs:5-6`); negation convention verified at
   `tools/sdlc-knowledge/src/search.rs:75` — verified: yes.
-- `pdf-extract` crate — symbol: text-extraction entry points — source: crate
-  README (not opened this session) — verified: no — assumption. The four
-  limitations enumerated above (scanned PDFs, multi-column layouts, form fields,
-  password-protected) are widely documented for the crate but not reverified
-  against the specific version pinned in iter-1's `Cargo.toml` during this
-  slice. Risk: the version in use may handle some categories differently than
-  documented; mitigation: TC-AAI-5 exercises representative inputs.
+- `pdfium-render` crate v0.9 — symbol: `Pdfium::bind_to_library`,
+  `load_pdf_from_byte_slice`, `pages()`, `text()` — source: pdfium-render
+  rustdoc (referenced via Slice 1 architect pre-review of pdfium-pdf-extraction)
+  and `tools/sdlc-knowledge/src/pdf.rs` (Slice 1 implementation) — verified:
+  yes (Slice 1 of pdfium-pdf-extraction reverified the API symbols; the calibre
+  fixture in `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` exercises
+  multi-column and CID-font extraction successfully per TC-AAI-5).
 - GitHub Actions runner images — symbol: `ubuntu-latest`, `macos-latest`,
   `windows-latest` — source: GitHub Actions docs (not opened this session) —
   verified: no — assumption. Used by Slice 4's release pipeline, not by this
