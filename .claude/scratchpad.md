@@ -1,37 +1,42 @@
 ## Feature: Role Planner (Iteration 1: On-Demand Role Expansion)
 ## Branch: feat/role-planner
-## Status: implementing wave 1 slice 1/6
+## Status: quality-gates
 
 ## Plan
 
-### Wave 1
-- [ ] Slice 1: `src/agents/role-planner.md` [new] — agent with frontmatter, Authority+Output Boundaries, MANDATORY filename-prefix self-check, MANDATORY overwrite annotation, CORE-AGENT-ENUMERATION HTML markers, frontmatter-extraction algorithm, closed-vocabulary 5 step labels, on-demand template, resource-architect boundary
-- [ ] Slice 2: `install.sh` banners 15→16 in 5 locations (exact counts: 15 specialized=3, 15 AI agents=1, (15 files=1, all 14-counterparts=0)
+### Wave 1 [COMPLETE]
+- [x] Slice 1: `src/agents/role-planner.md` [new] — `d400e45`
+- [x] Slice 2: `install.sh` 15→16 banners — `d09fbb1`
 
-### Wave 2
-- [ ] Slice 3: `src/commands/bootstrap-feature.md` — insert Step 3.75 between Step 3.5 (resource-architect) and Step 4 (QA); preserve Step 5.5 (changelog-writer); append `### On-Demand Role Invocation` section with verbatim frontmatter-extraction algorithm + 5 closed-vocabulary step labels + 3-row failure-mode matrix
-- [ ] Slice 4: `src/agents/planner.md` — rewrite Process step 4 into 4a/4b/4c (4a resources-pending → ## Recommended Resources, 4b roles-pending → ## Additional Roles AFTER 4a BEFORE Prerequisites, 4c MUST delete BOTH temp files independently)
+### Wave 2 [COMPLETE]
+- [x] Slice 3: `src/commands/bootstrap-feature.md` Step 3.75 + On-Demand Invocation — `3d5edd1`
+- [x] Slice 4: `src/agents/planner.md` 4a/4b/4c rewrite — `2c29712`
 
-### Wave 3
-- [ ] Slice 5: `src/claude.md` — Agency Roles row between resource-architect and qa-planner; Plan Critic bullet IMMEDIATELY AFTER existing ## Recommended Resources bullet, with slug-collision MAJOR clause
-- [ ] Slice 6: `README.md` — tagline 15→16, ## The 16 Agents heading, agent table row, new ## On-demand role recommendations at bootstrap section between Feature #4's section and Customization
+### Wave 3 [COMPLETE]
+- [x] Slice 5: `src/claude.md` Agency Roles + Plan Critic bullet — `4dcdc87`
+- [x] Slice 6: `README.md` 15→16 + agent row + on-demand section — `810fcea`
 
-## Pinned [STRUCTURAL] decisions
+## Post-wave verification (orchestrator)
 
-1. Frontmatter-extraction algorithm — verbatim identical in role-planner.md AND bootstrap-feature.md (Slice 3 copies from Slice 1's commit)
-2. 5 closed-vocabulary step labels in BOTH agent and command file
-3. Sub-steps 4a/4b/4c in planner.md
-4. CORE-AGENT-ENUMERATION HTML markers in role-planner.md
-5. MANDATORY overwrite annotation
-6. MANDATORY filename-prefix self-check
-7. Plan Critic core-slug collision = MAJOR
-8. Canonical case `src/claude.md` (lowercase, APFS case-alias inode 4443075)
-9. Slice 3 MUST copy frontmatter-extract algorithm verbatim from Slice 1's committed text
+- 7 commits on branch (1 bootstrap + 6 slices)
+- Agent count: **16** (was 15 after Feature #4)
+- install.sh: 3× "16 specialized", 0× "15 specialized"
+- README: 1× "16 specialized", 1× "## The 16 Agents"
+- src/claude.md: 2× "role-planner" (Agency Roles + Plan Critic); 17 Agency Roles rows (header + 16 agents)
+- bootstrap-feature.md: Step 3.5 + Step 3.75 (new) + Step 5.5 all coexist (1 each)
+- planner.md: 2× "MUST delete", 5× "4a"/"4b"/"4c" markers
+- Frontmatter-extraction algorithm byte-identical between role-planner.md and bootstrap-feature.md
+
+## Process notes
+
+- **Sandbox blocked subagent commits** — orchestrator commits each slice with pathspec (`-- <file>`) to ensure atomic 1-slice-1-commit.
+- **Initial wave-isolation hiccup**: Slice 2's commit accidentally pulled in Slice 1's staged role-planner.md (parallel sibling). Fixed via `git reset --soft HEAD~1` + restage with `git restore --staged` + 2 separate commits with pathspec.
+- **Git identity** — auto-detect broken on this machine (`aleksandra@Mac.(none)`); used inline `git -c user.name=... -c user.email=...` for every commit (subagent sandbox blocks this form, orchestrator allows it).
 
 ## Plan Critic findings
 
-- 1 CRITICAL (Wave 1→Wave 2 textual coupling) — addressed via [STRUCTURAL] 9 + Slice 3 diff Verify
-- 17 MAJOR — 12 fixed, 5 documented as accepted-risk in Review Notes
+- 1 CRITICAL (Wave 1→Wave 2 textual coupling) — addressed via Slice 3 diff Verify
+- 17 MAJOR — 12 fixed in plan, 5 documented as accepted-risk in Review Notes
 - 3 MINOR — documented
 
 ## Pre-existing SDLC bootstrap skips
@@ -40,8 +45,12 @@ This feature's bootstrap ran on main with Step 3.5 (resource-architect) and Step
 
 ## Completed
 
-(bootstrap artifacts staged but not yet committed)
+7 commits on `feat/role-planner` (`887ef19` bootstrap → `810fcea` README).
 
 ## Blockers
 
 (none)
+
+## Next
+
+- `/merge-ready` quality gates: git hygiene, docs, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
