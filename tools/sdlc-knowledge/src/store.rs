@@ -271,6 +271,77 @@ pub fn delete_by_id(conn: &Connection, id: i64) -> Result<u64, rusqlite::Error> 
     Ok(n as u64)
 }
 
+/// FR-4.5 result shape for `delete --by-id`. Serialized to JSON in `output.rs`
+/// as `{"deleted_id": N, "source_path": "...", "chunks_removed": M}`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeleteByIdSummary {
+    pub deleted_id: i64,
+    pub source_path: String,
+    pub chunks_removed: u64,
+}
+
+/// Delete a documents row by integer primary key, returning a summary of what
+/// was removed (id + source_path + chunks_removed) per FR-4.5.
+///
+/// Wraps the multi-statement cascade in a `BEGIN IMMEDIATE` transaction per
+/// FR-4.4 so the SELECT-source_path / SELECT-COUNT-chunks / DELETE-documents
+/// triple is atomic against concurrent writers. The chunks rows cascade-delete
+/// via the `chunks(doc_id) REFERENCES documents(id) ON DELETE CASCADE`
+/// foreign-key constraint declared in `SCHEMA_V1`; FTS5 cleanup happens via
+/// the `chunks_ad` AFTER-DELETE trigger on each chunk row removed.
+///
+/// Returns:
+///   - `Ok(Some(summary))` — document existed and was deleted.
+///   - `Ok(None)` — no documents row with that id; transaction rolls back
+///     (implicit on drop without commit).
+///   - `Err(...)` — SQL error during the probe or delete; transaction rolls
+///     back.
+pub fn delete_by_id_with_summary(
+    conn: &mut Connection,
+    id: i64,
+) -> Result<Option<DeleteByIdSummary>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+
+    // BEGIN IMMEDIATE per FR-4.4 — same transaction discipline as ingest.
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+
+    let source_path: Option<String> = tx
+        .query_row(
+            "SELECT source_path FROM documents WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let source_path = match source_path {
+        Some(s) => s,
+        None => {
+            // No row to delete; rollback is implicit on drop without commit.
+            return Ok(None);
+        }
+    };
+
+    let chunks_removed: u64 = tx.query_row(
+        "SELECT COUNT(*) FROM chunks WHERE doc_id = ?1",
+        rusqlite::params![id],
+        |row| row.get::<_, i64>(0).map(|n| n as u64),
+    )?;
+
+    tx.execute(
+        "DELETE FROM documents WHERE id = ?1",
+        rusqlite::params![id],
+    )?;
+    // chunks rows cascade-delete via FOREIGN KEY ... ON DELETE CASCADE on
+    // chunks.doc_id (declared in SCHEMA_V1); FTS5 stays in sync via the
+    // chunks_ad AFTER DELETE trigger on each chunk row removed.
+
+    tx.commit()?;
+    Ok(Some(DeleteByIdSummary {
+        deleted_id: id,
+        source_path,
+        chunks_removed,
+    }))
+}
+
 /// Delete a documents row by exact `source_path` string. Returns rows deleted.
 ///
 /// SECURITY: callers MUST canonicalize-and-prefix-check the `source_path`

@@ -93,6 +93,16 @@ pub fn render_status_human(info: &StatusInfo) -> String {
     )
 }
 
+// ---------------------------------------------------------------------------
+// delete --by-id (FR-4.5)
+// ---------------------------------------------------------------------------
+
+/// FR-4.5 — `{"deleted_id": N, "source_path": "...", "chunks_removed": M}`.
+/// Serializes via the `serde::Serialize` derive on `store::DeleteByIdSummary`.
+pub fn render_delete_by_id_json(summary: &crate::store::DeleteByIdSummary) -> String {
+    serde_json::to_string(summary).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

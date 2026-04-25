@@ -215,7 +215,7 @@ fn e2e_e_delete_by_string_path_removes_document() {
 }
 
 // ---------------------------------------------------------------------------
-// (f) delete by integer id.
+// (f) delete by integer id via explicit --by-id flag (Slice 2 FR-4.1).
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -231,7 +231,7 @@ fn e2e_f_delete_by_int_id_removes_document() {
 
     bin()
         .current_dir(tmp.path())
-        .args(["delete", &id.to_string()])
+        .args(["delete", "--by-id", &id.to_string()])
         .assert()
         .success();
 
@@ -245,6 +245,165 @@ fn e2e_f_delete_by_int_id_removes_document() {
         .query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))
         .expect("count chunks");
     assert_eq!(nc, 0, "chunks must cascade-delete");
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — delete --by-id happy path: JSON shape FR-4.5.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn delete_by_id_happy_path_json_shape() {
+    let tmp = project_with_ingested_sample();
+
+    let db = tmp.path().join(".claude/knowledge/index.db");
+    let conn = rusqlite::Connection::open(&db).expect("open db");
+    let (id, source_path): (i64, String) = conn
+        .query_row(
+            "SELECT id, source_path FROM documents LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("read id+path");
+    let prior_chunk_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM chunks WHERE doc_id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .expect("count chunks");
+    drop(conn);
+
+    let assert = bin()
+        .current_dir(tmp.path())
+        .args(["delete", "--by-id", &id.to_string(), "--json"])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("invalid JSON: {e}\nstdout=\n{stdout}"));
+
+    // FR-4.5: exactly three fields { deleted_id, source_path, chunks_removed } and no extras.
+    let obj = v.as_object().expect("JSON must be an object");
+    assert_eq!(
+        obj.len(),
+        3,
+        "JSON must have exactly 3 keys, got {}: {obj:?}",
+        obj.len()
+    );
+    assert_eq!(
+        obj.get("deleted_id").and_then(|x| x.as_i64()),
+        Some(id),
+        "deleted_id must equal {id}"
+    );
+    assert_eq!(
+        obj.get("source_path").and_then(|x| x.as_str()),
+        Some(source_path.as_str()),
+        "source_path must match"
+    );
+    assert_eq!(
+        obj.get("chunks_removed").and_then(|x| x.as_i64()),
+        Some(prior_chunk_count),
+        "chunks_removed must equal prior chunk count {prior_chunk_count}"
+    );
+
+    // List shows N-1 (was 1, now 0).
+    let assert = bin()
+        .current_dir(tmp.path())
+        .args(["list", "--json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout).to_string();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("json");
+    assert_eq!(v.as_array().expect("array").len(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — delete --by-id <nonexistent>: exit 1 + literal stderr FR-4.2.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn delete_by_id_nonexistent_returns_exit_1() {
+    let tmp = project_with_ingested_sample();
+    let db = tmp.path().join(".claude/knowledge/index.db");
+
+    // Capture prior counts to verify no rows were touched.
+    let conn = rusqlite::Connection::open(&db).expect("open db");
+    let docs_before: i64 = conn
+        .query_row("SELECT COUNT(*) FROM documents", [], |r| r.get(0))
+        .expect("count");
+    let chunks_before: i64 = conn
+        .query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))
+        .expect("count");
+    drop(conn);
+
+    let assert = bin()
+        .current_dir(tmp.path())
+        .args(["delete", "--by-id", "99999"])
+        .assert()
+        .code(1);
+
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).to_string();
+    assert!(
+        stderr.contains("error: no document with id 99999"),
+        "stderr must contain literal FR-4.2 message; got: {stderr:?}"
+    );
+
+    // Verify documents/chunks unchanged.
+    let conn = rusqlite::Connection::open(&db).expect("reopen db");
+    let docs_after: i64 = conn
+        .query_row("SELECT COUNT(*) FROM documents", [], |r| r.get(0))
+        .expect("count");
+    let chunks_after: i64 = conn
+        .query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))
+        .expect("count");
+    assert_eq!(docs_before, docs_after, "documents row count must not change");
+    assert_eq!(
+        chunks_before, chunks_after,
+        "chunks row count must not change"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — mutual exclusion: --by-id + positional path → exit 2 (FR-4.1).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn delete_mutual_exclusion_exit_2() {
+    let tmp = project_with_ingested_sample();
+
+    let assert = bin()
+        .current_dir(tmp.path())
+        .args(["delete", "--by-id", "5", "some/path.pdf"])
+        .assert()
+        .code(2);
+
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).to_string();
+    assert!(
+        stderr.contains("error: --by-id and <source-path> are mutually exclusive"),
+        "stderr must contain literal FR-4.1 mutual-exclusion message; got: {stderr:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — neither flag nor positional argument: exit 2.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn delete_neither_required_exit_2() {
+    let tmp = project_with_ingested_sample();
+
+    let assert = bin()
+        .current_dir(tmp.path())
+        .args(["delete"])
+        .assert()
+        .code(2);
+
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).to_string();
+    assert!(
+        stderr.contains("error: --by-id or <source-path> required"),
+        "stderr must contain literal `error: --by-id or <source-path> required`; got: {stderr:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
