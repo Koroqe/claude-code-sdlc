@@ -1,6 +1,6 @@
 ## Feature: Auto-Release Pipeline (iter-3)
 ## Branch: feat/auto-release
-## Status: phase 2.5 cleanup (7 slices implemented across 5 waves)
+## Status: complete — all 5 waves + cleanup + Gate 2 fix landed; merge-ready
 
 ## Plan
 
