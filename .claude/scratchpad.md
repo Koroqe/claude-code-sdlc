@@ -1,6 +1,6 @@
 ## Feature: Auto-Release Pipeline (iter-3)
 ## Branch: feat/auto-release
-## Status: implementing wave 4 slice 5/7
+## Status: phase 2.5 cleanup (7 slices implemented across 5 waves)
 
 ## Plan
 
@@ -25,15 +25,15 @@
   - Pre-review: security-auditor (Phase 1.5 — M5a CRITICAL via .gitattributes export-ignore + tar -tzf defense-in-depth, M5c HIGH env-var-mediated github expressions, A1 HIGH v-prefix strip)
 
 ### Wave 4 (sequential — opt-in + bootstrap; both touch install.sh)
-- [ ] Slice 5: SDLC core opt-in — auto-release rule + changelog sentinel + CHANGELOG.md + templates auto-release rule + pre-push hook template
+- [x] Slice 5: SDLC core opt-in — auto-release rule + changelog sentinel + CHANGELOG.md + templates auto-release rule + pre-push hook template — 2ef5a50
   - Files: .claude/rules/auto-release.md [new], .claude/rules/changelog.md [new copy of templates/rules/changelog.md], CHANGELOG.md [new at repo root], templates/rules/auto-release.md [new], templates/hooks/pre-push [new], install.sh (scaffold_project extension)
-  - Pre-review: architect (templates UNCHANGED scope clarification per action item #2)
-- [ ] Slice 6: install.sh --bootstrap-release flag for FIRST sdlc-knowledge-v0.2.0 tag + register_release_bash_allowlist
+  - Pre-review: architect action item #2 (templates UNCHANGED preserved — only NEW templates/rules/auto-release.md and templates/hooks/pre-push added)
+- [x] Slice 6: install.sh --bootstrap-release flag for FIRST sdlc-knowledge-v0.2.0 tag + register_release_bash_allowlist — 672efc5
   - Files: install.sh
-  - Pre-review: security-auditor (destructive: pushes tag to origin)
+  - Pre-review: security-auditor (Phase 1.5 — all 10 MUSTs M1–M10 implemented and verified by grep + negative tests)
 
 ### Wave 5 (sequential — docs)
-- [ ] Slice 7: Documentation — README + RELEASING.md + MIGRATION.md + CHANGELOG body refinement
+- [x] Slice 7: Documentation — README + RELEASING.md + MIGRATION.md + CHANGELOG body refinement — 6b348e5
   - Files: README.md, tools/sdlc-knowledge/RELEASING.md, MIGRATION.md [new], CHANGELOG.md (body refinement)
   - Pre-review: none
 
@@ -134,6 +134,9 @@ New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacha
 - Foundation chore — 7e4789c — .gitattributes export-ignore for source-tarball hygiene (.claude/, docs/qa/, docs/use-cases/, books/) before Wave 3 dispatch
 - Slice 3 (Wave 3 parallel) — ab666b4 — sdlc-knowledge-release.yml extended with windows-x64 matrix (target x86_64-pc-windows-msvc, .exe handling), grouped find alternation for Windows pdfium.dll, source tarball generation + upload, stat-with-wc fallback for Windows binary size check; TODO noted for pdf.rs cfg(unix) gate in iter-3.1
 - Slice 4 (Wave 3 parallel; Wave 3 complete) — 8dc32eb — new sdlc-core-release.yml triggers on bare v*.*.* tag (disjoint from sdlc-knowledge-v*), generates source tarball via git archive (M5a satisfied via .gitattributes), env-var-mediated github expressions (M5c shell-injection prevention), v-prefix strip via ${GITHUB_REF_NAME#v} (A1), tar -tzf grep defense-in-depth, body_path: .claude/release-notes-${VERSION}.md from checkout tree, softprops/action-gh-release@v2
+- Slice 5 (Wave 4 sequential) — 2ef5a50 — SDLC core opt-in: .claude/rules/auto-release.md (§7 executing-mode sentinel) + .claude/rules/changelog.md (changelog-writer activation, FR-7 dogfood flip) + CHANGELOG.md skeleton with [Unreleased] populated + templates/rules/auto-release.md + templates/hooks/pre-push (advisory, opt-in via existing .git/hooks); install.sh scaffold_project copies template rule + hook by default with opt-out instructions
+- Slice 6 (Wave 4 sequential; Wave 4 complete) — 672efc5 — install.sh --bootstrap-release flag with all 10 security MUSTs (M1 opt-in, M2 7-part precond gate, M3 strict semver regex, M4 [y/N] default-deny, M5 AUTO_RELEASE=1 + non-TTY headless, M6 atomic rollback, M7 idempotency, M8 NEVER --force, M9 [BOOTSTRAP] audit prefix on every git op, M10 sanitized error messages — no raw git remote / gh auth output); register_release_bash_allowlist function adds 11 settings.json entries mirroring §7 Trivial/Moderate/Sensitive whitelist; main flow short-circuits on --bootstrap-release before user-config install
+- Slice 7 (Wave 5 sequential; Wave 5 complete) — 6b348e5 — README badge 3.1.0→3.0.0, Koroqe→codefather-labs, executing-mode + Forbidden tier description; RELEASING.md §2/§3 iter-3 alternatives note; MIGRATION.md [new] v2.x→v3.0.0 guide with rollback paths and known issues; CHANGELOG body refined (REPO_URL fix moved Changed→Fixed)
 
 ## Blockers
 (none)
