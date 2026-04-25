@@ -121,7 +121,7 @@ Each `~/.claude/agents/ondemand-<slug>.md` file you write MUST follow this templ
 ---
 name: ondemand-<slug>
 description: <single sentence describing the role's responsibility, mirroring the per-role Why field>
-tools: ["Read", "Write", "Grep", "Glob"]
+tools: ["Read", "Write", "Glob", "Grep"]
 model: opus
 scope: on-demand
 ---
@@ -138,13 +138,13 @@ scope: on-demand
 ## Output format
 - <pinned structure of the role's deliverable, e.g. markdown subsections, JSON schema, etc.>
 
-## Authority boundary
+## Authority Boundary
 - <PERMITTED actions, scoped narrowly>
 - <PROHIBITED actions, especially writes outside the role's single output target>
 - <network/shell prohibitions if any>
 ```
 
-The default `tools` list is `["Read", "Write", "Grep", "Glob"]`. Do NOT include `Bash` in the tools list of an on-demand prompt unless the role's responsibility genuinely requires shell access AND the description field justifies it explicitly (per FR-1.7). The `tools` frontmatter is unenforced at runtime by the current general-purpose invocation pathway — the prompt body MUST self-restrict by enumerating prohibited actions in the role's `## Authority boundary`.
+The default `tools` list is `["Read", "Write", "Glob", "Grep"]`. Do NOT include `Bash` in the tools list of an on-demand prompt unless the role's responsibility genuinely requires shell access AND the description field justifies it explicitly (per FR-1.7). The `tools` frontmatter is unenforced at runtime by the current general-purpose invocation pathway — the prompt body MUST self-restrict by enumerating prohibited actions in the role's `## Authority Boundary`.
 
 The `scope: on-demand` frontmatter field is the marker that distinguishes on-demand roles from core agents. It is required on every prompt file you author. Future tooling may enforce session-time loading rules based on this field; iteration 1 treats it as a documentation-only marker.
 
