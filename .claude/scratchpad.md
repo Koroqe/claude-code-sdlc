@@ -1,6 +1,6 @@
 ## Feature: Local Knowledge Base for SDLC Agents (CLI-only, no MCP)
 ## Branch: feat/local-knowledge-base
-## Status: quality-gates (Phase 2.5 cleanup → Phase 3)
+## Status: MERGE READY (10 gates; Gate 9 SKIPPED — opt-out; Step 11 REFUSED — branch not yet merged)
 
 ## Plan
 
@@ -130,7 +130,29 @@ None. 5 MINOR refinements applied inline to plan slices:
 - Automated coupling between SDLC release-engineer and binary release pipeline
 
 ## Completed
-- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — bootstrap commit pending
+- Bootstrap pipeline (Steps 1-7) — bootstrap commit 3d2b0fd
+- Phase 1.5 security pre-review (slices 1, 2, 5) — commit ef5c3e5
+- Wave 1 Slice 1 — 58660a9 (18 tests)
+- Wave 2 Slice 2 — 4232a5d (38 tests + 1 ignored; 3.4 MB binary)
+- Wave 3 Slice 3 — 9289663 (58 tests + 1 ignored; BM25 positive-DESC)
+- Wave 4 Slices 4/5/6 (parallel) — 1e3aa13 + 7905345 + 152930b
+- Wave 5 Slices 7a/7b/7c/8 (parallel) — 94c7f3f (7a+7b bundled by parallel race) + 8dbb1a7 + b02e4cd
+- Phase 2.5 cleanup — 964341c (5 clippy lints; tests stable)
+- Scratchpad finalization — 4309af6
+- Gate 7 auto-fix — d2eac24 (knowledge-ingest.md aligned with actual aggregate JSON)
+
+## Quality gate verdicts
+- Gate 0 Git Hygiene: PASS
+- Gate 1 Documentation Completeness: PASS (PRD §11 + 1659-line UC + 2349-line QA)
+- Gate 2 Code Review: PASS (no findings; all invariants hold)
+- Gate 3 Security Audit: SECURITY APPROVED (all 23 Phase 1.5 MUSTs implemented; hash-verification deferred to iter-2)
+- Gate 4 Build Verification: PASS (cargo build clean; 58/0/1 tests; clippy clean; binary 3.44 MB)
+- Gate 5 E2E Tests: PASS (covered by Gate 4 — `cli_*_e2e_test.rs` integration tests)
+- Gate 6 Goal-Backward Verification: PASS (Levels 1-4 all PASS)
+- Gate 7 Documentation Accuracy: PASS (after auto-fix d2eac24)
+- Gate 8 UI/UX: N/A (no UI; CLI tool only)
+- Gate 9 Release Packaging: SKIPPED (no CHANGELOG.md; SDLC core opts out)
+- Step 11 On-Demand Role Teardown: REFUSED (branch not yet merged into main; FR-4.1 refusal; 0/0/0 counts; not a merge blocker)
 
 ## Blockers
 (none)
