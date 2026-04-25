@@ -1,20 +1,3 @@
-# Changelog
-
-All notable user-facing changes to claude-code-sdlc are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-User-facing means changes a developer using the SDLC pipeline notices in
-their day-to-day work — new commands, new agents, new gates, behavioral
-changes to existing pipeline stages, install.sh changes, fixes to broken
-flows. Internal refactors, type-only changes, test-infrastructure tweaks,
-and documentation cleanups do NOT belong here (per
-`templates/rules/changelog.md`).
-
-## [Unreleased]
-
-## [0.2.0] - 2026-04-26
 
 ### Added
 
