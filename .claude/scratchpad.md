@@ -1,6 +1,6 @@
 ## Feature: Cognitive Self-Check Protocol — Fact/Assumption Discipline for Thinking Agents
 ## Branch: feat/cognitive-self-check
-## Status: all 6 slices complete; running Phase 2.5 cleanup then /merge-ready quality gates
+## Status: MERGE READY (10 gates clear; Step 11 refused — branch not yet merged into main, expected)
 
 ## Plan
 
@@ -54,9 +54,24 @@ None. Three MINOR refinements applied inline:
 - README taglines `17 specialized AI agents` (line 5) and `10 quality gates` (line 35) — BYTE-UNCHANGED
 
 ## Completed
-- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — all artifacts produced; bootstrap commit 1364595
-- Wave 1 Slice 1 — `src/rules/cognitive-self-check.md` created (135 lines, 6 ## sections, 4 ### Facts subsections, 12 in-scope + 5 exempt slugs, MERGE_DATE placeholder, "I remember from a similar API / from training data" appears 2x, bilingual 4-question protocol). Verify checks all PASS — commit 16df3b1
-- Note: plan's awk verify for "exactly 6 ## headings" was fence-naive (counted `## Facts` example inside fenced code block); ran fence-aware variant `awk '/^```/{f=!f; next} !f && /^## /{n++}'` confirming 6 section headings. This is a Rule 1 (auto-fix) verify-command refinement, not a defect in the rule file.
+- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — bootstrap commit 1364595
+- Wave 1 Slice 1 — rule file 16df3b1
+- Wave 2 Slices 2/3/4 — parallel: e7ab0de + a942899 + a159f9f
+- Wave 3 Slices 5/6 — parallel: 8242896 + 42c34ed
+- Phase 2.5 cleanup — 098786e (refactor-cleaner harmonization)
+- Phase 3 /merge-ready — 4 fix commits driven by Gate 2 BEFORE/AFTER drift sweep (874119a, 7429824, b6cfaec, 71826a0) + 1 fix commit driven by Gate 7 gate-number drift (e16d31a)
+- Quality gates verdict:
+  - Gate 0 Git Hygiene: PASS
+  - Gate 1 Documentation Completeness: PASS
+  - Gate 2 Code Review: PASS (after 4 fix attempts to clean up cascading documentation drift)
+  - Gate 3 Security Audit: PASS (zero vulns; markdown-only feature)
+  - Gate 4 Build Verification: N/A (markdown-only)
+  - Gate 5 E2E Tests: N/A (no UI/runtime)
+  - Gate 6 Goal-Backward Verification: PASS (all 4 levels)
+  - Gate 7 Documentation Accuracy: PASS (after gate-number fix)
+  - Gate 8 UI/UX: N/A (no UI)
+  - Gate 9 Release Packaging: SKIPPED (SDLC core opts out of CHANGELOG automation)
+- Step 11 On-Demand Role Teardown: REFUSED (branch not yet merged into main; FR-4.1 refusal; counts N=0, M=0, K=0; not a merge blocker)
 
 ## Blockers
 (none)
