@@ -78,15 +78,15 @@ Delegate to the `release-engineer` agent. Gate 9 packages the release in suggest
 
 **Invocation order:** Gate 9 runs AFTER the pre-flight `changelog-writer` sync (which precedes Gate 0) AND AFTER all of Gate 0 through Gate 8 have completed. Gate 9 is the LAST gate in the merge-ready sequence.
 
-**6-step sequence performed by `release-engineer`:**
+**7-step sequence performed by `release-engineer`:**
 
-1. **Self-check** — read CHANGELOG.md `[Unreleased]`. If empty across all six Keep a Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), return `no-op: no unreleased changes` and report Gate 9 status as **SKIPPED** (per FR-7.2). STOP — do not run steps 2-6.
+1. **Self-check** — read CHANGELOG.md `[Unreleased]`. If empty across all six Keep a Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), return `no-op: no unreleased changes` and report Gate 9 status as **SKIPPED** (per FR-7.2). STOP — do not run steps 2-7.
 2. **Version detection** — resolve current version per FR-3.1 priority chain: `package.json` → `pyproject.toml` → `Cargo.toml` → `VERSION` → latest `.git/refs/tags/v*.*.*` (with `.git/packed-refs` fallback) → `0.1.0`. Apply `./CLAUDE.md` then `.claude/CLAUDE.md` `Version source:` overrides.
 3. **Semver bump** — compute next version from `[Unreleased]` content per FR-4.1 (Removed → major; Added/Changed → minor; Deprecated/Fixed/Security → patch) with negation skip (`non-breaking`, `not breaking`) and pre-1.0 override (MAJOR=0 demotes major to minor).
 4. **CHANGELOG rewrite** — rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD`, insert a fresh empty `[Unreleased]` block above it, preserve all prior versioned sections byte-for-byte.
 5. **Release-notes file** — write the renamed section's body (no heading) to `.claude/release-notes-X.Y.Z.md`. Overwrite if it exists. Do not delete prior release-notes files. Do not commit.
 6. **CI/CD provisioning** — detect existing GitHub Actions release workflow via multi-pattern (P1 tag trigger + P2 correct `body_path` + P3 inline extraction). When ABSENT, generate `.github/workflows/release.yml` with the HTML-comment marker, `Strip v prefix from tag` step, two-step `body_path: .claude/release-notes-${{ steps.ver.outputs.version }}.md`, and `softprops/action-gh-release@v2`.
-7. **Structured summary** — emit a 10-section labeled summary (per FR-6.1) with a fenced `Commands to run` block (per FR-6.5) listing the exact `git add` / `git commit` / `git tag` / `git push` / `gh release create` commands the user runs themselves.
+7. **Structured summary** — emit a 10-section labeled summary (per FR-6.1) with a fenced `Commands to run` block (per FR-6.5) listing the exact `git add` / `git commit` / `git push` / `git tag -a` / `git push origin vX.Y.Z` commands the user runs themselves. The tag push triggers the provisioned GitHub Actions release workflow which auto-creates the release — `gh release create` is NOT in the user's command block (it would race the workflow).
 
 **Conditional skip:** when step 1 detects an empty `[Unreleased]` (all six Keep a Changelog categories empty), Gate 9 reports **SKIPPED** instead of PASS/FAIL. SKIPPED is not a failure — it does not block merge readiness.
 
