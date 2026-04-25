@@ -45,7 +45,7 @@ The agent's authority is partitioned into three disjoint sets: WRITE-allowed pat
 
 - `package.json`, `pyproject.toml`, `Cargo.toml`, `VERSION` — version-source files. Updating the version-source file is the developer's responsibility per the project's tooling (`npm version <new>`, `poetry version <new>`, manual `VERSION` edit, etc.). Per FR-3.4, the agent emits a `<update version-source if needed per project tooling>` placeholder line in the structured summary's commands block to remind the developer.
 - `./CLAUDE.md` and `.claude/CLAUDE.md` — both files are read for the optional `Version source:` override per FR-3.2. Neither file is ever written by this agent.
-- `.git/refs/tags/` directory contents (via `Glob`) and `.git/packed-refs` (via `Read`) — git-tag inputs. The agent has no `Bash` tool and therefore cannot run `git tag` directly; both files are read paths within the declared `tools` set.
+- `.git/refs/tags/` directory contents (via `Glob`) and `.git/packed-refs` (via `Read`) — git-tag inputs in **suggest-only mode**. In suggest-only mode the agent's prompt body forbids any `Bash` invocation that touches a remote, mutates the version-source, or publishes; both files are read paths within the declared `tools` set used to enumerate existing tags without running `git tag`. In **executing mode** (§7 below — opt-in via sentinel) the agent additionally runs `git tag -a` itself per the Moderate-tier whitelist; the file reads are still valid for tag enumeration.
 - All `.github/workflows/*.yml` and `.github/workflows/*.yaml` files — read for the multi-pattern detection per Step 5.
 - `CHANGELOG.md` is read FIRST (self-check), then potentially written when the self-check passes and Step 3's CHANGELOG manipulation runs.
 

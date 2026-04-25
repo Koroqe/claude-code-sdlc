@@ -503,6 +503,40 @@ cargo_source_build_fallback() {
 }
 
 # ============================================================================
+# Internal helper: jq-based merge of allow-list entries into ~/.claude/settings.json.
+#
+# Args: variadic — one or more allow-list entry strings.
+# Pre-condition: settings.json MUST exist (callers create it if absent so they
+# can preserve their per-call missing-file log message).
+# Pre-condition: jq MUST be on PATH (callers gate on `command -v jq` so they
+# can emit per-call jq-absent guidance).
+#
+# Returns 0 on successful atomic merge; 1 if jq merge or validation failed.
+# Caller is responsible for log_ok / log_warn — this helper is silent so the
+# two register_*_bash_allowlist functions retain their distinct user-facing
+# success messages ("created with sdlc-knowledge allowlist" /
+# "release-engineer §7 allowlist merged — 11 entries").
+# ============================================================================
+_jq_merge_allow_entries() {
+  local settings="$CLAUDE_DIR/settings.json"
+  local tmp json_entries
+  tmp="$(mktemp)"
+  json_entries=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+
+  if jq --argjson new "$json_entries" \
+       '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + $new) | unique)' \
+       "$settings" > "$tmp" \
+     && jq -e '.' "$tmp" >/dev/null 2>&1; then
+    mv "$tmp" "$settings"
+    chmod 0644 "$settings"
+    return 0
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# ============================================================================
 # Register Bash allowlist for sdlc-knowledge in ~/.claude/settings.json (Slice 5)
 # ============================================================================
 register_bash_allowlist() {
@@ -522,17 +556,9 @@ EOF
 
   # File exists: prefer atomic jq-based merge; fail-closed if jq absent.
   if command -v jq >/dev/null 2>&1; then
-    local tmp
-    tmp="$(mktemp)"
-    if jq --arg e "$entry" \
-         '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + [$e]) | unique)' \
-         "$settings" > "$tmp" \
-       && jq -e '.' "$tmp" >/dev/null 2>&1; then
-      mv "$tmp" "$settings"
-      chmod 0644 "$settings"
+    if _jq_merge_allow_entries "$entry"; then
       log_ok "settings.json (sdlc-knowledge allowlist merged)"
     else
-      rm -f "$tmp"
       log_warn "settings.json merge failed; please add manually: $entry"
     fi
   else
@@ -584,19 +610,9 @@ register_release_bash_allowlist() {
     return 0
   fi
 
-  local tmp json_entries
-  tmp="$(mktemp)"
-  json_entries=$(printf '%s\n' "${entries[@]}" | jq -R . | jq -s .)
-
-  if jq --argjson new "$json_entries" \
-       '(.permissions //= {}) | (.permissions.allow //= []) | .permissions.allow = ((.permissions.allow + $new) | unique)' \
-       "$settings" > "$tmp" \
-     && jq -e '.' "$tmp" >/dev/null 2>&1; then
-    mv "$tmp" "$settings"
-    chmod 0644 "$settings"
+  if _jq_merge_allow_entries "${entries[@]}"; then
     log_ok "settings.json (release-engineer §7 allowlist merged — 11 entries)"
   else
-    rm -f "$tmp"
     log_warn "settings.json release allowlist merge failed; please add manually"
   fi
 }
