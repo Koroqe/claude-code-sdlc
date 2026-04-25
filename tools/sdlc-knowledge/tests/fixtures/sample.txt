@@ -1,0 +1,7 @@
+Plain text fixture for sdlc-knowledge ingest tests.
+
+The PlainTextReader reads bytes from disk and returns them as a UTF-8 string. No structural transforms are applied; the chunker then slices the result on the standard 500/100 window.
+
+This file is around one kilobyte of ASCII text so the chunker emits at least one chunk and the document table records one row with a stable sha256 and mtime pair. Re-ingesting this file with no edits prints the unchanged log line and exits zero.
+
+Repeated ingest is the idempotency invariant for the knowledge base. The CLI ingest command is the entrypoint Slice 2 wires up. The store layer initializes WAL journal mode at open_or_init and runs the v1 migration before any user data is written. The fts5 virtual table receives chunk inserts via after-insert triggers so search snippets are queryable immediately after commit.

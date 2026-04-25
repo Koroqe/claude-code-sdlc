@@ -3,7 +3,9 @@
 //! Coverage:
 //! - TC-1: `sdlc-knowledge --help` succeeds (exit 0); stdout lists all 5 subcommands.
 //! - TC-2: `sdlc-knowledge --version` exits 0; stdout matches `sdlc-knowledge X.Y.Z` semver shape.
-//! - TC-3: placeholder smoke — `sdlc-knowledge ingest <path>` exits 1 with `not yet implemented`.
+//! - TC-3: placeholder smoke — `sdlc-knowledge search <q>` exits 1 with `not yet implemented`
+//!   (the `search` subcommand body remains a placeholder until Slice 3; `ingest` was
+//!   implemented in Slice 2 so we can no longer use it as a placeholder probe).
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -58,12 +60,13 @@ fn version_prints_semver_shape() {
 #[test]
 fn placeholder_subcommand_exits_one_with_not_yet_implemented() {
     // We must run from a tempdir so resolve_project_root succeeds for the default case.
-    // The subcommand body is the placeholder that stderr-prints "not yet implemented".
+    // Use `search` since `ingest` is now implemented as of Slice 2; `search` is still a
+    // placeholder that stderr-prints "not yet implemented".
     let tmp = tempfile::tempdir().expect("tempdir");
 
     bin()
         .current_dir(tmp.path())
-        .args(["ingest", "."])
+        .args(["search", "anything"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains("not yet implemented"));

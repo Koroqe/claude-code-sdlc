@@ -71,11 +71,13 @@ fn test_cwd_is_symlink_no_false_reject() {
     // Path through the /tmp alias (not /private/tmp).
     let tmp_path = tmp_under_var.path();
 
+    // Use a still-placeholder subcommand (`search`) to prove the path-resolve gate did
+    // NOT reject (it would have exited 2). Slice 2 made `ingest` functional, so we
+    // probe via `search` to keep this assertion behavioural.
     bin()
         .current_dir(tmp_path)
-        .args(["ingest", ".", "--project-root", "."])
+        .args(["search", "x", "--project-root", "."])
         .assert()
-        // Placeholder body returns exit 1; this proves the path-resolve gate did NOT reject.
         .code(1)
         .stderr(predicate::str::contains("not yet implemented"));
 }
@@ -112,7 +114,7 @@ fn test_trailing_slash_normalization() {
     for arg in [".", "./"] {
         bin()
             .current_dir(tmp.path())
-            .args(["ingest", ".", "--project-root", arg])
+            .args(["search", "x", "--project-root", arg])
             .assert()
             .code(1)
             .stderr(predicate::str::contains("not yet implemented"));
@@ -144,8 +146,8 @@ fn test_project_root_equal_to_cwd() {
 
     bin()
         .current_dir(tmp.path())
-        .arg("ingest")
-        .arg(".")
+        .arg("search")
+        .arg("x")
         .arg("--project-root")
         .arg(&canonical)
         .assert()
@@ -163,7 +165,7 @@ fn test_project_root_is_regular_file() {
 
     bin()
         .current_dir(tmp.path())
-        .args(["ingest", ".", "--project-root", "file.txt"])
+        .args(["search", "x", "--project-root", "file.txt"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains("not yet implemented"));
@@ -211,15 +213,10 @@ fn test_no_panic_on_eacces() {
 #[test]
 fn test_placeholder_smoke() {
     // Each placeholder subcommand exits 1 with stderr "not yet implemented".
+    // NOTE: `ingest` was implemented in Slice 2 so it is no longer a placeholder.
+    // We retain the smoke probe for the four remaining placeholder subcommands
+    // (search/list/status/delete) — those are reactivated in Slice 3.
     let tmp = tempfile::tempdir().expect("tempdir");
-
-    // ingest
-    bin()
-        .current_dir(tmp.path())
-        .args(["ingest", "."])
-        .assert()
-        .code(1)
-        .stderr(predicate::str::contains("not yet implemented"));
 
     // search
     bin()
