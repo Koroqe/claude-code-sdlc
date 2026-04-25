@@ -1,20 +1,32 @@
 ## Feature: Cognitive Self-Check Protocol — Fact/Assumption Discipline for Thinking Agents
 ## Branch: feat/cognitive-self-check
-## Status: implementing wave 1 slice 1/6
+## Status: all 6 slices complete; running Phase 2.5 cleanup then /merge-ready quality gates
 
 ## Plan
 
-### Wave 1 [pending]
-- [ ] Slice 1: Create `src/rules/cognitive-self-check.md` with 6 `##` headings, 4 `###` Facts subsections, 12 in-scope + 5 exempt agents, MERGE_DATE placeholder, bilingual 4-question protocol
+### Wave 1 [COMPLETE]
+- [x] Slice 1: Create `src/rules/cognitive-self-check.md` with 6 `##` headings, 4 `###` Facts subsections, 12 in-scope + 5 exempt agents, MERGE_DATE placeholder, bilingual 4-question protocol — 16df3b1
 
-### Wave 2 [pending] (parallel — 3 disjoint slice file-sets)
-- [ ] Slice 2: Doc-writing agents — append `## Cognitive Self-Check (MANDATORY)` to prd-writer, ba-analyst, qa-planner, planner
-- [ ] Slice 3: Stdout reviewer agents — same section + `Emit a \`## Facts\` block to stdout BEFORE your verdict.` line for architect, security-auditor, code-reviewer, verifier
-- [ ] Slice 4: Specialized agents + refactor-cleaner — same section for resource-architect, role-planner, release-engineer, refactor-cleaner
+### Wave 2 [COMPLETE]
+- [x] Slice 2: Doc-writing agents — prd-writer, ba-analyst, qa-planner, planner — e7ab0de
+- [x] Slice 3: Stdout reviewer agents — architect, security-auditor, code-reviewer, verifier (with `Emit a \`## Facts\` block to stdout BEFORE your verdict/PASS-FAIL report` literal) — a942899
+- [x] Slice 4: Specialized + refactor-cleaner — resource-architect, role-planner, release-engineer, refactor-cleaner — a159f9f
 
-### Wave 3 [pending] (parallel — 2 disjoint files)
-- [ ] Slice 5: Plan Critic — TWO new `> -` Completeness bullets in `src/claude.md` between `**Completeness:**` and `**Slice Quality:**`, plus file-vs-stdout preamble sentence
-- [ ] Slice 6: README — Hardening table row + new `## Cognitive self-check at authoring time` section
+Wave 2 integrity confirmed: 12 thinking agents have `## Cognitive Self-Check (MANDATORY)` section; 5 executors (test-writer, build-runner, e2e-runner, doc-updater, changelog-writer) do NOT (TC-CC-2 PASS).
+
+### Wave 3 [COMPLETE]
+- [x] Slice 5: Plan Critic — TWO new `> -` Completeness bullets in `src/claude.md` (lines 120-121) between `**Completeness:**` and `**Slice Quality:**`, plus file-vs-stdout preamble sentence (line 107) — 8242896
+- [x] Slice 6: README — Hardening table row (line 158) + new `## Cognitive self-check at authoring time` section (lines 269-282) — 42c34ed
+
+End-to-end verification (TC-CC-1 through TC-CC-11): ALL PASS.
+- TC-CC-1: rule file 6 sections (fence-aware), 4 ### subsections, "I remember..." 2x, MERGE_DATE 7x
+- TC-CC-2: 12 thinking agents have section, 5 executors have 0
+- TC-CC-3: file-vs-stdout preamble present in src/claude.md
+- TC-CC-5/6: 2 new bullets in Completeness window, 6 MAJOR/MINOR mentions, 0 ### headings
+- TC-CC-7: README new row + new section + rule path 2x
+- TC-CC-8/9: 17-agent tagline byte-unchanged, "10 quality gates" appears 3x (line 35, 127, 137)
+- TC-CC-10/11: install.sh, templates/rules/, templates/CLAUDE.md, 5 executors — zero diff vs main
+- Agency Roles table at src/claude.md lines 11-29 — byte-unchanged (only diff hunks at 104 and 117 from Slice 5)
 
 ## Bootstrap artifacts produced
 - PRD §9 (lines 2082–2333) — 7 numbered subsections (9.1–9.7), 7 FRs, 8 NFRs, 20 ACs, 17 risks/deps
@@ -42,7 +54,9 @@ None. Three MINOR refinements applied inline:
 - README taglines `17 specialized AI agents` (line 5) and `10 quality gates` (line 35) — BYTE-UNCHANGED
 
 ## Completed
-- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — all artifacts produced
+- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — all artifacts produced; bootstrap commit 1364595
+- Wave 1 Slice 1 — `src/rules/cognitive-self-check.md` created (135 lines, 6 ## sections, 4 ### Facts subsections, 12 in-scope + 5 exempt slugs, MERGE_DATE placeholder, "I remember from a similar API / from training data" appears 2x, bilingual 4-question protocol). Verify checks all PASS — commit 16df3b1
+- Note: plan's awk verify for "exactly 6 ## headings" was fence-naive (counted `## Facts` example inside fenced code block); ran fence-aware variant `awk '/^```/{f=!f; next} !f && /^## /{n++}'` confirming 6 section headings. This is a Rule 1 (auto-fix) verify-command refinement, not a defect in the rule file.
 
 ## Blockers
 (none)
