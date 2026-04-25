@@ -1,6 +1,6 @@
 ## Feature: Robust PDF Extraction via pdfium-render (iter-2 of local-knowledge-base)
 ## Branch: feat/pdfium-pdf-extraction
-## Status: quality-gates (Phase 2.5 cleanup → Phase 3)
+## Status: MERGE READY (10 gates; Gate 9 SKIPPED — opt-out; Step 11 REFUSED — branch not merged)
 
 ## Plan
 
@@ -139,7 +139,27 @@ Wrap the whole `read()` body in `catch_unwind(AssertUnwindSafe(...))` per existi
 - sha256 verification of downloaded pdfium binary (deferred to iter-3)
 
 ## Completed
-(none — implementation pending)
+- Bootstrap (Steps 1-7) — 5a64c8f
+- Phase 1.5 pre-review (architect API resolution + security-auditor Slices 1+3) — fedb026
+- Wave 1 Slice 1 — ca7c6dd (62 tests + 5 ignored, calibre fixture 71974 B, all 5 security remediations)
+- Wave 2 Slice 2 — 70f63e6 (66 tests, delete --by-id with FR-4.5 JSON shape, BEGIN IMMEDIATE transaction)
+- Wave 3 Slices 3+4 bundled by parallel git race — 001142b (install_pdfium_binary 17 MUSTs + GHA workflow pdfium download + smoke test)
+- Wave 3 Slice 5 — 801dd59 (knowledge-base rules + RELEASING.md + README hardening row)
+- Phase 2.5 cleanup — d7665f4 (removed legacy delete_by_id, 11 lines, zero call sites)
+- Scratchpad — f17fb7b
+
+## Quality gate verdicts
+- Gate 0 Git Hygiene: PASS (8 commits ahead of main, working tree clean)
+- Gate 1 Documentation Completeness: PASS (PRD §12 + 1203-line UC + 1515-line QA)
+- Gate 2 Code Review: PASS (no findings; all invariants hold)
+- Gate 3 Security Audit: SECURITY APPROVED (22 MUSTs verified; sha256 deferral acceptable iter-3)
+- Gate 4 Build Verification: PASS (cargo build/test/clippy clean; 66/0/5; binary 2.89 MB)
+- Gate 5 E2E Tests: PASS (covered by Gate 4 — cli_*_e2e_test.rs)
+- Gate 6 Goal-Backward Verification: PASS (Levels 1-4 all PASS)
+- Gate 7 Documentation Accuracy: PASS (all 7 doc surfaces accurate)
+- Gate 8 UI/UX: N/A (no UI; CLI tool only)
+- Gate 9 Release Packaging: SKIPPED (no CHANGELOG.md; SDLC core opts out)
+- Step 11 On-Demand Role Teardown: REFUSED (branch not merged; FR-4.1; counts N=0, M=0, K=0; not a merge blocker)
 
 ## Blockers
 (none)
