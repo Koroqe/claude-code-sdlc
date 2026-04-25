@@ -1,6 +1,6 @@
 ## Feature: Resource Manager-Architect — Iteration 2: Auto-Install
 ## Branch: feat/resource-architect-auto-install
-## Status: implementing wave 2 slice 2/3
+## Status: quality-gates
 
 ## Plan
 
@@ -12,11 +12,11 @@
 - [x] Slice 7: `README.md` — feature section extension (4-tier, approval, whitelist, backward compat) — 19a3fd1
 - [x] Slice 8: `templates/CLAUDE.md` — `Resource preferences:` placeholder (OPTIONAL) — b38f0ab
 
-### Wave 2 [IN PROGRESS]
-- [ ] Slice 2: `src/agents/resource-architect.md` — Bash whitelist + detect-then-install + multi-pkg-manager tiebreaker (appends to Slice 1) [IN PROGRESS]
+### Wave 2 [COMPLETE]
+- [x] Slice 2: `src/agents/resource-architect.md` — Bash whitelist + detect-then-install + multi-pkg-manager tiebreaker — 7479a8a
 
-### Wave 3
-- [ ] Slice 3: `src/agents/resource-architect.md` — Approval flow + halt semantics + output extension `## Auto-Install Results` (appends to Slice 2)
+### Wave 3 [COMPLETE]
+- [x] Slice 3: `src/agents/resource-architect.md` — Approval flow + halt semantics + output extension `## Auto-Install Results` — 33c5ac9
 
 ## [STRUCTURAL] decisions
 
@@ -33,12 +33,14 @@
 
 ## Process notes
 - Sandbox blocks subagent commits; orchestrator commits with pathspec
-- Wave 1 done: 6 atomic commits f08bd02→b38f0ab
-- Waves 2 + 3 sequential on `src/agents/resource-architect.md`
+- Wave 1 done: 6 atomic commits
+- Wave 2 done: 1 commit (Slice 2 appended to resource-architect.md)
+- Wave 3 done: 1 commit (Slice 3 appended to resource-architect.md)
 - 17 agents stay (no banner change in install.sh)
 
 ## Completed
-- Wave 1 all 6 slices on disjoint files
+- All 8 slices committed (8 atomic commits + 1 scratchpad commit)
+- Implementation complete; ready for merge-ready
 
 ## Blockers
 (none)
