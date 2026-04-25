@@ -255,6 +255,188 @@ Per `[STRUCTURAL]` decision #4, when a recommendation's natural install path fal
 
 The Forbidden tier is the only tier whose presence can be canonically suppressed (option (a)) — Trivial, Moderate, and Sensitive entries are always emitted with their tier label. Install mode treats option-(b) Forbidden entries identically to Sensitive entries for the purpose of skipping execution, but it counts them in the Forbidden bucket of the summary line.
 
+### Bash Whitelist
+
+Install mode is permitted to invoke `Bash` only when the literal command string matches one of the anchored regex patterns enumerated below. The whitelist is the authoritative gate: any command that does not match a pattern in this section MUST be refused with the literal Authority Boundary violation message defined at the bottom of this subsection. The whitelist is anchored with `^` and `$` on every pattern; partial matches are rejected. The character class `[a-zA-Z0-9@/._+~-]` (the "widened class") is the only character class permitted inside parameter slots. Per `[STRUCTURAL]` decision #3, the widened class covers: uppercase letters (for scoped package organizations like `@MyOrg`), `~` (semver tilde range like `~1.2.3`), `+` (semver build metadata like `1.0.0+build`), and the standard alphanumeric / scoped-package punctuation. The widened class explicitly does NOT permit: whitespace, shell metacharacters (`; & | $ \` ( ) < > { }`), backticks, or any redirection operator (`> >> < <<`). If a package identifier contains any character outside the widened class, the command does not match the whitelist and is refused.
+
+#### Detection patterns (read-only probes — 13 patterns)
+
+The following 13 patterns are read-only probes that produce no side effects. They are used during the detect-then-install phase (see next subsection) to determine whether a recommended resource is already installed at a compatible version.
+
+1. `^claude mcp list$` — enumerate already-registered MCP servers from `~/.claude/settings.json` via the CLI (read-only side of the MCP CLI surface).
+2. `^npm list --depth=0( --json)?$` — list top-level npm dependencies in the project (with optional JSON output for parsing).
+3. `^cat package\.json$` — read the project's `package.json` (read-only — no write here, only detection of existing dependencies and the `packageManager` field).
+4. `^cat \.claude/settings\.json$` — read the project-level Claude settings file (read-only — no write here, only detection).
+5. `^stat -f %m package-lock\.json$` — lockfile mtime probe for the multi-package-manager tiebreaker (compare freshness of `package-lock.json` against sibling lockfiles).
+6. `^stat -f %m yarn\.lock$` — lockfile mtime probe for `yarn.lock`.
+7. `^stat -f %m pnpm-lock\.yaml$` — lockfile mtime probe for `pnpm-lock.yaml`.
+8. `^test -f package-lock\.json$` — existence check for `package-lock.json`.
+9. `^test -f yarn\.lock$` — existence check for `yarn.lock`.
+10. `^test -f pnpm-lock\.yaml$` — existence check for `pnpm-lock.yaml`.
+11. `^node -e .process\.stdin\.isTTY.$` — headless-context probe (or equivalent: detects whether the agent is running attached to a TTY; if not, install mode falls back to suggest-only behavior because no approval prompt can be presented).
+12. `^which (npm|pnpm|yarn|claude|npx)$` — resolve the binary path of a known package-manager or Claude-CLI executable.
+13. `^command -v (npm|pnpm|yarn|claude|npx)$` — POSIX-portable equivalent of `which` for the same set of binaries.
+
+#### Trivial install patterns (3 patterns)
+
+These three anchored patterns cover all Trivial-tier auto-applicable install commands. Trivial-tier execution is gated by a single bulk approval rather than per-item.
+
+1. `^claude mcp add [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — register an MCP server in `~/.claude/settings.json` via the official Claude CLI. Accepts a name plus one or more space-separated additional argument tokens (URL, transport options, etc.), each restricted to the widened class.
+2. `^npx --yes playwright install( --with-deps)?$` — install Playwright browser binaries non-interactively under `~/.cache/ms-playwright/`, with optional `--with-deps` for system library auto-install.
+3. `^npx playwright install( --with-deps)?$` — same as above without the `--yes` confirmation flag (used when the npx prompt has already been suppressed by environment).
+
+#### Moderate install patterns (6 patterns)
+
+These six anchored patterns cover all Moderate-tier per-item-approval install commands. The widened class `[a-zA-Z0-9@/._+~-]` is used in every parameter slot per `[STRUCTURAL]` decision #3.
+
+1. `^npm install --save-dev [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more npm packages as devDependencies (long-form flag).
+2. `^npm install -D [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more npm packages as devDependencies (short-form flag).
+3. `^pnpm add -D [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more pnpm packages as devDependencies.
+4. `^yarn add --dev [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more yarn packages as devDependencies.
+5. `^pip install --user [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more Python packages into the user's site-packages (no sudo, no system mutation).
+6. `^poetry add --dev [a-zA-Z0-9@/._+~-]+( [a-zA-Z0-9@/._+~-]+)*$` — install one or more Python packages as dev-group dependencies via Poetry.
+
+#### Widened character class semantics
+
+The widened class `[a-zA-Z0-9@/._+~-]` is the **only** class that may appear inside a parameter slot of any whitelist pattern. Its members and rationale:
+
+- Lowercase `a-z` and uppercase `A-Z` — package names commonly mix case, especially scoped organization names like `@MyOrg/my-package`.
+- Digits `0-9` — version numbers, package-name suffixes.
+- `@` — leading scope marker for npm scoped packages (`@scope/pkg`) and version pin separators (`pkg@1.2.3`).
+- `/` — scope-to-name separator within scoped npm packages.
+- `.` — version separators (`1.2.3`), in-name dots (`some.tool`).
+- `_` — common in Python package names and some npm packages.
+- `+` — semver build metadata (`1.0.0+build.42`).
+- `~` — semver tilde range (`~1.2.3` meaning >=1.2.3 <1.3.0).
+- `-` — hyphenated package names, prerelease tags (`1.0.0-rc.1`).
+
+Explicitly disallowed (these characters cause the input not to match the regex, hence the command is refused): whitespace inside a token, `;`, `&`, `|`, `$`, `` ` ``, `(`, `)`, `<`, `>`, `{`, `}`, `> >> < <<`, and any other shell metacharacter or redirection operator. NO backticks. NO command substitution. NO redirection. NO whitespace within a single argument token (whitespace only separates tokens, and the regex enforces single-space separators between bracketed groups).
+
+#### 26-prefix deny-list (defense-in-depth)
+
+Even if a future modification accidentally widens a whitelist pattern to admit a dangerous command, the following prefix-based deny-list provides a second line of defense. Before any command is dispatched to `Bash`, the agent MUST verify that the command's prefix does NOT match any of the following literal prefixes. A match against any prefix below is an immediate refusal regardless of whitelist status. Each prefix is enumerated as its own bullet to make audit and review unambiguous.
+
+- `rm `
+- `rmdir`
+- `mv `
+- `cp `
+- `curl`
+- `wget`
+- `ssh`
+- `scp`
+- `rsync`
+- `sudo`
+- `su `
+- `runas`
+- `git push`
+- `git tag`
+- `git commit -a`
+- `git rebase`
+- `git reset --hard`
+- `npm publish`
+- `cargo publish`
+- `pypi upload`
+- `gh release create`
+- `docker push`
+- `aws configure`
+- `gcloud auth login`
+- `chmod`
+- `chown`
+
+The deny-list is checked **before** the whitelist regex match. Order of operations: (1) prefix deny-list check → if matched, refuse; (2) whitelist regex match → if no pattern matches, refuse; (3) dispatch the command. Both layers must pass for the command to execute.
+
+#### Authority Boundary violation literal
+
+When a command is refused (either by prefix deny-list match or by failure to match any whitelist pattern), the agent emits the following literal message verbatim, substituting `<cmd>` with the offending command string:
+
+```
+Authority Boundary violation: command `<cmd>` does not match any whitelist pattern
+```
+
+This literal is what install mode logs in the audit trail's refusal record and surfaces in the `aborted-whitelist-violation` outcome string defined in Slice 3. Do not paraphrase, do not localize, do not abbreviate.
+
+#### POSIX-only fallback literal
+
+The whitelist patterns assume POSIX-shell semantics (in particular, `stat -f %m` is the BSD/macOS form of mtime probing; GNU `stat` uses `--format=%Y`, and Windows `cmd.exe` has no equivalent). When install mode detects that the current shell is non-POSIX (e.g., the `node -e` TTY probe returns a Windows shell signature, or `command -v` itself is not available), the agent emits the following literal message verbatim and falls back to suggest-only behavior:
+
+```
+Auto-install requires POSIX shell; current environment unsupported in iteration 2
+```
+
+The fallback is reported in the `## Auto-Install Results` section as the reason no items were attempted. Iteration 2 explicitly does not target Windows `cmd.exe` or PowerShell — adding cross-shell support is deferred.
+
+#### No-runtime-expansion rule
+
+The agent MUST NOT construct command strings by runtime string interpolation, concatenation, or variable expansion. Every command dispatched to `Bash` MUST come from a finite set of static templates (the patterns enumerated above), with parameter slots filled only by validated identifier strings. Validation requires that each interpolated identifier:
+
+1. Matches the widened class character set `[a-zA-Z0-9@/._+~-]` end-to-end (no characters outside the class).
+2. Is non-empty.
+3. Originates from a controlled source (the recommendation block's name field, a lockfile name from a closed enumeration, or a CLI-binary name from a closed enumeration).
+
+After parameter substitution, the resulting full command string MUST itself be matched against the anchored whitelist regex before dispatch. The agent MUST NOT use shell expansion features (`$VAR`, `$(...)`, `` `...` ``, `${...}`, glob `*`, brace expansion `{a,b}`) when constructing command strings — these are forbidden because they break the static-template invariant and could route control to unwhitelisted commands at runtime.
+
+### Detect-then-Install Pattern
+
+Install mode operates in two phases per recommendation: first **detect** whether the resource is already present at a compatible version (using only the read-only probes from the Bash whitelist above); then, if absent, proceed to the **install** phase (gated by approval per the tier rules). The detect phase prevents redundant installs and surfaces version conflicts before any mutation occurs.
+
+#### Selection table — resource type → detection probe → install command
+
+The following table maps each install-mode-eligible resource type to its detection probe and its install command. Both columns reference patterns from the Bash whitelist above; the agent never deviates from this mapping.
+
+| # | Resource type | Detection probe (whitelist pattern) | Install command (whitelist pattern) |
+|---|---------------|-------------------------------------|-------------------------------------|
+| 1 | MCP server (Trivial) | `claude mcp list` then grep stdout for the server name | `claude mcp add <name> <url>` |
+| 2 | Playwright browsers (Trivial) | `test -d ~/.cache/ms-playwright/<browser>` (path-based, no whitelisted shell test required because file existence is queried via `test -f` for files; for directories the agent uses `Glob`) | `npx --yes playwright install` (optionally `--with-deps`) |
+| 3 | npm devDependency (Moderate) | `cat package.json` then JSON-parse devDependencies field for the package name; cross-check with `npm list --depth=0 --json` for resolved version | `npm install --save-dev <pkg>` (or `-D` short form) |
+| 4 | pnpm devDependency (Moderate) | `cat package.json` then JSON-parse devDependencies; lockfile presence via `test -f pnpm-lock.yaml` | `pnpm add -D <pkg>` |
+| 5 | yarn devDependency (Moderate) | `cat package.json` then JSON-parse devDependencies; lockfile presence via `test -f yarn.lock` | `yarn add --dev <pkg>` |
+| 6 | pip user package (Moderate) | (No whitelisted detection probe in iteration 2 — agent treats pip packages as absent unless reading a `requirements.txt` via Read tool surfaces the name; this is a known limitation deferred to a later iteration) | `pip install --user <pkg>` |
+| 7 | Poetry dev dependency (Moderate) | Read `pyproject.toml` via the `Read` tool (not Bash — `pyproject.toml` reading is read-only and outside the Bash whitelist) and inspect the `[tool.poetry.group.dev.dependencies]` table | `poetry add --dev <pkg>` |
+
+Detection ALWAYS runs before install. If the detection probe is unavailable for a resource type (row 6 above), the agent treats the resource as absent and proceeds to the approval flow — but the audit log MUST record that detection was unavailable so the user can recognize a possible duplicate-install situation.
+
+#### Multi-package-manager tiebreaker (3 levels)
+
+When a project has multiple coexisting lockfiles (e.g., both `package-lock.json` and `pnpm-lock.yaml` exist — a real situation in repos migrated between managers), the agent applies the following tiebreaker per `[STRUCTURAL]` decision #2 to pick exactly one package manager. The three levels are tried in priority order; the first level that produces a definitive answer wins.
+
+1. **Level 1 — most-recently-modified lockfile.** Compare `stat -f %m package-lock.json`, `stat -f %m yarn.lock`, and `stat -f %m pnpm-lock.yaml` for whichever lockfiles exist (skipping any that don't). Pick the package manager whose most-recently-modified lockfile has the freshest mtime — this reflects which manager was used most recently for a real install. If only one lockfile exists, this level trivially picks that manager.
+
+2. **Level 2 — `packageManager` field in `package.json`.** When Level 1 ties (e.g., two lockfiles share an mtime to the second, or both lockfiles are absent), parse `package.json` (via `cat package.json` from the whitelist) and read the `packageManager` field. Format example: `"packageManager": "pnpm@8.14.0"` → use pnpm. Format example: `"packageManager": "yarn@4.0.0"` → use yarn. The field follows the standard Node.js `packageManager` convention.
+
+3. **Level 3 — Built-in fallback ordering.** When Levels 1 and 2 are both inconclusive (no lockfiles exist AND no `packageManager` field is set), apply the deterministic priority order: `pnpm > yarn > npm`. The agent prefers pnpm first (most-recent ecosystem direction, content-addressable store), then yarn, then npm as the final fallback. This guarantees a definitive answer for every project layout.
+
+The tiebreaker output is a single chosen package manager identifier; the agent then constructs install commands using only that manager's whitelist patterns (rows 3–5 of the selection table above) for all Moderate-tier npm-ecosystem entries in the recommendation list.
+
+#### Audit-log mandate (per attempt)
+
+For every install attempt — successful, failed, skipped, or aborted — the agent MUST emit an audit-log entry capturing:
+
+- The full command string as dispatched (post-template-substitution, post-whitelist-validation).
+- The matched whitelist pattern (one of the 13 detection / 3 Trivial / 6 Moderate patterns enumerated above), so the auditor can verify which template the command came from.
+- The exit code of the `Bash` invocation (or `n/a` if no command was dispatched, e.g., for `aborted-whitelist-violation`).
+- The first 200 characters of stdout, followed by the literal string `... [truncated]` if stdout exceeded 200 characters. (Stdout shorter than 200 chars is logged in full, no truncation marker.)
+- The first 200 characters of stderr, followed by the literal string `... [truncated]` if stderr exceeded 200 characters. (Stderr shorter than 200 chars is logged in full, no truncation marker.)
+
+The audit log is appended to the `## Auto-Install Results` section of `.claude/resources-pending.md` (Slice 3 defines the section's full schema). The 200-char cap prevents runaway log growth; the literal `... [truncated]` marker is what humans grep for to confirm truncation occurred. Do not vary the truncation marker text.
+
+#### Three outcomes per single install attempt
+
+Every install attempt resolves to exactly one of three short-circuit outcomes. The downstream approval flow (Slice 3) only handles the third outcome (absent → approval); the first two outcomes terminate the attempt without entering the approval flow.
+
+- **`skipped-already-present`** — the detection probe found the resource installed at a compatible version. The agent records this status string in the audit log and the `## Auto-Install Results` section, then moves to the next recommendation. No mutation occurs.
+
+- **`aborted-version-conflict`** — the detection probe found the resource installed at an INCOMPATIBLE version (the recommendation specifies `>=2.0.0` but the project has `1.4.5`, for example). The agent emits the following verbatim warning template, with `<resource>`, `<found>`, and `<expected>` substituted from the recommendation context:
+
+  ```
+  Detected <resource> at version <found>; recommendation expected <expected>; manual reconciliation required.
+  ```
+
+  The agent sets the status to `aborted-version-conflict` in the audit log and the `## Auto-Install Results` section, then moves to the next recommendation. No mutation occurs — manual reconciliation required.
+
+- **absent** — the detection probe found that the resource is not present (or detection was unavailable per row 6 of the selection table). The agent does NOT immediately install; instead, it proceeds to the approval flow defined in Slice 3 (single-bulk approval for Trivial-tier, per-item approval for Moderate-tier, manual-action-only for Sensitive / option-(b) Forbidden). The approval flow is responsible for any subsequent mutation; the detect-then-install phase ends here for this recommendation.
+
+The three outcomes are mutually exclusive per attempt. Multiple recommendations in the same install-mode pass may resolve to different outcomes (e.g., one `skipped-already-present`, one `aborted-version-conflict`, one absent → approval), and each is logged independently.
+
 ### Authority Boundary — Iteration 2 Extension
 
 The iteration-1 Authority Boundary (above) is preserved **byte-for-byte** in iteration 2. In particular, the iter-1 prohibitions enumerated above — direct `Edit` / direct `Write` to settings files, network calls, secret-file access, arbitrary shell commands — remain in force unchanged. Iteration 2 introduces a narrowly scoped extension permitting **side-effect mutations via whitelisted Bash** (and only via whitelisted Bash; the prohibitions on direct `Write`/`Edit` to the same paths still hold).
