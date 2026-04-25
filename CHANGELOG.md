@@ -66,19 +66,27 @@ and documentation cleanups do NOT belong here (per
 
 ### Changed
 
-- **install.sh major version bump 2.1.0 → 3.0.0.** Reflects the breaking
-  change in `release-engineer` Gate 9 semantics: opted-in projects now
-  see Gate 9 transition from suggest-only to executing mode. Suggest-only
-  remains the default; the bump signals the new executing-mode option.
-- **install.sh REPO_URL** corrected from `github.com/Koroqe/claude-code-sdlc.git`
-  to `github.com/codefather-labs/claude-code-sdlc.git`. Restores the
-  one-line install via `curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash`,
-  which had been broken by the typo against the actual canonical remote.
-- **`sdlc-knowledge` release pipeline** extended with grouped find
-  alternation (`\( -name 'libpdfium*' -o -name 'pdfium*' \) -type f`)
-  so Windows pdfium archives (which name the library `pdfium.dll`
-  without the `lib` prefix per Windows convention) are matched
-  alongside the macOS/Linux `libpdfium.{dylib,so}` form.
+- **install.sh major version bump 2.1.0 → 3.0.0.** Reflects the new
+  executing-mode option in `release-engineer` Gate 9: opted-in projects
+  see Gate 9 run whitelisted git commands itself instead of just
+  emitting a fenced `Commands to run` block. Suggest-only remains the
+  default; projects without `<project>/.claude/rules/auto-release.md`
+  see byte-identical v2.x behavior.
+- **`sdlc-knowledge` release pipeline** matches Windows pdfium archives
+  via grouped find alternation. The library is named `pdfium.dll`
+  on Windows (no `lib` prefix per Windows convention); the workflow
+  now copies it alongside the macOS/Linux `libpdfium.{dylib,so}` form.
+- **Migration guide** at `MIGRATION.md` walks v2.x users through the
+  upgrade, opt-in path, opt-out path, and known issues.
+
+### Fixed
+
+- **`install.sh` REPO_URL** corrected from `github.com/Koroqe/claude-code-sdlc.git`
+  to `github.com/codefather-labs/claude-code-sdlc.git`. The v2.x typo
+  broke `curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash`
+  one-line install against the actual canonical remote. The corrected
+  URL also propagates to the script's quick-install help text and
+  inline comments.
 
 ### Security
 

@@ -55,6 +55,15 @@ From a clean checkout of `main` at the commit that introduces this feature:
    git tag sdlc-knowledge-v0.1.0
    git push origin sdlc-knowledge-v0.1.0
    ```
+
+   **Iter-3 alternative (recommended for v0.2.0 and later first-tag bootstraps):**
+   `bash install.sh --bootstrap-release 0.2.0` runs a 7-part pre-condition
+   gate (clean tree, on main, codefather-labs origin, Cargo.toml version
+   match, no existing tag local/remote, gh CLI authenticated,
+   `.claude/release-notes-0.2.0.md` non-empty), prompts default-deny
+   `[y/N]` (or auto-confirms when `AUTO_RELEASE=1` / non-TTY), pushes the
+   tag with rollback-on-failure, and never uses `--force`. See
+   `install.sh` `bootstrap_release()` for the full implementation.
 4. Open the **Actions** tab on GitHub and watch the
    `sdlc-knowledge release` workflow complete. You should see:
    - the `actionlint` job pass,
@@ -97,6 +106,18 @@ Concretely, when releasing:
    git push origin sdlc-knowledge-vX.Y.Z
    ```
 5. The release workflow will run automatically.
+
+**Iter-3 alternative — automated via `release-engineer` §7 executing mode:**
+when this repo's `.claude/rules/auto-release.md` sentinel is present (it is,
+as of iter-3 where the SDLC core opted in), `/merge-ready` Gate 9 runs the
+tag-creation and push steps itself per the §7 4-tier authority dispatch. The
+maintainer's responsibility shrinks to: ensure `[Unreleased]` in
+`CHANGELOG.md` is populated and run `/merge-ready` on a clean main checkout.
+Gate 9 disambiguates the tag scheme based on whether
+`tools/sdlc-knowledge/` was changed (sdlc-knowledge-v* scheme) or not
+(bare v* scheme); if both, the agent prompts for explicit user choice. The
+Sensitive-tier `git push origin <tag>` step still prompts default-deny
+`[y/N]` unless `AUTO_RELEASE=1` is set in the environment.
 
 ---
 
