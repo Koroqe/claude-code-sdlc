@@ -971,16 +971,16 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 1. The verifier runs the 4-question protocol per FR-1.2
 2. The verifier reads the slice's plan, the test file, and the implementation file (Q2 freshness)
-3. The verifier performs Section 1 FR-1.5 levels (wiring check, data-flow check, stub-detection check) and emits PASS/FAIL per level
-4. AFTER the structured PASS/FAIL output, the verifier emits the `## Facts` block per FR-2.10 with:
+3. The verifier emits the `## Facts` block per FR-2.10 to stdout BEFORE the structured PASS/FAIL output, with:
    - `### Verified facts` citing the files Read, the wiring graph traced, the data-flow checked
    - `### External contracts` citing any external API surfaces verified (or `(none)` if internal)
    - `### Assumptions` flagging any unverified claims (e.g., "no concurrent test affected the integration — assumed")
    - `### Open questions` if any user input needed
+4. AFTER the `## Facts` block, the verifier performs Section 1 FR-1.5 levels (wiring check, data-flow check, stub-detection check) and emits PASS/FAIL per level
 5. The orchestrator captures stdout; the slice proceeds to commit if PASS
 
 **Postconditions**:
-- The verifier's stdout contains the structured PASS/FAIL block AND the `## Facts` block at end
+- The verifier's stdout begins with the `## Facts` block (BEFORE the structured PASS/FAIL output), followed by the PASS/FAIL block
 - The audit trail allows the developer to challenge any verifier conclusion
 
 **Mapped FR**: FR-1.2, FR-2.10, FR-4.6
