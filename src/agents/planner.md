@@ -18,12 +18,26 @@ You plan new features by breaking them into small, testable implementation slice
    - `docs/qa/<feature>_test_cases.md` — test cases from QA Lead
 2. Read the project's CLAUDE.md for tech stack, file structure, and conventions
 3. Explore the codebase to understand existing patterns and affected files
-4. Read `.claude/resources-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written). Inline that captured content as the first top-level section of `.claude/plan.md`, placed immediately before `## Prerequisites verified`. After successful inlining, you **MUST delete** `.claude/resources-pending.md` — this is mandatory, not optional. If the file does not exist, skip silently — no error, no warning, and do not add a `## Recommended Resources` section.
+4. Inline temp files from upstream agents into `.claude/plan.md`. This step has three independent sub-steps that MUST be performed in the order given (Recommended Resources, then Additional Roles, then deletion).
+
+   - **4a — Recommended Resources (from `resource-architect`):** Read `.claude/resources-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written) and inline that captured content as a top-level `## Recommended Resources` section at the top of `.claude/plan.md`, positioned above `## Prerequisites verified`. If the file does not exist, skip silently — no error, no warning, and do not add a `## Recommended Resources` section. (This preserves the Feature #4 contract.)
+
+   - **4b — Additional Roles (from `role-planner`):** Read `.claude/roles-pending.md` if it exists. If present, capture the full content verbatim (preserve bullets, code fences, indentation, and line breaks exactly as written) and inline that captured content as a top-level `## Additional Roles` section in `.claude/plan.md`, positioned AFTER the previously inlined Recommended Resources section (or at the top of the plan when no prior section was inlined), and BEFORE `## Prerequisites verified`. If the file does not exist, skip silently — no error, no warning, and do not add a `## Additional Roles` section.
+
+   - **4c — Independent temp-file deletion:** On successful inline, delete each consumed temp file INDEPENDENTLY. Each deletion is independent: failure of one deletion MUST NOT block or skip the other deletion. If a sub-step above was skipped (its source file absent), do not attempt to delete its corresponding temp file. The two deletion obligations are:
+     - If `.claude/resources-pending.md` was successfully inlined, you **MUST delete** `.claude/resources-pending.md` — this is mandatory, not optional.
+     - If `.claude/roles-pending.md` was successfully inlined, you **MUST delete** `.claude/roles-pending.md` — this is mandatory, not optional.
+
 5. Produce an implementation plan with 5-9 concrete slices
 
 ## Output Format
 
-**Note on `## Recommended Resources`:** When `.claude/resources-pending.md` was present and inlined per Process step 4, `## Recommended Resources` appears as the first top-level heading at the top of `.claude/plan.md`, positioned above `## Prerequisites verified`. When the temp file was absent, no `## Recommended Resources` section is added and the plan starts with `## Prerequisites verified` as before.
+**Note on top-of-plan section ordering:** The generated `.claude/plan.md` MUST begin with the following top-level sections in this exact order (each upstream-sourced section is conditional on its temp file existing per Process step 4; when absent, the section is omitted and the next one moves up):
+
+1. `## Recommended Resources` — produced only if `.claude/resources-pending.md` existed and was inlined per Process step 4a (sourced from `resource-architect`).
+2. `## Additional Roles` — produced only if `.claude/roles-pending.md` existed and was inlined per Process step 4b (sourced from `role-planner`).
+3. `## Prerequisites verified` — always present.
+4. ... slices and remaining sections ...
 
 1. **Prerequisites verified** (confirm these documents exist):
    - PRD section: `docs/PRD.md` — [section number]
