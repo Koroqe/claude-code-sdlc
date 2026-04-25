@@ -1,55 +1,83 @@
 ## Feature: Changelog Release Packaging (Iteration 2 of #3)
 ## Branch: feat/changelog-release-packaging
-## Status: implementing wave 1
+## Status: complete — MERGE READY
 
 ## Plan
 
-### Wave 1
-- [ ] Slice 1: `src/agents/release-engineer.md` [new] frontmatter+structure
-- [ ] Slice 3: `install.sh` 16→17 banners
-- [ ] Slice 4: `src/commands/merge-ready.md` Gate 9 + line 7 + table + SKIPPED legend
-- [ ] Slice 5: `src/claude.md` Agency Roles row + line 114 list (16→17 names) + Plan Critic Gate-9 awareness
-- [ ] Slice 6: `README.md` 16→17 + line 194 + 9→10 + agent row + feature; `templates/CLAUDE.md` Version source: docs
+### Wave 1 [COMPLETE]
+- [x] Slice 1: `src/agents/release-engineer.md` [new] frontmatter+structure — `00d47ea`
+- [x] Slice 3: `install.sh` 16→17 banners — `d1d028c`
+- [x] Slice 4: `src/commands/merge-ready.md` Gate 9 + line 7 + table + SKIPPED legend — `dd3347c`
+- [x] Slice 5: `src/claude.md` Agency Roles + slug list 16→17 + Plan Critic Gate-9 awareness — `73ba603`
+- [x] Slice 6: `README.md` + `templates/CLAUDE.md` 16→17 + 9→10 + agent row + feature + Version source: docs — `afcbf4c`
 
-### Wave 2
-- [ ] Slice 2: `src/agents/release-engineer.md` algorithms+worked examples (appends to Slice 1)
+### Wave 2 [COMPLETE]
+- [x] Slice 2: `src/agents/release-engineer.md` algorithms (Steps 1-6 + Recovery + Anti-Drift) — `4fa1134`
 
-## Pinned [STRUCTURAL] decisions
+### Post-gate fixes
+- [x] `1314742` — Commands to run block (chore commit msg + remove gh release + git push without main)
+- [x] `8c2210f` — merge-ready Gate 9 step count 6→7 + gh release auto-creation note
+- [x] `a72d804` — README slug-collision list 16→17 (line 198 Plan Critic missed by Slice 6)
+- [x] `abbb46a` — UC-1 gate references corrected (Gate 9 → Gate 8 for "earlier gates")
 
-1. Gate 9 (NOT Gate 10) — count rises 9→10
-2. Two-step body_path (id: ver run step → ${{ steps.ver.outputs.version }})
-3. `breaking` negation skip — `non-breaking` and `not breaking` excluded
-4. Multi-pattern CI/CD detection (P1+P2+P3)
-5. packed-refs MUST (not MAY)
-6. ./CLAUDE.md precedence with literal warning text
-7. Gate-Count Propagation table separate from agent-count
+## Quality Gates
 
-## Plan Critic findings
+| Gate | Status | Notes |
+|------|--------|-------|
+| 0. Git Hygiene | PASS | 11 commits on branch (1 bootstrap + 6 feat + 4 fix) |
+| 1. Documentation Completeness | PASS | PRD §6 (336 lines), use cases (1115 lines / 35 scenarios), QA (1800 lines / 139 TCs) |
+| 2. Code Review | PASS (after fix) | 4 MAJOR + 2 MINOR; 4 MAJOR fixed via 4 fix commits, 2 MINOR documented |
+| 3. Security Audit | PASS | 0 CRIT/HIGH/MED, 2 INFO; defense-in-depth two-layer (tools allowlist + Authority Boundary/NEVER list/Self-Check) |
+| 4. Build Verification | PASS | bash -n OK; 17/17 agents valid frontmatter |
+| 5. E2E Tests | PASS | byte-for-byte simulation; 17 agents in src/agents/, glob picks up release-engineer.md, 4 template rules unchanged |
+| 6. Goal-Backward Verification | PASS | All 4 levels; 17 agent count consistent; Gate 9 wired correctly; data flow verified |
+| 7. Documentation Accuracy | PASS | 3 inconsistencies fixed inline (README:198 + use-cases:20/24); 3 acknowledged minor flags |
+| 8. UI/UX | N/A | markdown-only |
+
+**Overall: MERGE READY**
+
+## Summary
+
+- 11 commits on `feat/changelog-release-packaging` (1 bootstrap + 6 feat + 4 fix)
+- 17th agent `release-engineer` shipped (407 lines / 19 sections)
+- New Gate 9 in /merge-ready (gate count 9→10)
+- Multi-pattern CI/CD detection (P1+P2+P3) with two-step body_path workflow template
+- Defense-in-depth: tools allowlist + Authority Boundary + NEVER list + Self-Check + Anti-Drift
+- packed-refs MUST fallback for git-gc'd repos
+- ./CLAUDE.md precedence over .claude/CLAUDE.md with literal warning
+- Agent count 16→17 propagated; gate count 9→10 propagated
+- templates/CLAUDE.md Version source: now consumed by release-engineer (Feature #1's iter-1 placeholder finally has runtime consumer)
+
+## Plan Critic summary
 
 - 0 CRITICAL
-- 5 MAJOR — all fixed (line 194 README + line 114 src/claude.md slug-list extension + case-insensitive runtime-effect check + FR-8.8 verify clause + prose audit acknowledgement)
-- 5 MINOR — 1 fixed (Slice 2 preservation check); 4 documented in Review Notes
+- 5 MAJOR — all fixed in plan
+- 5 MINOR — 1 fixed (Slice 2 preservation check), 4 documented
+
+## Code Review post-gate fixes
+
+- 4 MAJOR found by code-reviewer:
+  1. `release-engineer.md:376` commit msg `release: vX.Y.Z` → `chore(core): release X.Y.Z` (PRD FR-6.5 contract)
+  2. `release-engineer.md:378` hardcoded `git push origin main` → `git push` (branch-agnostic)
+  3. `release-engineer.md:380` extra `gh release create` removed (would race GA workflow)
+  4. `README.md:198` slug-collision list: 16 → 17 names (Slice 6 missed; doc-updater Gate 7 fixed inline)
+- 2 MINOR not fixed (acknowledged in fix commits):
+  1. `merge-ready.md:81-83` 6/7 step count discrepancy — fixed in `8c2210f`
+  2. `templates/CLAUDE.md:9` paraphrase vs PRD FR-8.7 mandate — meaning preserved, accepted
 
 ## Process notes
 
-- Sandbox blocks subagent commits — orchestrator commits each slice with pathspec
-- Inline git identity per established pattern: `git -c user.name='Aleksandra' -c user.email='aleksandra@MacBook-Air-Aleksandra.local'`
-- Slice 1+2 share `src/agents/release-engineer.md` — Wave 2 appends to Wave 1 commit
+- Sandbox blocked subagent commits — orchestrator commits each slice with pathspec
+- Inline git identity per established pattern
+- Wave 1 + Wave 2 sequential on same file; pathspec isolation prevents staging cross-contamination
+- 4 post-gate fix commits applied after Code Review FAIL turned to PASS
 
-## Pre-existing SDLC bootstrap skips
+## Next steps
 
-This feature's bootstrap ran on main with Step 3.5/3.75/5.5 hooks but those agents not registered as subagent_type in this session. Skipped during meta-bootstrap (consistent with prior features).
-
-## Completed
-
-(bootstrap artifacts staged, awaiting commit)
+After this feature merges:
+- Feature B (Task #45): Resource Manager-Architect — Iteration 2 (auto-install)
+- Feature C (Task #46): Role Planner — Iteration 2 (reuse + teardown)
 
 ## Blockers
 
 (none)
-
-## Iteration 2 stack queue
-
-After Feature A (release-engineer) merges:
-- Feature B: Resource Manager-Architect Iteration 2 (auto-install MCP/cloud after approval)
-- Feature C: Role Planner Iteration 2 (cross-feature reuse + automatic teardown)
