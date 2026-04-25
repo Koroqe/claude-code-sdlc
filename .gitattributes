@@ -1,0 +1,18 @@
+# Source-tarball exclusions for git archive
+#
+# git archive (used by .github/workflows/sdlc-core-release.yml and
+# .github/workflows/sdlc-knowledge-release.yml to publish source tarballs)
+# honors `export-ignore` from this file. It does NOT honor `.gitignore` —
+# that file controls which paths are TRACKED, while this file controls
+# which TRACKED paths are STRIPPED from the archive.
+#
+# Excluded: project-internal artifacts that consumers building from source
+# do not need (agent state, scratchpads, plans, per-feature QA docs, the
+# untracked-but-defense-in-depth books/ corpus). Workflow files in .github/
+# are intentionally INCLUDED as a reference for downstream maintainers.
+#
+# Slice 4 security pre-review M5a CRITICAL.
+.claude/        export-ignore
+docs/qa/        export-ignore
+docs/use-cases/ export-ignore
+books/          export-ignore
