@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-15 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
@@ -92,7 +92,7 @@ MERGE READY
 
 ---
 
-## The 15 Agents
+## The 16 Agents
 
 | Agent | Role |
 |-------|------|
@@ -100,6 +100,7 @@ MERGE READY
 | `ba-analyst` | Use cases and scenarios in `docs/use-cases/` |
 | `architect` | Architecture review, module boundaries, `[STRUCTURAL]` fix authorizations |
 | `resource-architect` | Recommends external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap Step 3.5 — suggest-only, no installs |
+| `role-planner` | Recommend project-specific on-demand roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 — suggest-only |
 | `qa-planner` | Test cases in `docs/qa/` before any code |
 | `planner` | Breaks features into 5-9 executable slices with verification commands |
 | `security-auditor` | Vulnerability audit, auth boundaries |
@@ -185,6 +186,24 @@ See `templates/rules/changelog.md` for the full policy, including Keep-a-Changel
 ## Resource recommendation at bootstrap
 
 The `resource-architect` agent runs at Step 3.5 of `/bootstrap-feature`, immediately after the architecture review passes, and produces structured recommendations across six categories: MCP servers, cloud/compute, external APIs, third-party services, libraries/frameworks, and hardware. Each recommendation includes Category, Why, Install/activate, Cost/complexity, and Reversibility fields so downstream humans or agents can evaluate tradeoffs without re-researching. The agent is strictly **suggest-only**: it never runs `claude mcp add`, never writes to `~/.claude/settings.json`, never touches `.env` or credentials, never invokes package managers (`npm install`, `pip install`, `brew install`, etc.), and makes no network calls — all inputs are local files. When no external resources are needed, the agent still emits all six category headings with `(none)` so downstream readers can distinguish "not needed" from "not considered". The planner inlines the recommendations as a top-level `## Recommended Resources` section at the top of `.claude/plan.md` and deletes the temporary `.claude/resources-pending.md` handoff file.
+
+---
+
+## On-demand role recommendations at bootstrap
+
+The 16 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 16 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 16. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
+
+Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 16 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`); the Plan Critic flags collisions as MAJOR.
+
+Because on-demand subagent types are not registered with Claude Code at session start, they cannot be invoked via `subagent_type: ondemand-<slug>`. Instead, the bootstrap pipeline reads the prompt body from `~/.claude/agents/ondemand-<slug>.md`, strips the frontmatter, and spawns the role using the **general-purpose** subagent type with the body passed verbatim as the prompt. This frontmatter-extraction-and-invocation contract is documented in detail in `src/commands/bootstrap-feature.md` (see the `### On-Demand Role Invocation` section). The `tools:` frontmatter field is not runtime-enforced for general-purpose subagents — the prompt body itself must self-restrict authority and tool usage.
+
+Concrete examples of on-demand roles `role-planner` may suggest:
+
+- **`mobile-dev`** — mobile-specific implementation guidance (iOS/Android platform conventions, app-store review concerns, native bridge patterns) when a feature targets a mobile client and no core agent covers that surface.
+- **`compliance-officer`** — feature-level compliance review (GDPR, HIPAA, PCI, SOC2, regional data-residency rules) when a feature touches regulated data and the standard `security-auditor` audit is not sufficient.
+- **`information-researcher`** — focused background research (competitor analysis, prior-art survey, regulatory context, domain-specific terminology) for features whose PRD requires external context the core team cannot generate from local files alone.
+
+When `role-planner` determines no additional roles are needed, it explicitly emits "No additional roles required" rather than silently skipping — making the suggest-only decision auditable.
 
 ---
 
