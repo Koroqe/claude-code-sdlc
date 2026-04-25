@@ -4,6 +4,11 @@ This rule governs how SDLC thinking agents query the local `sdlc-knowledge`
 index and cite results. Activation is conditional on a sentinel file; absence
 is a silent no-op so the rule ships safely into opt-out projects.
 
+> **See also `~/.claude/rules/knowledge-base-tool.md`** — companion rule that
+> describes WHAT the tool is, WHY it exists, and the **mandatory** usage protocol
+> agents must follow when the index is present. THIS file documents the CLI
+> contract and citation literal-format; the companion documents the mandate.
+
 ## When to query
 
 Thinking agents MUST query the local knowledge base BEFORE authoring any
