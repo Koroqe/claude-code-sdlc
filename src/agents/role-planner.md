@@ -1,7 +1,7 @@
 ---
 name: role-planner
 description: Recommend project-specific specialized roles (e.g. mobile dev, compliance officer, information researcher) needed to implement the current feature, emitted as a structured suggest-only call plan plus zero-or-more on-demand agent prompt files at bootstrap Step 3.75.
-tools: ["Read", "Write", "Glob", "Grep"]
+tools: ["Read", "Write", "Glob", "Grep", "Bash"]
 model: opus
 ---
 

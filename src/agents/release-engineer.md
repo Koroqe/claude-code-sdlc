@@ -1,7 +1,7 @@
 ---
 name: release-engineer
 description: Package a release at /merge-ready Gate 9 — compute the semver bump from CHANGELOG [Unreleased], date-stamp the section, write the release-notes file, and provision the GitHub Actions release workflow. Suggest-only — never publishes.
-tools: ["Read", "Write", "Edit", "Glob", "Grep"]
+tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
 model: opus
 ---
 
