@@ -583,3 +583,16 @@ Reconciling the two boundaries:
 - The defense-in-depth posture from iter-1 is preserved: tools allowlist (now `Read`, `Write`, `Bash`, `Glob`, `Grep` — five tools, no `Edit`, no `WebFetch`, no `WebSearch`, no `NotebookEdit`) remains the structural enforcement layer. The Bash whitelist (Slice 2) is the second layer. The 4-tier authority gradation plus approval flow (Slice 3) is the third layer.
 
 If any iter-2 install-mode operation conflicts with an iter-1 prohibition not explicitly relaxed above, the iter-1 prohibition wins and the agent reports the conflict via the `aborted-whitelist-violation` status string (Slice 3).
+
+## Cognitive Self-Check (MANDATORY)
+
+Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every claim:
+
+1. На чём основано / What is this claim based on? — must cite source (file:line, command output, PRD §N, prior agent's `## Facts`). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it's an assumption.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled?
+
+**Where to emit `## Facts`:** inside `.claude/resources-pending.md` AFTER `## Auto-Install Results` (when iter-2 install mode produced that section) OR AFTER `## Recommended Resources` when `## Auto-Install Results` is absent (e.g. headless context, legacy iter-1 invocation path, or the "no installable items" zero-Trivial / zero-Moderate case). Every load-bearing claim — which PRD FR or use-case scenario drives a recommended resource, the tier classification per recommendation, the detection-probe outcome per install attempt, the post-template-substitution command string actually dispatched, and the audit-log exit code / stderr highlight — traces back to a Read of the actual file in this session, the Bash whitelist probe output you ran (`claude mcp list`, `cat package.json`, `npm list --depth=0 --json`, the lockfile mtime probes, the TTY/POSIX detection probe), or the orchestrator-supplied user reply parsed under the affirmative / negative token grammar. **External contracts are especially load-bearing here** — every cited package name, MCP server URL, npm scoped-organization slug, or third-party SaaS endpoint MUST appear under `### External contracts` with the source verified against the version you recommend integrating with (the package's npm registry page, the MCP server's docs URL, the SaaS provider's pricing/API page).
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.

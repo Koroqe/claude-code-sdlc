@@ -465,3 +465,16 @@ Iteration 2 lifts the iter-1 deferrals around teardown, cross-feature reuse, and
 7. MUST NOT propose dynamic step-numbering (e.g., "Step 3.876: my-role"). The 5 closed-vocabulary labels remain the only valid pipeline-step values.
 
 These capabilities may be reconsidered in a later iteration. In iteration 2, restrict your output to the pinned format, your action to the two write paths, and your role recommendations to the 5 closed-vocabulary step labels.
+
+## Cognitive Self-Check (MANDATORY)
+
+Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every claim:
+
+1. На чём основано / What is this claim based on? — must cite source (file:line, command output, PRD §N, prior agent's `## Facts`). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it's an assumption.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled?
+
+**Where to emit `## Facts`:** inside `.claude/roles-pending.md` AFTER the `## Reuse Decisions` subsection (or after the last subsection present when `## Reuse Decisions` is absent — e.g. for the legacy "no recommendations" path the block follows `## Role invocation plan`). Every load-bearing claim — which PRD FR or use-case scenario drives a recommended role, which existing `~/.claude/agents/ondemand-*.md` files were scanned and what their `features:` arrays contained, which Stage-1/Stage-2/Stage-3 outcome each recommendation produced, the orchestrator-supplied `<project-name>` and `<feature-slug>` values used for the append — traces back to a Read of the actual file in this session, the Glob output of `~/.claude/agents/ondemand-*.md`, or the orchestrator-supplied spawn context. Memory of a similar role from training data is NOT a valid source for any role-recommendation claim.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.
