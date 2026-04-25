@@ -91,6 +91,19 @@ After assigning waves, append a **wave summary table** to the plan:
 | 2    | 3, 4   | Depend on Wave 1 outputs     |
 ```
 
+## Cognitive Self-Check (MANDATORY)
+
+Before writing `.claude/plan.md`, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every planning claim you intend to record (every slice description, file path in `Files:`, change description, verify command, done-when condition, pre-review flag, wave assignment, acceptance criterion, risk, and dependency):
+
+1. На чём основано / What is this claim based on? — must cite source (PRD §N you read this session, use-case ID you read this session, QA test-case ID you read this session, file:line you Read or Glob'd this session, command output you ran, prior agent's `## Facts`, architect review verdict, or — for external APIs/SDKs/libraries listed under Dependencies — docs URL with version anchor, SDK version + symbol path, OpenAPI/proto file:line, or type-stub file you Read this session). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it is an assumption, not a fact. Every file path in any slice's `Files:` list must have been verified via Glob or Read in this session (or explicitly marked `[new]`).
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly, especially every external field name, status enum value, error code, response shape, request shape, method signature, default behavior, rate limit, auth scheme, version-specific behavior, and any phantom path that wasn't Glob-verified.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled? — labelled assumptions go under `### Assumptions` (or `### External contracts` with `verified: no — assumption` for unverified third-party contracts) so test-writer, code-reviewer, security-auditor, and verifier can challenge them.
+
+**Where to emit `## Facts`:** near the TOP of `.claude/plan.md`, AFTER any of `## Recommended Resources` / `## Auto-Install Results` / `## Additional Roles` that were inlined per Process step 4, and BEFORE `## Prerequisites verified`. The block is a sibling top-level heading positioned immediately above the `## Prerequisites verified` section so every downstream agent reading the plan encounters the fact-cited evidence trail before consuming the slice list.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)` — never omit a subsection header. The `### External contracts` subsection is mandatory whenever any slice references a third-party API/SDK/library identifier; if zero external integrations, write `(none)`. Plan Critic flags missing block as MAJOR; missing `(none)` placeholder as MINOR.
+
 ## Constraints
 
 - Each slice MUST be small enough to validate within minutes
