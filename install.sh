@@ -754,22 +754,33 @@ bootstrap_release() {
   fi
 
   # ---------- M9 + M8 — annotated tag (NO --force, NO --force-with-lease) ----------
+  # Capture git's structured stderr (e.g. "fatal: tag 'x' already exists",
+  # "! [rejected] non-fast-forward", "fatal: Authentication failed") so the
+  # operator gets actionable diagnostic context. Git's stderr does not
+  # contain identity-bearing fields like origin URL or auth tokens, so
+  # M10 hygiene (which scopes to `git remote get-url` and `gh auth status`
+  # raw output) is preserved.
+  local err
+  err=$(mktemp)
   log_info "[BOOTSTRAP] running: git tag -a $tag -F $notes_file"
-  if ! git -C "$SCRIPT_DIR" tag -a "$tag" -F "$SCRIPT_DIR/$notes_file" 2>/dev/null; then
-    log_error "[BOOTSTRAP] git tag -a failed"
+  if ! git -C "$SCRIPT_DIR" tag -a "$tag" -F "$SCRIPT_DIR/$notes_file" 2>"$err"; then
+    log_error "[BOOTSTRAP] git tag -a failed: $(head -1 "$err")"
+    rm -f "$err"
     exit 1
   fi
 
   # ---------- M9 + M8 — push (NO --force) ----------
   log_info "[BOOTSTRAP] running: git push origin $tag"
-  if ! git -C "$SCRIPT_DIR" push origin "$tag" 2>/dev/null; then
+  if ! git -C "$SCRIPT_DIR" push origin "$tag" 2>"$err"; then
     # M6 — atomic rollback: delete local tag so re-runs don't trip
     # pre-condition #5's "local-only tag" branch.
-    log_error "[BOOTSTRAP] git push failed; rolling back local tag"
+    log_error "[BOOTSTRAP] git push failed: $(head -1 "$err"); rolling back local tag"
     git -C "$SCRIPT_DIR" tag -d "$tag" >/dev/null 2>&1 || true
     log_warn "[BOOTSTRAP] rollback: tag $tag deleted (local)"
+    rm -f "$err"
     exit 1
   fi
+  rm -f "$err"
 
   log_ok "[BOOTSTRAP] tag $tag pushed to origin; GitHub Actions release workflow triggered"
   log_info "[BOOTSTRAP] check progress at: https://github.com/codefather-labs/claude-code-sdlc/actions"

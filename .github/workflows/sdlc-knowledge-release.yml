@@ -28,7 +28,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 1 — actionlint self-check.
   # Gates the matrix: if the workflow file itself is malformed, do not waste
-  # 4 runners building binaries.
+  # 5 runners building binaries (4 GA + 1 Windows best-effort per iter-3).
   # ---------------------------------------------------------------------------
   lint:
     name: actionlint

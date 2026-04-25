@@ -36,7 +36,7 @@ and documentation cleanups do NOT belong here (per
   headless mode).
 - **Windows-x64 prebuilt binary** for `sdlc-knowledge`. The release matrix
   now produces a Windows binary alongside darwin-arm64, darwin-x64,
-  linux-x64, and linux-arm64. `install.sh` detects MINGW2/MSYS/CYGWIN
+  linux-x64, and linux-arm64. `install.sh` detects MINGW/MSYS/CYGWIN
   shell environments and downloads the Windows binary (with `.exe`
   suffix) instead of attempting a cargo source build. (Note: Windows
   binary build is matrix-defined but pdf.rs unix-only imports may

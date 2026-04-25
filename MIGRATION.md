@@ -104,9 +104,20 @@ If executing mode causes problems:
    v2.x behavior. No log line, no warning, silent no-op for §7. This
    is the canonical opt-out path.
 2. **Pin to v2.x** by checking out the v2.1.0 tag of the SDLC repo and
-   re-running `bash install.sh --yes --local` from that checkout. Note:
-   v2.1.0 had the broken `Koroqe` REPO_URL — the piped `curl ... | bash`
-   install does NOT work against v2.x; you must clone manually.
+   re-running `bash install.sh --yes --local` from that checkout. To
+   obtain that checkout, clone manually from the canonical (current)
+   remote:
+   ```bash
+   git clone https://github.com/codefather-labs/claude-code-sdlc.git
+   cd claude-code-sdlc
+   git checkout v2.1.0
+   bash install.sh --yes --local
+   ```
+   The piped `curl -fsSL https://raw.githubusercontent.com/.../install.sh
+   | bash` shortcut does NOT work against v2.x because v2.1.0's hardcoded
+   `Koroqe` REPO_URL points at a no-longer-canonical remote. Always use
+   the codefather-labs URL for the manual clone, regardless of which tag
+   you check out.
 3. **If a Sensitive-tier prompt fired and you said `n`**: nothing
    happened. Gate 9 emits a Warnings entry in Section 9 of the
    structured summary; the developer's `Commands to run` block remains

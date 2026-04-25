@@ -469,10 +469,11 @@ Every Bash invocation in executing mode MUST pass two filters in this order:
 **Sensitive tier regex set:**
 
 ```
-^git push$
 ^git push origin v[0-9]+\.[0-9]+\.[0-9]+$
 ^git push origin sdlc-knowledge-v[0-9]+\.[0-9]+\.[0-9]+$
 ```
+
+(The bare `^git push$` form is INTENTIONALLY OMITTED — it would match `git push` with no args, which under `push.default = matching` or `simple` pushes the current branch to its tracked remote. That is unrelated to release packaging and falls through to the Forbidden tier by the closed-mapping default. The only release-time push the agent performs is the explicit `git push origin <tag>` form above.)
 
 **Forbidden tier:** the literal NEVER List in the existing `## NEVER List` section PLUS any command failing the pre-filter PLUS any command matching no Trivial/Moderate/Sensitive regex (the closed-mapping default). The NEVER List explicitly enumerates `npm publish`, `cargo publish`, `pypi upload`, `gh release create`, any `--force` / `--force-with-lease` flag — these MATCH NO whitelist regex by construction (Slice 1 security MUST M7: relocations are explicit, not silent).
 
