@@ -40,7 +40,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 - Common preconditions hold
 - Bootstrap Step 3 (Software Architect) begins; the orchestrator spawns the `architect` subagent with the feature's PRD section, use-case file, and design decisions in context
 - The PRD section's `Date:` field is on or after the cognitive-self-check feature's merge date (i.e., this is a current-cycle artifact subject to the rule)
-- The architect's prompt file `src/agents/architect.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.5 specifying the `## Facts` block appears at the END of the stdout review, AFTER the verdict line
+- The architect's prompt file `src/agents/architect.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.5 specifying the `## Facts` block appears at the START of the stdout review, BEFORE the verdict line
 
 **Trigger**: The `/bootstrap-feature` orchestrator invokes the `architect` subagent at Step 3 to validate the proposed architecture
 
@@ -52,8 +52,7 @@ Every use case below is precise enough for a test to be derived without re-consu
    - Q2 (Did I verify against current state this session?): the agent checks whether each cited source was Read in the current session
    - Q3 (What am I assuming without proof?): the agent surfaces assumptions, especially any external SDK/API references
    - Q4 (If it's an assumption, is it labelled?): the agent moves unverified claims into the `### Assumptions` subsection with a risk + verification path
-3. The agent emits its prose architecture review to stdout, including the verdict line `APPROVED` (or `REJECTED` / `APPROVED WITH CONDITIONS`)
-4. AFTER the verdict, the agent emits the `## Facts` block per FR-2.5 with all four subsections in the literal order:
+3. The agent emits the `## Facts` block per FR-2.5 to stdout, BEFORE its prose review and verdict, with all four subsections in the literal order:
    ```
    ## Facts
 
@@ -70,12 +69,13 @@ Every use case below is precise enough for a test to be derived without re-consu
    ### Open questions
    (none)
    ```
-5. The orchestrator captures the stdout (review prose + verdict + `## Facts` block) into the user's transcript
+4. AFTER the `## Facts` block, the agent emits its prose architecture review and the verdict line `APPROVED` (or `REJECTED` / `APPROVED WITH CONDITIONS`)
+5. The orchestrator captures the stdout (`## Facts` block + review prose + verdict) into the user's transcript
 6. The Plan Critic does NOT mechanically enforce this `## Facts` block per FR-4.6 (file-vs-stdout split) -- enforcement is the architect's own prompt's responsibility
 7. Bootstrap Step 3 SUCCEEDS; the orchestrator proceeds to Step 3.5 (`resource-architect`)
 
 **Postconditions**:
-- The architect's stdout review contains a `## Facts` block at the end with all four subsections in the FR-1.3 order
+- The architect's stdout review begins with a `## Facts` block (BEFORE the verdict) with all four subsections in the FR-1.3 order
 - The Plan Critic does not flag the architect's review (it cannot see stdout per FR-4.6)
 - The transcript provides an audit trail: the developer can review the architect's `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions` and challenge any unverified claim
 
@@ -140,7 +140,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 ### Data Requirements
 
 - **Input**: The PRD section, the use-case file, prior agent output (e.g., prd-writer's PRD section with its own `## Facts` block)
-- **Output**: Stdout review prose + verdict line + `## Facts` block at the END of stdout
+- **Output**: Stdout `## Facts` block at the START + prose review + verdict line
 - **Side Effects**: Zero file writes by the architect (architect is stdout-only). No Bash invocations. No network calls.
 
 ---
@@ -152,7 +152,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 **Preconditions**:
 - Common preconditions hold
 - Bootstrap Step 5 (planner) begins; all prior bootstrap steps (PRD, use cases, architect review, resource-architect, role-planner, qa-planner) completed
-- The planner's prompt file `src/agents/planner.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.7 specifying the `## Facts` block appears at the END of `.claude/plan.md`, AFTER the existing `## Review Notes` section
+- The planner's prompt file `src/agents/planner.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.7 specifying the `## Facts` block appears NEAR THE TOP of `.claude/plan.md`, AFTER any inlined `## Recommended Resources` / `## Auto-Install Results` / `## Additional Roles` / `## Reuse Decisions` sections and BEFORE `## Prerequisites verified`
 - The plan being authored is for a current-cycle feature (subject to the rule per FR-7.1)
 
 **Trigger**: The `/bootstrap-feature` orchestrator invokes the `planner` subagent at Step 5 to author the executable plan at `.claude/plan.md`
@@ -212,7 +212,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 - **UC-2-A2: Plan inlines content from `.claude/resources-pending.md` and `.claude/roles-pending.md`** -- The planner inlines the Recommended Resources, Auto-Install Results, Additional Roles, Role invocation plan, and Reuse Decisions sections from the upstream agents per Section 4/5/7/8 FRs
   1. Steps 1-3 proceed; the planner reads the two pending files
   2. The planner inlines all upstream sections into `.claude/plan.md` in their canonical order
-  3. The planner emits its OWN `## Facts` block per FR-2.7 at the END of `.claude/plan.md`. The upstream agents' `## Facts` blocks (in `.claude/resources-pending.md` per FR-2.12 and `.claude/roles-pending.md` per FR-2.13) are inlined as part of the upstream sections OR are NOT inlined depending on the upstream agent's emission point — the planner's own `## Facts` block is the load-bearing one for plan-authoring decisions
+  3. The planner emits its OWN `## Facts` block per FR-2.7 NEAR THE TOP of `.claude/plan.md`, after the inlined upstream sections and before `## Prerequisites verified`. The upstream agents' `## Facts` blocks (in `.claude/resources-pending.md` per FR-2.12 and `.claude/roles-pending.md` per FR-2.13) are inlined as part of the upstream sections OR are NOT inlined depending on the upstream agent's emission point — the planner's own `## Facts` block is the load-bearing one for plan-authoring decisions
   4. Plan Critic checks proceed as in primary flow
 
   **Mapped FR**: FR-2.7, FR-2.12, FR-2.13
@@ -819,7 +819,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 **Preconditions**:
 - Common preconditions hold
 - `/merge-ready` Gate 6 (refactor-cleaner) begins
-- The agent's prompt file `src/agents/refactor-cleaner.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.11 specifying the `## Facts` block appears at the END of stdout report
+- The agent's prompt file `src/agents/refactor-cleaner.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.11 specifying the `## Facts` block appears at the START of the stdout report, BEFORE the cleanup verdict
 - The agent has Edit/Write/Read tools to perform refactor changes
 
 **Trigger**: The orchestrator invokes refactor-cleaner at Gate 6
@@ -830,8 +830,8 @@ Every use case below is precise enough for a test to be derived without re-consu
 2. The agent identifies refactor targets (e.g., duplicate logic, dead code, naming improvements)
 3. For each refactor, the agent verifies the target file's current state by Read (Q2 freshness — the file content in this session, not memory)
 4. The agent performs the refactor edits
-5. The agent emits its refactor report to stdout: prose summary of changes + verdict
-6. AFTER the verdict, the agent emits the `## Facts` block per FR-2.11 with all four subsections:
+5. The agent emits its refactor report to stdout, beginning with the `## Facts` block, followed by the prose summary of changes and the verdict
+6. The `## Facts` block per FR-2.11 contains all four subsections:
    - `### Verified facts` cites the files Read and the lines refactored, e.g., `src/foo.ts:42-60 — duplicate of src/bar.ts:30-48; verified by Read of both files in current session`
    - `### External contracts: (none)` if the refactor is internal-only
    - `### Assumptions` notes any unverified claims (e.g., "no other call sites depend on the old signature — assumed; risk: silent breakage; how to verify: run typecheck after merge")
@@ -841,7 +841,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 **Postconditions**:
 - Refactored files reflect the changes
-- The stdout report contains the `## Facts` block at end
+- The stdout report begins with the `## Facts` block (BEFORE the verdict)
 - The audit trail allows the developer to verify each refactor's evidence base
 
 **Mapped FR**: FR-1.2, FR-2.11, FR-4.6
@@ -963,7 +963,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 - Common preconditions hold
 - `/implement-slice` is mid-slice; tests have been written and run, code has been written, build-runner (exempt) has confirmed build/typecheck pass
 - The verifier is invoked per Section 1 FR-1 to perform goal-backward integration verification
-- The agent's prompt file `src/agents/verifier.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.10 specifying the `## Facts` block appears at the END of the stdout report
+- The agent's prompt file `src/agents/verifier.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.10 specifying the `## Facts` block appears at the START of the stdout report, BEFORE the structured PASS/FAIL output
 
 **Trigger**: The orchestrator invokes verifier mid-slice
 

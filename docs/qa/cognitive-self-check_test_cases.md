@@ -165,7 +165,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 
 ## 1. Architect Stdout-Only Path
 
-### TC-1.1: Architect emits `## Facts` block to stdout AFTER verdict
+### TC-1.1: Architect emits `## Facts` block to stdout BEFORE verdict
 - **Category:** Stdout-Only Agent (Architect)
 - **Mapped UC:** UC-1
 - **Mapped AC:** AC-6, AC-7
@@ -177,10 +177,10 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
   1. Spawn architect via `/bootstrap-feature` Step 3
   2. Capture full stdout transcript
   3. Locate the verdict line (`APPROVED`, `REJECTED`, or `APPROVED WITH CONDITIONS`)
-  4. `grep -A 200 "^APPROVED\|^REJECTED\|^APPROVED WITH CONDITIONS" transcript.txt | grep -c "^## Facts$"`
-  5. Verify the four subsection headings appear in literal order after `## Facts`
-- **Expected Result:** Stdout contains exactly one `^## Facts$` line AFTER the verdict line; subsections appear in order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`
-- **Pass Criteria:** All four subsections present after verdict; the block is not enforced by Plan Critic per FR-4.6.
+  4. `grep -B 200 "^APPROVED\|^REJECTED\|^APPROVED WITH CONDITIONS" transcript.txt | grep -c "^## Facts$"`
+  5. Verify the four subsection headings appear in literal order after `## Facts` and before the verdict line
+- **Expected Result:** Stdout contains exactly one `^## Facts$` line BEFORE the verdict line; subsections appear in order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`
+- **Pass Criteria:** All four subsections present before verdict; the block is not enforced by Plan Critic per FR-4.6.
 
 ### TC-1.2: Architect emits `### External contracts: (none)` for purely-internal feature
 - **Category:** Stdout-Only Agent (Architect)
@@ -877,7 +877,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 
 ## 10. Refactor-Cleaner Stdout-Only Path with Code Edits
 
-### TC-10.1: Refactor-cleaner emits `## Facts` to stdout AFTER verdict
+### TC-10.1: Refactor-cleaner emits `## Facts` to stdout BEFORE verdict
 - **Category:** Stdout-Only Agent + Code Edits
 - **Mapped UC:** UC-10
 - **Mapped AC:** AC-6, AC-7
@@ -887,10 +887,10 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Inputs:** `/merge-ready` Gate 6 invocation
 - **Steps:**
   1. Capture stdout
-  2. Verify `## Facts` block at end after verdict
+  2. Verify `## Facts` block appears at the start of stdout, before the verdict
   3. Verify `### Verified facts` cites each refactored file:line
   4. Verify any unverified claim under `### Assumptions` with risk + verification path
-- **Expected Result:** Stdout block present; audit trail records each refactor's evidence base.
+- **Expected Result:** Stdout block present at start; audit trail records each refactor's evidence base before the verdict line.
 - **Pass Criteria:** FR-2.11 satisfied.
 
 ### TC-10.2: Refactor-cleaner finds no targets -> still emits `## Facts`
@@ -1011,7 +1011,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 
 ## 12. Verifier Stdout-Only Path During `/implement-slice`
 
-### TC-12.1: Verifier emits `## Facts` after structured PASS/FAIL output
+### TC-12.1: Verifier emits `## Facts` BEFORE structured PASS/FAIL output
 - **Category:** Stdout-Only Agent (Verifier)
 - **Mapped UC:** UC-12
 - **Mapped AC:** AC-6, AC-7
@@ -1021,9 +1021,9 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Inputs:** Mid-slice verifier invocation
 - **Steps:**
   1. Capture stdout transcript
-  2. Verify structured PASS/FAIL output appears first
-  3. Verify `## Facts` block follows
-- **Expected Result:** Both blocks present in correct order.
+  2. Verify `## Facts` block appears at the start of stdout
+  3. Verify structured PASS/FAIL output follows the `## Facts` block
+- **Expected Result:** Both blocks present in correct order: `## Facts` first, PASS/FAIL second.
 - **Pass Criteria:** FR-2.10 satisfied.
 
 ### TC-12.2: Verifier reports FAIL Level 1 (wiring) -> `## Facts` records gap
