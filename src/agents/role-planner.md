@@ -478,3 +478,28 @@ Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. R
 **Where to emit `## Facts`:** inside `.claude/roles-pending.md` AFTER the `## Reuse Decisions` subsection (or after the last subsection present when `## Reuse Decisions` is absent — e.g. for the legacy "no recommendations" path the block follows `## Role invocation plan`). Every load-bearing claim — which PRD FR or use-case scenario drives a recommended role, which existing `~/.claude/agents/ondemand-*.md` files were scanned and what their `features:` arrays contained, which Stage-1/Stage-2/Stage-3 outcome each recommendation produced, the orchestrator-supplied `<project-name>` and `<feature-slug>` values used for the append — traces back to a Read of the actual file in this session, the Glob output of `~/.claude/agents/ondemand-*.md`, or the orchestrator-supplied spawn context. Memory of a similar role from training data is NOT a valid source for any role-recommendation claim.
 
 The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before recommending on-demand roles when domain context could justify a specialized role (e.g., compliance-officer, mobile-dev) cited in the knowledge base.
+
+Citations land under `## Facts → ### External contracts` per the cognitive-self-check rule:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently.
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → record `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

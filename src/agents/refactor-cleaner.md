@@ -66,3 +66,28 @@ Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. R
 **Where to emit `## Facts`:** stdout-only. Emit a `## Facts` block to stdout BEFORE your verdict. The cleanup summary you return to the orchestrator MUST be preceded by the `## Facts` block — every claim about which dead code was removed, which duplication was consolidated, which type was tightened, and which file was rebuilt traces back to a Read of the actual file in this session, the typecheck output you ran, or the prior agent's emitted `## Facts`.
 
 The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`. Stdout-only enforcement: Plan Critic does not mechanically check transcripts; this instruction is the binding constraint.
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before consolidating patterns when domain semantics inform the right abstraction (e.g., domain-driven design boundaries cited in the knowledge base).
+
+Citations land under `## Facts → ### External contracts` per the cognitive-self-check rule:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently.
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → record `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.
