@@ -1,6 +1,6 @@
 ## Feature: Auto-Release Pipeline (iter-3)
 ## Branch: feat/auto-release
-## Status: implementing wave 3 slices 3+4/7 (parallel)
+## Status: implementing wave 4 slice 5/7
 
 ## Plan
 
@@ -16,13 +16,13 @@
   - Pre-review: security-auditor (Phase 1.5 MEDIUM: curl/wget hardening parity — applied)
 
 ### Wave 3 (parallel — workflows; disjoint files)
-- [ ] Slice 3: extend sdlc-knowledge-release.yml — windows-x64 matrix + alternation find -o operator + source tarball
+- [x] Slice 3: extend sdlc-knowledge-release.yml — windows-x64 matrix + alternation find -o operator + source tarball — ab666b4
   - Files: .github/workflows/sdlc-knowledge-release.yml
   - Pre-review: none (CI-only)
-  - Inlines architect action item #3 (find -o syntax)
-- [ ] Slice 4: new sdlc-core-release.yml — triggers on bare v* tag, uploads source + CHANGELOG body
-  - Files: .github/workflows/sdlc-core-release.yml [new]
-  - Pre-review: security-auditor (workflow permissions + tag pattern disjoint from sdlc-knowledge-v*)
+  - Inlined architect action item #3 (grouped find alternation `\( -name 'libpdfium*' -o -name 'pdfium*' \) -type f` for Windows pdfium.dll)
+- [x] Slice 4: new sdlc-core-release.yml — triggers on bare v* tag, uploads source + CHANGELOG body — 8dc32eb
+  - Files: .github/workflows/sdlc-core-release.yml [new] + foundation .gitattributes [new] (7e4789c)
+  - Pre-review: security-auditor (Phase 1.5 — M5a CRITICAL via .gitattributes export-ignore + tar -tzf defense-in-depth, M5c HIGH env-var-mediated github expressions, A1 HIGH v-prefix strip)
 
 ### Wave 4 (sequential — opt-in + bootstrap; both touch install.sh)
 - [ ] Slice 5: SDLC core opt-in — auto-release rule + changelog sentinel + CHANGELOG.md + templates auto-release rule + pre-push hook template
@@ -131,6 +131,9 @@ New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacha
 ## Completed
 - Slice 1 (Wave 1 complete) — 4d2f47b — release-engineer §7 executing mode + 4-tier authority + bash whitelist + tag-scheme disambiguation; sentinel-absent path byte-identical to current main suggest-only Gate 9; all 8 Slice 1 security MUSTs (M1–M8) inlined; architect action items #1/#2/#4 inlined; file grew 446 → 554 lines (+108)
 - Slice 2 (Wave 2 complete) — 0be97d0 — install.sh REPO_URL Koroqe→codefather-labs (unblocks piped curl|bash bootstrap); VERSION 2.1.0→3.0.0 (matches major bump from §7 executing-mode flip); Windows uname branch (MINGW/MSYS/CYGWIN → windows-x64 + .exe handling end-to-end including cargo fallback); Slice 2 security MEDIUM applied (curl --max-redirs 5 --max-time 120 + wget --max-redirect=5 --timeout=120 --secure-protocol=TLSv1_2 parity with pdfium path)
+- Foundation chore — 7e4789c — .gitattributes export-ignore for source-tarball hygiene (.claude/, docs/qa/, docs/use-cases/, books/) before Wave 3 dispatch
+- Slice 3 (Wave 3 parallel) — ab666b4 — sdlc-knowledge-release.yml extended with windows-x64 matrix (target x86_64-pc-windows-msvc, .exe handling), grouped find alternation for Windows pdfium.dll, source tarball generation + upload, stat-with-wc fallback for Windows binary size check; TODO noted for pdf.rs cfg(unix) gate in iter-3.1
+- Slice 4 (Wave 3 parallel; Wave 3 complete) — 8dc32eb — new sdlc-core-release.yml triggers on bare v*.*.* tag (disjoint from sdlc-knowledge-v*), generates source tarball via git archive (M5a satisfied via .gitattributes), env-var-mediated github expressions (M5c shell-injection prevention), v-prefix strip via ${GITHUB_REF_NAME#v} (A1), tar -tzf grep defense-in-depth, body_path: .claude/release-notes-${VERSION}.md from checkout tree, softprops/action-gh-release@v2
 
 ## Blockers
 (none)
