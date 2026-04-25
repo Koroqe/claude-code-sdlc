@@ -268,6 +268,21 @@ scaffold_project() {
   cp "$SCRIPT_DIR/templates/rules/changelog.md" ".claude/rules/changelog.md"
   log_ok ".claude/rules/changelog.md (template)"
 
+  cp "$SCRIPT_DIR/templates/rules/auto-release.md" ".claude/rules/auto-release.md"
+  log_ok ".claude/rules/auto-release.md (template — release-engineer Gate 9 executing mode)"
+
+  # Pre-push hook (advisory) — install only if .git/hooks exists.
+  # The hook is opt-out per project: `rm .git/hooks/pre-push` after install.
+  if [ -d .git/hooks ]; then
+    if [ -f .git/hooks/pre-push ]; then
+      log_warn ".git/hooks/pre-push already exists — skipping (preserve user's existing hook)"
+    else
+      cp "$SCRIPT_DIR/templates/hooks/pre-push" ".git/hooks/pre-push"
+      chmod +x .git/hooks/pre-push
+      log_ok ".git/hooks/pre-push (advisory — warns when CHANGELOG [Unreleased] is non-empty at push)"
+    fi
+  fi
+
   cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md"
   log_ok ".claude/scratchpad.md"
 
@@ -323,6 +338,12 @@ EOF
   echo "    3. Fill in .claude/rules/security.md"
   echo "    4. Fill in .claude/rules/testing.md"
   echo "    5. Start a Claude Code session and describe a feature"
+  echo ""
+  echo "  Auto-release (opt-out):"
+  echo "    .claude/rules/auto-release.md activates release-engineer Gate 9"
+  echo "    executing mode. Gate 9 will create and push release tags during"
+  echo "    /merge-ready (Sensitive-tier prompts default-deny [y/N], or set"
+  echo "    AUTO_RELEASE=1 to auto-confirm). To opt out: remove that file."
   echo ""
 }
 
