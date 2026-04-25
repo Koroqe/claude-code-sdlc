@@ -1,6 +1,6 @@
 [package]
 name = "sdlc-knowledge"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Local knowledge base CLI for SDLC agents — ingest, search, list, status, delete"
 license = "MIT"
@@ -12,8 +12,12 @@ clap = { version = "4.5", features = ["derive"] }
 # Storage / FTS5 (bundled SQLite avoids platform divergence; vtab enables FTS5)
 rusqlite = { version = "0.31", features = ["bundled", "vtab"] }
 
-# PDF text extraction (Slice 2). Pinned per Phase 1.5 Security MUST #7 / Slice 2 MUST #8.
-pdf-extract = "0.7"
+# PDF text extraction (iter-2). Replaces `pdf-extract = "0.7"` per PRD §12 FR-2.1.
+# Caret semver `"0.9"` allows 0.9.x patch updates but fences the major-bump
+# (architect MINOR action item #3). Library binding uses the explicit-path
+# entrypoint `Pdfium::bind_to_library(<absolute-path>)` per architect STRUCTURAL
+# action item #1 — eliminates LD_LIBRARY_PATH/DYLD_LIBRARY_PATH hijack surface.
+pdfium-render = "0.9"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

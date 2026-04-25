@@ -105,8 +105,11 @@ pub struct StatusArgs {
 
 #[derive(Args, Debug)]
 pub struct DeleteArgs {
-    /// Source ID (sha256-prefix or full hash).
-    pub source_id: String,
+    /// Source path (legacy positional form; mutually exclusive with `--by-id`).
+    pub source_path: Option<String>,
+    /// Delete by integer document id (mutually exclusive with positional `<source-path>`).
+    #[arg(long = "by-id")]
+    pub by_id: Option<i64>,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
     #[arg(long)]

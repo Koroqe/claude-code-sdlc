@@ -181,6 +181,37 @@ The only coupling is the one-time bootstrap (§2): the very first
 
 ---
 
+## pdfium-render dependency (iter-2)
+
+The `sdlc-knowledge` binary loads `libpdfium.{dylib,so,dll}` at runtime via the `pdfium-render = "0.9"` Rust crate. The library itself is NOT statically linked — it's downloaded by `install.sh` from `bblanchon/pdfium-binaries` GitHub Releases (tag `chromium/<version>`) and placed at `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`.
+
+### Caret semver fence
+
+`Cargo.toml` declares `pdfium-render = "0.9"`. This caret semver constraint resolves to `>=0.9.0, <0.10.0` — patch-version updates are picked up automatically for security fixes within the 0.9 line, but major-version bumps are blocked.
+
+To upgrade past `0.9.x`:
+1. Open the new release's CHANGELOG and identify breaking API changes
+2. Update `tools/sdlc-knowledge/src/pdf.rs` to match the new API (typically the `Pdfium::bind_to_library`, `load_pdf_from_byte_slice`, `pages()`, `text()` calls)
+3. Update `Cargo.toml` to the new version
+4. Run `cargo test --release` and verify no regressions
+5. Bump `KNOWLEDGE_PDFIUM_VERSION` in `install.sh` to a corresponding bblanchon tag (the chromium/<int> versions track Chrome releases; pdfium-render docs note compatibility)
+6. Re-test install.sh smoke flow on darwin-arm64 (and ideally other platforms via CI)
+
+### KNOWLEDGE_PDFIUM_VERSION bump
+
+To upgrade pdfium binary alone (without changing the Rust bindings):
+1. Visit `https://github.com/bblanchon/pdfium-binaries/releases` and pick a recent stable tag like `chromium/7300`
+2. Edit `install.sh` line `KNOWLEDGE_PDFIUM_VERSION="chromium/<old>"` to the new tag
+3. Edit `.github/workflows/sdlc-knowledge-release.yml` `PDFIUM_VERSION:` env var to match
+4. Run `bash install.sh --yes --local` to fetch the new binary
+5. `cargo test --release` smokes against the new pdfium
+
+### Fixture stress note (architect action item #4)
+
+`tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` is a 2-page calibre-converted excerpt; size budget was raised from 100 KB to 200 KB during planning to accommodate calibre's font-subset embedding. Current fixture is ~72 KB. If a future calibre-converted fixture exceeds 100 KB, that's expected — calibre embeds substantial subset fonts. The 200 KB ceiling is the hard fence.
+
+---
+
 ## Facts
 
 ### Verified facts

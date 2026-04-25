@@ -158,6 +158,7 @@ Claude automatically:
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
 | Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
 | Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `sdlc-knowledge` CLI; agents query before authoring; cite hits in `## Facts` |
+| PDF extraction | `pdfium-render` handles all PDFs (CID fonts, calibre conversions, scanned-with-text-layer, multi-column) |
 
 ---
 

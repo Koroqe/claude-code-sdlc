@@ -225,41 +225,72 @@ fn run_status(root: &std::path::Path, args: &cli::StatusArgs) -> std::process::E
     std::process::ExitCode::SUCCESS
 }
 
-/// `delete <source-id>` — accepts either an integer documents.id OR a string
-/// source_path. Per the Slice 1 cross-slice security flag, a string path is
-/// canonicalize-and-prefix-checked against the project root BEFORE the SQL
-/// DELETE runs. This blocks an attacker who has write access to the index.db
-/// (but not to the project source tree) from coaxing the binary into deleting
-/// rows whose source paths point outside the project — a defense-in-depth
-/// guard, since the rows are already inside our own DB.
+/// `delete --by-id <int>` OR `delete <source-path>` — mutually exclusive per
+/// FR-4.1 (Slice 2). The two branches differ in their security posture:
+///   - `--by-id` operates on the integer primary key, which never originated
+///     from a user-controlled file path. The DB-open project-root canonicalize
+///     gate (in `cli::resolve_project_root`) is the load-bearing security
+///     boundary; no additional path check is needed (FR-4.3).
+///   - The positional `<source-path>` branch (legacy iter-1 form) keeps the
+///     Slice 1 cross-slice canonicalize-and-prefix-check in place verbatim.
 fn run_delete(root: &std::path::Path, args: &cli::DeleteArgs) -> std::process::ExitCode {
-    let (conn, _db_path) = match open_and_validate(root) {
+    // FR-4.1 mutual exclusion — checked BEFORE opening the DB so a malformed
+    // invocation never side-effects on the index.
+    match (&args.by_id, &args.source_path) {
+        (Some(_), Some(_)) => {
+            eprintln!("error: --by-id and <source-path> are mutually exclusive");
+            return std::process::ExitCode::from(2);
+        }
+        (None, None) => {
+            eprintln!("error: --by-id or <source-path> required");
+            return std::process::ExitCode::from(2);
+        }
+        _ => {}
+    }
+
+    let (mut conn, _db_path) = match open_and_validate(root) {
         Ok(t) => t,
         Err(code) => return code,
     };
 
-    // Try int-id first; fall back to string-path.
-    if let Ok(id) = args.source_id.parse::<i64>() {
-        let n = match store::delete_by_id(&conn, id) {
-            Ok(n) => n,
+    // --by-id branch (FR-4.4 transactional via store helper, FR-4.5 JSON shape).
+    if let Some(id) = args.by_id {
+        let summary = match store::delete_by_id_with_summary(&mut conn, id) {
+            Ok(Some(s)) => s,
+            Ok(None) => {
+                // FR-4.2: literal stderr + exit 1; transaction already rolled back.
+                eprintln!("error: no document with id {id}");
+                return std::process::ExitCode::from(1);
+            }
             Err(e) => {
                 eprintln!("error: delete failed: {e}");
                 return std::process::ExitCode::from(1);
             }
         };
         if args.json {
-            println!("{{\"deleted\": {n}, \"by\": \"id\", \"id\": {id}}}");
+            println!("{}", output::render_delete_by_id_json(&summary));
         } else {
-            println!("deleted {n} document(s) by id={id}");
+            println!(
+                "deleted: id={} source={} chunks={}",
+                summary.deleted_id, summary.source_path, summary.chunks_removed
+            );
         }
         return std::process::ExitCode::SUCCESS;
     }
+
+    // Positional <source-path> branch — preserve iter-1 canonicalize-and-prefix
+    // check verbatim. We unwrap because the mutual-exclusion check above
+    // guarantees exactly one of (by_id, source_path) is Some at this point.
+    let source_arg = args
+        .source_path
+        .as_ref()
+        .expect("mutual exclusion guarantees source_path is Some here");
 
     // String path branch — canonicalize-and-prefix-check first (Slice 1
     // cross-slice security flag). The DB stores the path string EXACTLY as
     // ingest emitted it (`p.display().to_string()` from the canonical path),
     // so for the DELETE to match, we use the same canonical string here.
-    let raw = std::path::Path::new(&args.source_id);
+    let raw = std::path::Path::new(source_arg);
     let candidate: std::path::PathBuf = if raw.is_absolute() {
         raw.to_path_buf()
     } else {
@@ -278,7 +309,7 @@ fn run_delete(root: &std::path::Path, args: &cli::DeleteArgs) -> std::process::E
             if !not_canonical.starts_with(root) {
                 eprintln!(
                     "error: source path must resolve under project root: {}",
-                    args.source_id
+                    source_arg
                 );
                 return std::process::ExitCode::from(2);
             }
@@ -288,7 +319,7 @@ fn run_delete(root: &std::path::Path, args: &cli::DeleteArgs) -> std::process::E
     if !canonical.starts_with(root) {
         eprintln!(
             "error: source path must resolve under project root: {}",
-            args.source_id
+            source_arg
         );
         return std::process::ExitCode::from(2);
     }
