@@ -1,247 +1,285 @@
-# Implementation Plan: Resource Manager-Architect — Iteration 1 (Mandatory Pipeline Role)
+# Implementation Plan: Role Planner — Iteration 1 (On-Demand Role Expansion)
 
 ## Prerequisites verified
 
-- **PRD section:** `docs/PRD.md` — Section 4 (lines 562-803); 42 FRs, 9 NFRs, 15 ACs
-- **Use cases:** `docs/use-cases/resource-architect_use_cases.md` — 31 scenarios across 12 primary UCs
-- **QA test cases:** `docs/qa/resource-architect_test_cases.md` — 103 TCs across 13 categories
-- **Architecture review:** PASS with 5 [STRUCTURAL] authorizations (agent file boundaries, output-format pinning, MUST deletion, verdict forwarding, mirror commit)
+- **PRD section:** `docs/PRD.md` Section 5 (lines 805-1093) — 20 ACs, 6 FR groups, 11 NFRs
+- **Use cases:** `docs/use-cases/role-planner_use_cases.md` — 54 scenarios across 13 primary UCs
+- **QA test cases:** `docs/qa/role-planner_test_cases.md` — 136 TCs across 15 categories
+- **Architecture review:** PASS with 5 [STRUCTURAL] authorizations
 
 ## Deliverables checklist
 
-- [x] PRD section in `docs/PRD.md` (Section 4, lines 562-803)
-- [x] Use cases in `docs/use-cases/resource-architect_use_cases.md` (31 scenarios)
-- [x] Architecture review verdict (PASS with 5 [STRUCTURAL] items)
-- [x] QA test cases in `docs/qa/resource-architect_test_cases.md` (103 test cases)
-- [ ] Implementation slices (this document, below)
+- [x] PRD section in `docs/PRD.md` (Section 5)
+- [x] Use cases in `docs/use-cases/role-planner_use_cases.md` (54 scenarios)
+- [x] Architecture review verdict (PASS)
+- [x] QA test cases in `docs/qa/role-planner_test_cases.md` (136 TCs)
+- [ ] Implementation slices (this document)
 
-## Feature scope
+## [STRUCTURAL] decisions pinned
 
-Add the `resource-architect` agent as a mandatory pipeline role executed at Step 3.5 of `/bootstrap-feature`. The agent writes `.claude/resources-pending.md` with structured resource recommendations across six categories; the planner inlines and deletes that temp file into `.claude/plan.md` as a top-level `## Recommended Resources` section. The global agent count rises from 14 to 15.
-
-## [STRUCTURAL] decisions pinned by Tech Lead
-
-1. **Agent name:** `resource-architect` (kebab-case, matches `prd-writer`/`changelog-writer` pattern); role title "Resource Manager-Architect"
-2. **Output format canonicalized:** `## Recommended Resources` (top-level) → summary line → six `### <Category>` subheadings in fixed order (MCP → Cloud/Compute → External API → Third-party Service → Library/Framework → Hardware) → each resource as `#### <Name>` with five bullet fields: `- **Category:**`, `- **Why:**`, `- **Install/activate:**`, `- **Cost/complexity:**`, `- **Reversibility:**`. Empty categories show literal `(none)` on its own line
-3. **Temp file deletion:** MANDATORY — `src/agents/planner.md` uses "MUST delete" wording, never "may" or "should"
-4. **Verdict forwarding:** Step 3.5 body of `src/commands/bootstrap-feature.md` explicitly states "the architect's PASS verdict text from Step 3 is inlined into the `resource-architect` spawn prompt as context"
-5. **No "mirror" — single physical file:** verified via `ls -lai` that `src/claude.md` and `src/CLAUDE.md` share **inode 4432546** on this macOS APFS case-insensitive filesystem; `git ls-files src/` tracks only `src/claude.md`. They are the SAME file, not a mirror pair. The architect's [STRUCTURAL] #5 "mirror invariant" is trivially satisfied because there's nothing to mirror. Slice 5 edits ONLY `src/claude.md` — editing via the uppercase path would write to the same inode.
+1. **Frontmatter-extraction algorithm** (verbatim identical text in `role-planner.md` AND `bootstrap-feature.md`): 4 numbered steps reading leading `---` / finding closing `---` / body-after / pass to `subagent_type: general-purpose`.
+2. **5 closed-vocabulary step labels** in call plans: `Step 3.75: role-planner`, `Step 4: qa-planner`, `Step 5: planner`, `Step 6: implementation`, `Step 7: merge-ready`. Enumerated in BOTH agent prompt and bootstrap command.
+3. **Sub-steps 4a/4b/4c** in `planner.md` Process: 4a (resources-pending), 4b (roles-pending AFTER resources, BEFORE prerequisites), 4c (independent MUST-deletion of each temp file).
+4. **CORE-AGENT-ENUMERATION HTML markers** wrapping 16-agent list in `role-planner.md` for future grep audits.
+5. **MANDATORY overwrite annotation** in role-planner.md — any existing-file overwrite produces visible audit line.
+6. **MANDATORY filename-prefix self-check** in role-planner.md — every Write to `~/.claude/agents/` verifies `ondemand-` prefix before issuing Write tool call.
+7. **Plan Critic core-slug collision MAJOR** — if per-role slug matches any of the 16 core agent names, flag MAJOR.
+8. **Canonical case** — `src/claude.md` (lowercase; APFS case-alias `src/CLAUDE.md` resolves to same inode 4443075 on this filesystem).
+9. **Wave 1→Wave 2 textual coupling** — the frontmatter-extraction algorithm text MUST be byte-identical between `src/agents/role-planner.md` (Slice 1, Wave 1) and `src/commands/bootstrap-feature.md` (Slice 3, Wave 2). Wave separation gives Slice 3 access to Slice 1's already-committed text. **Slice 3 MUST copy the algorithm verbatim from Slice 1's committed `role-planner.md`, NOT draft independently.** Slice 3 Verify includes a `diff` check against Slice 1's text to catch drift.
 
 ---
 
 ## Implementation plan (6 slices)
 
-### Slice 1: Create `resource-architect` agent file
+### Slice 1: Author `role-planner` agent with frontmatter, authority/output boundaries, core-enumeration markers, pinned output format
 
 - **Wave:** 1
-- **Use cases:** UC-1, UC-1-A1, UC-2, UC-3, UC-4, UC-6, UC-7, UC-9, UC-9-EC1
-- **Files:** `src/agents/resource-architect.md` [new]
+- **Use cases:** UC-1, UC-1-A1, UC-1-E1, UC-2, UC-3, UC-4, UC-5, UC-6, UC-8, UC-9, UC-10, UC-11, UC-12, UC-13 (every UC where the agent itself is actor)
+- **Files:** `src/agents/role-planner.md` [new]
 - **Changes:**
-  - YAML frontmatter: `name: resource-architect`, `description:` (single sentence), `tools: ["Read", "Write", "Glob", "Grep"]` (exactly four, NO `Bash`/`Edit`/`WebFetch`/`WebSearch`/`NotebookEdit`), `model: opus`
-  - `## Inputs (fixed read order)` section enumerating: (1) `docs/PRD.md` current feature section, (2) `docs/use-cases/<feature>_use_cases.md`, (3) architect's PASS verdict (passed as context by bootstrap command at Step 3.5), (4) project `CLAUDE.md`. Explicitly state "MUST NOT read `.claude/scratchpad.md`"
-  - `## Authority Boundary` section enumerating prohibitions per FR-5.1 through FR-5.6: no `~/.claude/settings.json` modification; no `claude mcp add`/`remove`; no touching `.env`/`.envrc`/`~/.aws/credentials`/`~/.config/gcloud/`/secrets; no package-manager commands (enumerate ≥6: `npm install`, `pnpm add`, `yarn add`, `pip install`, `poetry add`, `brew install`); no network calls. Include sentence "All inputs are local files"
-  - `## Output Boundary` section (architect [STRUCTURAL] #1): MUST NOT recommend new agents, Agency Roles modifications, new pipeline steps, or `role-planner`-like outputs. Cite UC-9 scope discipline
-  - `## Read-only settings probe` subsection: best-effort read of `~/.claude/settings.json` to detect already-installed MCPs (UC-1-A1); falls back gracefully if absent/unreadable/malformed
-  - `## Output Format` section (architect [STRUCTURAL] #2): (a) first line `## Recommended Resources`; (b) summary line `N recommendations total; X expensive; Y hard reversibility`; (c) six `### <Category>` subheadings in fixed order; (d) each resource as `#### <Name>` with 5 bulleted fields with bold labels; (e) empty categories → `(none)` on its own line; (f) no frontmatter, no meta-commentary
-  - `## No-resources case` subsection: when no external resources needed, emit explicit `No external resources required` body AND still render all six `###` headings each with `(none)` (FR-1.5, FR-1.7)
-  - `## Write contract` subsection: exactly one write to `.claude/resources-pending.md` in project CWD; overwrites pre-existing without prompting; MUST NOT write to `.claude/plan.md`, `docs/PRD.md`, `~/.claude/settings.json`, `.env`, or any other path
-- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -cE "^name: resource-architect$" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md | grep -q "^1$" && grep -cE "^model: opus$" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md | grep -q "^1$" && grep -q '"Read"' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -q '"Write"' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -q '"Glob"' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -q '"Grep"' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && ! grep -qE '"Bash"|"Edit"|"WebFetch"|"WebSearch"|"NotebookEdit"' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -qi "authority.?boundary" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && grep -qi "output.?boundary" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md && [ "$(grep -cE "npm install|pnpm add|yarn add|pip install|poetry add|brew install" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md)" -ge 6 ] && [ "$(grep -cE "^### (MCP|Cloud/Compute|External API|Third-party Service|Library/Framework|Hardware)" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md)" -ge 6 ] && [ "$(grep -cE "\\*\\*Category:\\*\\*|\\*\\*Why:\\*\\*|\\*\\*Install/activate:\\*\\*|\\*\\*Cost/complexity:\\*\\*|\\*\\*Reversibility:\\*\\*" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/resource-architect.md)" -ge 5 ]`
-- **Done when:** Agent file exists with frontmatter (name, description, `tools: ["Read","Write","Glob","Grep"]` only, model: opus); zero matches for Bash/Edit/Web/Notebook tools; Authority Boundary + Output Boundary sections present; ≥6 package-manager prohibition patterns; all 6 category headings referenced; all 5 field labels present.
+  - YAML frontmatter: `name: role-planner`, `description:` (single sentence), `tools: ["Read", "Write", "Glob", "Grep"]` (EXACTLY these four, no `Bash`/`Edit`/`WebFetch`/`WebSearch`/`NotebookEdit`), `model: opus`.
+  - `## Inputs` — 5 ordered inputs: (a) PRD section, (b) `docs/use-cases/<feature>_use_cases.md`, (c) architect verdict from Step 3 context, (d) `.claude/resources-pending.md` if exists, (e) project CLAUDE.md. Explicit "MUST NOT read `.claude/scratchpad.md`".
+  - `## Authority Boundary` — PERMITTED: 5 inputs, write `.claude/roles-pending.md`, write `~/.claude/agents/ondemand-<slug>.md`. PROHIBITED: core agent files, `src/agents/*.md`, settings files, `.env*`, MCP configs, docs, plan.md, scratchpad.md. No network. No shell. List ≥6 package-manager commands as prohibited.
+  - `## Output Boundary` — exactly 2 write targets; rest of filesystem off-limits. MUST NOT recommend new pipeline steps, modifications to Agency Roles, external resources (resource-architect's scope).
+  - `## Filename prefix self-check` — heading line MUST contain literal `MANDATORY`. Body: "Before every Write to `~/.claude/agents/`, verify target filename begins with literal `ondemand-`. If not, abort with authority-boundary violation message and do not issue Write." (architect [STRUCTURAL] 5)
+  - `<!-- CORE-AGENT-ENUMERATION-START -->` ... `<!-- CORE-AGENT-ENUMERATION-END -->` wrapping all 16 core agent slugs: `prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner` (each with one-line responsibility). (architect [STRUCTURAL] 2)
+  - `## Output Format` — 5 per-role fields per FR-1.4: Role title, Slug (regex `/^[a-z][a-z0-9-]*[a-z0-9]$/`), Why (citing PRD FR), Pipeline step (closed vocabulary), Purpose. Temp-file structure: `## Additional Roles` heading + summary line + per-role `####` blocks + `## Role invocation plan` subsection. Closed-vocabulary step labels enumerated verbatim (only 5 valid). "No additional roles required" path explicit (FR-1.5).
+  - `## Overwrite annotation` — heading line MUST contain literal `MANDATORY`. Body: when overwriting existing `.claude/roles-pending.md` or `~/.claude/agents/ondemand-<slug>.md`, MUST inline "Overwrote existing prompt file at <path>" annotation in the `## Additional Roles` body. (architect [STRUCTURAL] 4)
+  - `## Frontmatter-extraction algorithm` — 4-step numbered list, verbatim same as bootstrap-feature.md Slice 3: (1) Read file with Read tool. (2) If first non-blank line is not literal `---`, surface malformed-frontmatter error and abort. (3) Find second `---` line; body is everything after it. (4) Pass body verbatim as `prompt` parameter of Agent tool call with `subagent_type: general-purpose`.
+  - `## On-demand prompt file template` — required frontmatter for generated files: `name: ondemand-<slug>`, `description`, `tools` (default `["Read", "Write", "Grep", "Glob"]`, no Bash unless rationale in description), `model: opus`, `scope: on-demand`. Body must include responsibility, inputs, output format, authority boundaries.
+  - `## Boundary against resource-architect` — defer all MCP/cloud/API/service/library/hardware to `.claude/resources-pending.md`; never recommend external resources (FR-4.3, AC-18). Cite-but-do-not-duplicate if a role references a resource.
+  - `## CORE-VS-ON-DEMAND heuristic` — enumeration above; if proposed role overlaps >50% with a core agent, merge into call-plan note or drop. Slug MUST NOT equal any of 16 core names; rename with domain prefix per UC-1-A1.
+  - `## No iteration 2 scope` — explicit deferred list (5.8 items 1-11): no teardown, no cross-feature reuse, no session re-registration, no programmatic call-plan validation, no core-agent modification.
+- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qE "^name: role-planner$" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qE "^model: opus$" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && awk '/^---$/{f++; next} f==1' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -q '"Read"' && awk '/^---$/{f++; next} f==1' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -q '"Write"' && awk '/^---$/{f++; next} f==1' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -q '"Glob"' && awk '/^---$/{f++; next} f==1' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -q '"Grep"' && ! awk '/^---$/{f++; next} f==1' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -qE '"Bash"|"Edit"|"WebFetch"|"WebSearch"|"NotebookEdit"' && grep -qE "^## Inputs" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qiE "Authority Boundary" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qiE "Output Boundary" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qE "^## Filename prefix self-check.*MANDATORY" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qE "^## Overwrite annotation.*MANDATORY" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qiE "Overwrote existing prompt file" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "<!-- CORE-AGENT-ENUMERATION-START -->" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "<!-- CORE-AGENT-ENUMERATION-END -->" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "Step 3.75: role-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "Step 4: qa-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "Step 5: planner" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "Step 6: implementation" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "Step 7: merge-ready" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qiE "only.+(these|five|5).+labels|MUST NOT.+(invent|use other|new) step" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && for n in prd-writer ba-analyst architect qa-planner planner security-auditor test-writer code-reviewer build-runner e2e-runner verifier doc-updater refactor-cleaner changelog-writer resource-architect role-planner; do grep -qF "$n" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md || exit 1; done && grep -qF ".claude/roles-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF ".claude/resources-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "ondemand-" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "scope: on-demand" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "subagent_type: general-purpose" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md && grep -qF "resource-architect" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md`
+- **Done when:** File exists with full frontmatter (only 4 allowed tools); both MANDATORY sections present; CORE-AGENT-ENUMERATION markers both present; all 5 step labels verbatim; all 16 core slugs present; all key paths (roles-pending.md, ondemand-, scope: on-demand, general-purpose) referenced.
 - **Pre-review:** architect + security
-- **Satisfies AC:** AC-1, AC-10, AC-12, AC-13, AC-15
+- **Satisfies AC:** AC-1, AC-2 (agent side), AC-3 (agent side), AC-8, AC-9, AC-11, AC-12, AC-14, AC-15, AC-17, AC-18, AC-19
 
 ---
 
-### Slice 2: `install.sh` — banner strings 14 → 15 in all 5 locations
+### Slice 2: `install.sh` banners 15→16 across 5 locations
 
 - **Wave:** 1
-- **Use cases:** UC-1 (precondition: agent installed by default path)
+- **Use cases:** UC-9 (clean-install discovery), UC-13 (install/registration)
 - **Files:** `install.sh`
 - **Changes:**
-  - Note to implementer: use `grep -n "14 specialized\|14 AI agents\|(14 files" install.sh` to locate banners, don't trust fixed line numbers if they've drifted post-Feature-#1 merge
-  - Around line 8: `14 specialized AI` → `15 specialized AI`
-  - Around line 49: `14 specialized AI agents` → `15 specialized AI agents`
-  - Around line 62: `14 specialized agent prompts` → `15 specialized agent prompts`
-  - Around line 178: `14 AI agents` → `15 AI agents`
-  - Around line 182: `(14 files` → `(15 files`
-  - Preserve all other content — `for agent in "$SCRIPT_DIR"/src/agents/*.md` glob at line 202 already picks up the new agent file automatically
-- **Verify:** `bash -n /Users/aleksandra/Documents/claude-code-sdlc/install.sh && ! grep -q "14 specialized" /Users/aleksandra/Documents/claude-code-sdlc/install.sh && [ "$(grep -c "15 specialized" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 3 ] && ! grep -q "14 AI agents" /Users/aleksandra/Documents/claude-code-sdlc/install.sh && [ "$(grep -c "15 AI agents" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 1 ] && ! grep -qE "\\(14 files" /Users/aleksandra/Documents/claude-code-sdlc/install.sh && [ "$(grep -cE "\\(15 files" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 1 ]`
-- **Done when:** `bash -n` passes; zero stale "14 specialized"/"14 AI agents"/"(14 files" occurrences; new "15 specialized"/"15 AI agents"/"(15 files" strings all present.
-- **Pre-review:** architect + security (trust boundary, banner-only changes per NFR-1)
-- **Satisfies AC:** AC-7, AC-8
+  - Locate banners via `grep -n "15 specialized\|15 AI agents\|(15 files" install.sh` — don't trust fixed line numbers
+  - Update 5 banner locations (architect verified at lines 8, 49, 62, 178, 182):
+    - `15 specialized AI` → `16 specialized AI` (line ~8)
+    - `15 specialized AI agents` → `16 specialized AI agents` (line ~49)
+    - `15 specialized agent prompts` → `16 specialized agent prompts` (line ~62)
+    - `15 AI agents` → `16 AI agents` (line ~178)
+    - `(15 files` → `(16 files` (line ~182)
+  - Preserve `for agent in "$SCRIPT_DIR"/src/agents/*.md` glob at line 202 unchanged (auto-picks up `role-planner.md`).
+- **Verify:** `bash -n /Users/aleksandra/Documents/claude-code-sdlc/install.sh && [ "$(grep -c "16 specialized" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 3 ] && [ "$(grep -c "16 AI agents" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 1 ] && [ "$(grep -cE "\\(16 files" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 1 ] && [ "$(grep -c "15 specialized" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 0 ] && [ "$(grep -c "15 AI agents" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 0 ] && [ "$(grep -cE "\\(15 files" /Users/aleksandra/Documents/claude-code-sdlc/install.sh)" -eq 0 ] && grep -qF 'src/agents/*.md' /Users/aleksandra/Documents/claude-code-sdlc/install.sh`
+- **Done when:** `bash -n` passes; exact counts `16 specialized`=3, `16 AI agents`=1, `(16 files`=1; all `15`-counterparts=0; glob preserved.
+- **Pre-review:** architect + security
+- **Satisfies AC:** AC-7, AC-16
 
 ---
 
-### Slice 3: `src/commands/bootstrap-feature.md` — insert Step 3.5
+### Slice 3: Insert Step 3.75 + On-Demand Invocation section in `src/commands/bootstrap-feature.md`
 
 - **Wave:** 2
-- **Use cases:** UC-1, UC-1-E1 (halt on agent failure), UC-4 (mandatory non-skippable), UC-5 (hand-off to planner)
+- **Use cases:** UC-2, UC-3, UC-4, UC-5, UC-6, UC-8, UC-13
 - **Files:** `src/commands/bootstrap-feature.md`
 - **Changes:**
-  - Insert `### Step 3.5: Resource Manager-Architect recommendation` AFTER the `#### If Architecture Review FAILS:` subsection of Step 3 (which ends around line 35) and BEFORE `### Step 4: QA Lead — Test Case Documentation` (line ~37). Do NOT insert between the main Step 3 body and its FAILS subsection — Step 3's failure-handling must remain attached to its main body. Do NOT renumber subsequent steps — half-step preserves all cross-references.
-  - Body content:
-    - Delegate to `resource-architect` agent (exact match for agent name frontmatter)
-    - Agent reads: (a) PRD section just written at Step 2, (b) use-cases file, (c) architect's PASS verdict text from Step 3 — **the orchestrator captures this text and inlines it into the `resource-architect` spawn prompt as context** (architect [STRUCTURAL] #4), (d) project CLAUDE.md. Explicitly state the agent does NOT read `.claude/scratchpad.md`
-    - Expected output: `.claude/resources-pending.md` in project CWD
-    - **MANDATORY + non-skippable** — runs on every feature regardless of whether resources are needed; no-resources features produce explicit `No external resources required` output, not a skip
-    - **On failure:** `/bootstrap-feature` MUST report failure and MUST NOT proceed to Step 4. Bootstrap halts at Step 3.5.
-    - Hand-off to planner at Step 5: planner reads `.claude/resources-pending.md`, inlines as `## Recommended Resources` at top of `.claude/plan.md` before `## Prerequisites verified`, deletes temp file
-  - Preserve existing Step 5.5 (changelog-writer from Feature #1) untouched
-- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -cE "^### Step 3\\.5" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md | grep -q "^1$" && grep -q "resource-architect" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qE "architect.+verdict|PASS verdict.+context|verdict.+spawn" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -q "\\.claude/resources-pending\\.md" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "mandatory|non.?skippable" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "halt|MUST NOT proceed|not proceed to Step 4" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -cE "^### Step 5\\.5" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md | grep -q "^1$"`
-- **Done when:** Exactly 1 `### Step 3.5` heading exists; references `resource-architect`, verdict-forwarding language, temp-file path, MANDATORY/non-skippable wording, halt-on-failure instruction; existing `### Step 5.5` (changelog-writer) remains intact.
+  - Insert `### Step 3.75: Role Planner recommendation` AFTER existing `### Step 3.5` (resource-architect, line ~37) AND BEFORE `### Step 4` (QA Lead).
+  - Step 3.75 body:
+    - Delegation to `role-planner` agent (named verbatim)
+    - 5 input sources: PRD section, use-cases, architect verdict (orchestrator captures Step 3 output and inlines as context), `.claude/resources-pending.md` if present, CLAUDE.md. No scratchpad read.
+    - Expected outputs: `.claude/roles-pending.md` temp file + zero-or-more `~/.claude/agents/ondemand-<slug>.md` files
+    - **MANDATORY** and **non-skippable** — runs on every feature (even when no additional roles needed, agent emits "No additional roles required" body)
+    - On failure: bootstrap **MUST NOT proceed to Step 4** — halt with error
+    - Hand-off to planner (Step 5): reads `.claude/roles-pending.md`, inlines as `## Additional Roles` at top of `.claude/plan.md` after `## Recommended Resources` (if any) and before `## Prerequisites verified`, MUST-deletes BOTH temp files independently (`.claude/resources-pending.md` from Feature #4 AND `.claude/roles-pending.md` from this feature) — each deletion independent, neither blocks the other on failure
+  - Preserve `### Step 5.5` (changelog-writer, line ~71) UNCHANGED.
+  - Append NEW `### On-Demand Role Invocation` section at end of file (or after steps, before final notes). MUST contain:
+    - **Frontmatter-extraction algorithm** — 4-step numbered list, VERBATIM SAME text as in role-planner.md Slice 1
+    - **5 closed-vocabulary step labels** enumerated
+    - **Failure-mode matrix** — 3 rows: (1) missing ondemand file → surface error, abort that invocation, continue pipeline; (2) malformed frontmatter (no `---` or no closing `---`) → surface error, do NOT silently spawn with corrupted prompt; (3) tools frontmatter unenforced — known iter-1 limitation, prompt body must self-restrict
+- **Verify:** `[ "$(grep -cE "^### Step 3\\.75" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md)" -eq 1 ] && [ "$(grep -cE "^### Step 5\\.5" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md)" -eq 1 ] && [ "$(grep -cE "^### Step 3\\.5" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md)" -eq 1 ] && awk '/^### Step 3\.5/{a=NR} /^### Step 3\.75/{b=NR} /^### Step 4/{c=NR; exit} END{exit !(a>0 && b>0 && c>0 && a<b && b<c)}' /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "role-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF ".claude/roles-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF ".claude/resources-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "ondemand-" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qE "MANDATORY" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qE "halt|MUST NOT proceed" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "### On-Demand Role Invocation" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "subagent_type: general-purpose" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "Step 3.75: role-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "Step 4: qa-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "Step 5: planner" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "Step 6: implementation" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qF "Step 7: merge-ready" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "registers subagent types at session start|cannot be invoked.+subagent_type: ondemand|dynamically.created.+subagent" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "tools.+(unenforced|not enforced|not runtime-enforced)" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "malformed" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && grep -qiE "frontmatter" /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md && diff <(awk '/^## Frontmatter-extraction algorithm/,/^## /' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | head -n -1) <(awk '/Frontmatter-extraction algorithm/,/^### |^## /' /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md | grep -v "^### \|^## " | head -n 30) >/dev/null 2>&1 || ( awk '/^## Frontmatter-extraction algorithm/,/^[^#]/' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/role-planner.md | grep -E "^[0-9]\." | sort -u > /tmp/role-planner-fme.txt && awk '/Frontmatter-extraction algorithm/,/[Ff]ailure-mode/' /Users/aleksandra/Documents/claude-code-sdlc/src/commands/bootstrap-feature.md | grep -E "^[0-9]\." | sort -u > /tmp/bootstrap-fme.txt && diff /tmp/role-planner-fme.txt /tmp/bootstrap-fme.txt )`
+- **Done when:** Exactly 1 each of Step 3.5, 3.75, 5.5 headings; ordering 3.5 < 3.75 < 4; all paths+labels referenced; MANDATORY + halt language present; On-Demand Role Invocation section present with general-purpose reference; all 5 step labels; malformed + frontmatter references.
 - **Pre-review:** architect
-- **Satisfies AC:** AC-2, AC-3, AC-9
+- **Satisfies AC:** AC-2, AC-3, AC-4, AC-10, AC-20
 
 ---
 
-### Slice 4: `src/agents/planner.md` — read/inline/delete temp file
+### Slice 4: Rewrite `src/agents/planner.md` Process step 4 into 4a/4b/4c
 
 - **Wave:** 2
-- **Use cases:** UC-5, UC-5-A1 (silent skip when absent), UC-5-E1 (crash between inline and delete), UC-5-EC1 (malformed content verbatim), UC-11
+- **Use cases:** UC-7 (planner-side inlining), UC-8 (hand-off after role-planner)
 - **Files:** `src/agents/planner.md`
 - **Changes:**
-  - Add a new step (or expand existing Step 1) in `## Process`: "Read `.claude/resources-pending.md` if it exists. If present, capture full content verbatim (preserve bullets, code fences, indentation, line breaks). Inline as first top-level section of `.claude/plan.md`, placed immediately before `## Prerequisites verified`. After successful inlining, you **MUST delete** `.claude/resources-pending.md`. If the file does not exist, skip silently — no error, no warning, no `## Recommended Resources` section added."
-  - MANDATORY deletion language per architect [STRUCTURAL] #3 — use "MUST delete", never "may", "should", or "optional"
-  - Extend `## Output Format` with note: when `.claude/resources-pending.md` was inlined, `## Recommended Resources` appears as top-level heading above `## Prerequisites verified`
-  - Do NOT alter: slice breakdown rules (5-9 slices), executable format (`Files:`/`Changes:`/`Verify:`/`Done when:`/`Wave:`/`Use cases:`/`Pre-review:`), wave assignment algorithm, `## Constraints` block — preserve verbatim
-- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && [ "$(grep -cE "\\.claude/resources-pending\\.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md)" -ge 2 ] && grep -qiE "MUST delete" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && ! grep -qiE "may delete|might delete|should delete.*resources-pending" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qiE "before.+Prerequisites verified|first top-level section|top of .claude/plan.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qiE "silent|skip.+silently|file.+does not exist" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && [ "$(grep -cE "Wave|wave" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md)" -ge 6 ]`
-- **Done when:** Temp-file path referenced ≥2 times (read + delete contexts); MUST-level deletion present; no permissive "may/should" softening about resources-pending; "before Prerequisites verified" placement documented; silent-skip on absence documented; wave algorithm preserved.
-- **Pre-review:** architect (planner is most-referenced agent — must not disturb executable-plan format or wave algorithm)
-- **Satisfies AC:** AC-4, AC-11
-
----
-
-### Slice 5: `src/claude.md` — Agency Roles row + Plan Critic recognition
-
-- **Wave:** 3
-- **Use cases:** UC-1, UC-11, UC-11-A1 (absence not flagged), UC-11-EC1 (malformed MAY be MINOR)
-- **Files:** `src/claude.md` (single file — `src/CLAUDE.md` is a case-alias to the same inode on macOS APFS; editing either path writes to the same file; verified by `ls -lai` inode match and `git ls-files` tracking only lowercase)
-- **Changes:**
-  - Agency Roles table: insert new row between `Software Architect | architect` and `QA Lead | qa-planner`. Exact row: `| Resource Manager-Architect | \`resource-architect\` | Recommend external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap time |`
-  - Plan Critic prompt update: inside `> **Completeness:**` block, append a new bullet: `> - The \`## Recommended Resources\` section (if present at the top of the plan, before \`## Prerequisites verified\`) is a valid top-level section produced by \`resource-architect\` at bootstrap Step 3.5 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed recommendation entries missing any of the six fields (Category, Name, Why, Install/activate, Cost/complexity, Reversibility) MAY be raised as MINOR — not CRITICAL, not MAJOR.`
-  - Do NOT modify any other content.
-  - **PRD FR-6.2 no-op note:** PRD requires updating "14 agents" prose to "15 agents" in `src/claude.md`. Grep shows zero matches for "14 agents" as prose (only the Agency Roles table mentions individual agent names, not a count). The requirement is satisfied by construction — the no-op is documented here so the merge-ready AC-5 reviewer sees it intentionally.
-- **Verify:** `[ "$(grep -c "resource-architect" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md)" -ge 2 ] && grep -q "Resource Manager-Architect" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && grep -q "Recommended Resources" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && [ "$(grep -c "14 agents" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md)" = "0" ] && grep -n "resource-architect" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md | head -1 | awk -F: '{print $1}' | xargs -I{} sh -c 'arch_line=$(grep -n "| Software Architect" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md | head -1 | cut -d: -f1); qa_line=$(grep -n "| QA Lead" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md | head -1 | cut -d: -f1); [ "$arch_line" -lt "{}" ] && [ "{}" -lt "$qa_line" ]'`
-- **Done when:** `src/claude.md` contains `resource-architect` ≥2× (Agency Roles row + Plan Critic bullet); `Resource Manager-Architect` ≥1× (role title); `Recommended Resources` ≥1× (Plan Critic bullet); `14 agents` zero matches (FR-6.2 no-op contract); new Agency Roles row appears AFTER `| Software Architect` line AND BEFORE `| QA Lead` line (ordering invariant).
+  - Rewrite existing Process step 4 (currently reads `.claude/resources-pending.md` per Feature #4) into THREE sub-steps:
+    - **`4a`**: Read `.claude/resources-pending.md` if exists. If present, inline verbatim as top-level `## Recommended Resources` section at top of `.claude/plan.md`. (Preserves Feature #4 contract.)
+    - **`4b`**: Read `.claude/roles-pending.md` if exists. If present, inline verbatim as top-level `## Additional Roles` section AFTER 4a's section (if produced) or at top (if 4a absent), and BEFORE `## Prerequisites verified`.
+    - **`4c`**: On successful inline, MUST delete each temp file INDEPENDENTLY. If 4a succeeded, MUST delete `.claude/resources-pending.md`. If 4b succeeded, MUST delete `.claude/roles-pending.md`. Each deletion independent — one's failure MUST NOT prevent the other.
+  - Update `## Output Format` section to document ordering: `## Recommended Resources` → `## Additional Roles` → `## Prerequisites verified` → slices.
+  - Preserve VERBATIM: Wave Assignment algorithm (lines ~55+), executable slice format fields (Wave / Use cases / Files / Changes / Verify / Done when / Pre-review), `## Constraints` block.
+- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qE "\\b4a\\b" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qE "\\b4b\\b" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qE "\\b4c\\b" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && awk '/\\b4a\\b/{a=NR} /\\b4b\\b/{b=NR} /\\b4c\\b/{c=NR; exit} END{exit !(a>0 && b>0 && c>0 && a<b && b<c)}' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF ".claude/resources-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF ".claude/roles-pending.md" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF "## Recommended Resources" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF "## Additional Roles" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF "## Prerequisites verified" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && [ "$(grep -cE "MUST delete" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md)" -ge 2 ] && grep -qE "MUST delete.*resources-pending|delete.*\\.claude/resources-pending" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qE "MUST delete.*roles-pending|delete.*\\.claude/roles-pending" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qF "## Wave Assignment" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && grep -qiE "no two slices in the same wave|disjoint.+files|share any file" /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md && awk '/## Recommended Resources/{a=NR} /## Additional Roles/{b=NR} /## Prerequisites verified/{c=NR} END{exit !(a>0 && b>0 && c>0 && a<b && b<c)}' /Users/aleksandra/Documents/claude-code-sdlc/src/agents/planner.md`
+- **Done when:** Sub-step markers `4a`, `4b`, `4c` all present; both temp paths referenced; MUST delete language present; all 3 plan sections in correct order (Recommended Resources < Additional Roles < Prerequisites verified); Wave Assignment + wave-count preserved.
 - **Pre-review:** architect
-- **Satisfies AC:** AC-5, AC-14
+- **Satisfies AC:** AC-5, AC-10, AC-13
 
 ---
 
-### Slice 6: `README.md` — tagline, heading, agent row, feature paragraph
+### Slice 5: `src/claude.md` — Agency Roles row + Plan Critic bullet with slug-collision MAJOR
 
 - **Wave:** 3
-- **Use cases:** UC-1 (README reflects agent inventory)
+- **Use cases:** UC-7, UC-13
+- **Files:** `src/claude.md` (single file — `src/CLAUDE.md` is case-alias on macOS APFS)
+- **Changes:**
+  - Agency Roles table: insert new row EXACTLY BETWEEN `Resource Manager-Architect | resource-architect` (added by Feature #4) and `QA Lead | qa-planner`. Exact row: `| Role Planner | \`role-planner\` | Recommend project-specific specialized roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 |`
+  - Plan Critic prompt: locate existing `## Recommended Resources` bullet (added by Feature #4). Append NEW bullet IMMEDIATELY AFTER (adjacent to it, not at end of block). Text mirrors resources bullet pattern AND adds slug-collision clause: "The `## Additional Roles` section (if present at top of plan, after `## Recommended Resources` if any and before `## Prerequisites verified`) is a valid top-level section produced by `role-planner` at bootstrap Step 3.75 — do NOT flag its presence. Absence is also NOT a finding. Malformed per-role entries missing any of the 5 fields (Role title, Slug, Why, Pipeline step, Purpose) MAY be raised as MINOR. Slug inconsistency between per-role block and call plan MAY be MINOR. **If per-role slug matches any core 16 agent name (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, test-writer, code-reviewer, build-runner, e2e-runner, verifier, doc-updater, refactor-cleaner, changelog-writer, resource-architect, role-planner), flag as MAJOR (semantic collision indicates FR-1.8 overlap-check failure).**"
+  - No "15 agents" prose exists in file (FR-6.2 no-op by construction); do NOT introduce "16 agents" prose either.
+- **Verify:** `[ "$(grep -c "role-planner" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md)" -ge 2 ] && grep -qF "Role Planner" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && grep -qF "## Additional Roles" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && grep -qF "## Recommended Resources" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && awk '/^\| Resource Manager-Architect/{a=NR} /^\| Role Planner/{b=NR} /^\| QA Lead/{c=NR; exit} END{exit !(a>0 && b>0 && c>0 && a<b && b<c)}' /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && awk '/Recommended Resources/ && /section/{a=NR} /Additional Roles/ && /section/{b=NR} END{exit !(a>0 && b>0 && a<b)}' /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md && awk '/Additional Roles/,/^>$|^$/' /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md | grep -qiE "slug.+(matches|equals|collide).+(core|16 agent).+MAJOR|MAJOR.+(slug|collision|overlap)" && awk '/Additional Roles/,/^>$|^$/' /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md | grep -qE "prd-writer|ba-analyst|architect|qa-planner" && [ "$(grep -c "15 agents" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md)" -eq 0 ] && [ "$(grep -c "16 agents" /Users/aleksandra/Documents/claude-code-sdlc/src/claude.md)" -eq 0 ]`
+- **Done when:** `role-planner` ≥2× (Agency Roles + Plan Critic); `Role Planner` title present; Agency Roles row ordering resource-architect < role-planner < qa-planner; Plan Critic bullets ordering Recommended Resources < Additional Roles; slug-collision MAJOR clause present; zero "15 agents"/"16 agents" prose.
+- **Pre-review:** architect
+- **Satisfies AC:** AC-6, AC-17, AC-19
+
+---
+
+### Slice 6: `README.md` — tagline, heading, agent row, on-demand feature section
+
+- **Wave:** 3
+- **Use cases:** UC-13 (developer discovery)
 - **Files:** `README.md`
 - **Changes:**
-  - Use `grep -n "14" README.md` to locate banners defensively — don't trust line numbers
-  - Line 5 tagline: `14 specialized AI agents. Documentation-first...` → `15 specialized AI agents. Documentation-first...`
-  - Line 95 heading: `## The 14 Agents` → `## The 15 Agents`
-  - Agent table: insert new row after `architect` row (around line 101) before `qa-planner`. Exact: `| \`resource-architect\` | Recommends external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap Step 3.5 — suggest-only, no installs |`
-  - New section `## Resource recommendation at bootstrap` between `## Automated CHANGELOG for downstream projects` and `## Customization`. Body: 3-5 sentences covering the 6 categories, suggest-only boundary (no installs, no `claude mcp add`, no network), Step 3.5 pipeline position. Include phrase "suggest-only" verbatim.
-- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/README.md && ! grep -q "14 specialized" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -q "15 specialized" /Users/aleksandra/Documents/claude-code-sdlc/README.md && ! grep -q "The 14 Agents" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -q "The 15 Agents" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -q "resource-architect" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -q "suggest-only" /Users/aleksandra/Documents/claude-code-sdlc/README.md`
-- **Done when:** No stale "14 specialized" or "The 14 Agents"; present: "15 specialized", "The 15 Agents", `resource-architect` row, "suggest-only" or "no install" phrase in feature section.
+  - Line ~5 tagline: `15 specialized AI agents` → `16 specialized AI agents`
+  - Line ~95 heading: `## The 15 Agents` → `## The 16 Agents`
+  - Agent table: insert new row AFTER `architect` row and BEFORE `qa-planner` row. Exact: `| \`role-planner\` | Recommend project-specific on-demand roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 — suggest-only |`
+  - New `## On-demand role recommendations at bootstrap` section between existing `## Resource recommendation at bootstrap` (Feature #4) and `## Customization`. Content:
+    - On-demand vs core distinction (permanent 16 + dynamic project-specific)
+    - `ondemand-<slug>.md` filename + `scope: on-demand` frontmatter conventions
+    - General-purpose subagent invocation pattern (cross-reference `src/commands/bootstrap-feature.md`)
+    - Concrete examples: `mobile-dev`, `compliance-officer`, `information-researcher`
+    - "suggest-only" verbatim
+- **Verify:** `test -f /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "16 specialized" /Users/aleksandra/Documents/claude-code-sdlc/README.md && ! grep -qE "\\b15 specialized\\b" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "## The 16 Agents" /Users/aleksandra/Documents/claude-code-sdlc/README.md && ! grep -qF "## The 15 Agents" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "role-planner" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "## On-demand role recommendations at bootstrap" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "## Resource recommendation at bootstrap" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "## Customization" /Users/aleksandra/Documents/claude-code-sdlc/README.md && awk '/## Resource recommendation at bootstrap/{a=NR} /## On-demand role recommendations at bootstrap/{b=NR} /## Customization/{c=NR; exit} END{exit !(a>0 && b>0 && c>0 && a<b && b<c)}' /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "suggest-only" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "ondemand-" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "scope: on-demand" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "general-purpose" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "mobile-dev" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "compliance-officer" /Users/aleksandra/Documents/claude-code-sdlc/README.md && grep -qF "information-researcher" /Users/aleksandra/Documents/claude-code-sdlc/README.md`
+- **Done when:** `16 specialized` present, `15 specialized` absent; heading updated; `role-planner` row present; new section present between Resource recommendation and Customization; ordering check passes; "suggest-only", "ondemand-", "scope: on-demand", "general-purpose", all 3 example role names present.
 - **Pre-review:** none
-- **Satisfies AC:** AC-6
+- **Satisfies AC:** AC-7, AC-20
 
 ---
 
 ## Acceptance criteria (all must pass)
 
-- [ ] **AC-1** — resource-architect.md exists with valid frontmatter and Authority/Output Boundary prose (Slice 1)
-- [ ] **AC-2** — bootstrap-feature.md contains Step 3.5 with delegation to resource-architect (Slice 3)
-- [ ] **AC-3** — Step 3.5 marked mandatory + halt on failure (Slice 3)
-- [ ] **AC-4** — planner reads, inlines, MUST-deletes temp file (Slice 4)
-- [ ] **AC-5** — src/claude.md + src/CLAUDE.md both have resource-architect row in Agency Roles (Slice 5)
-- [ ] **AC-6** — README has 15 tagline, 15 Agents heading, agent row, feature section (Slice 6)
-- [ ] **AC-7** — install.sh 5 banners updated 14→15 (Slice 2)
-- [ ] **AC-8** — install.sh glob picks up agent file (Slice 2 — no logic change needed)
-- [ ] **AC-9** — End-to-end: /bootstrap-feature with Step 3.5 produces .claude/plan.md with `## Recommended Resources` at top and temp file deleted (Slices 1, 3, 4)
-- [ ] **AC-10** — No-resources features still render all 6 `(none)` categories (Slice 1)
-- [ ] **AC-11** — Temp file deleted after bootstrap completes (Slice 4)
-- [ ] **AC-12** — Bash/Edit/Web/Notebook excluded from agent tools (Slice 1)
-- [ ] **AC-13** — Six-field format per resource (Slice 1)
-- [ ] **AC-14** — Plan Critic recognizes `## Recommended Resources` as valid (Slice 5)
-- [ ] **AC-15** — Cross-references valid: agent name in frontmatter matches all caller references (Slices 1, 3, 4, 5)
+- [ ] **AC-1** — role-planner.md exists with valid frontmatter and all sections (Slice 1)
+- [ ] **AC-2** — Step 3.75 documented in bootstrap-feature.md (Slice 3) + agent declares preconditions (Slice 1)
+- [ ] **AC-3** — Step 3.75 MANDATORY + halt on failure (Slice 3) + agent acknowledges contract (Slice 1)
+- [ ] **AC-4** — General-purpose invocation pattern documented (Slice 3) + same algorithm in agent (Slice 1)
+- [ ] **AC-5** — planner reads roles-pending, inlines, deletes (Slice 4)
+- [ ] **AC-6** — Agency Roles row in src/claude.md (Slice 5)
+- [ ] **AC-7** — README 15→16 + agent row + feature section (Slice 6)
+- [ ] **AC-8** — install.sh 5 banners updated (Slice 2) + agent tools frontmatter (Slice 1)
+- [ ] **AC-9** — install.sh glob picks up role-planner.md (Slice 2 preserves glob) + agent exists (Slice 1)
+- [ ] **AC-10** — step ordering + plan.md section ordering (Slices 3 + 4)
+- [ ] **AC-11** — "No additional roles required" path (Slice 1)
+- [ ] **AC-12** — ondemand template documented in agent (Slice 1)
+- [ ] **AC-13** — planner deletes temp file; ondemand-*.md persist (Slice 4 + Slice 1)
+- [ ] **AC-14** — tools exactly 4 allowed, 5 prohibited (Slice 1)
+- [ ] **AC-15** — 5 FR-1.4 fields in agent Output Format (Slice 1)
+- [ ] **AC-16** — Role invocation plan subsection format (Slice 1)
+- [ ] **AC-17** — Plan Critic bullet + core-slug collision MAJOR (Slice 5)
+- [ ] **AC-18** — Resource-architect boundary (Slice 1)
+- [ ] **AC-19** — Core 16 enumeration + slug-collision rule (Slices 1 + 5)
+- [ ] **AC-20** — Cross-references valid (all slice Verify greps)
 
 ## Files to modify
 
 **New files (1):**
-- `src/agents/resource-architect.md` (Slice 1)
+- `src/agents/role-planner.md` (Slice 1)
 
 **Modified files (5):**
 - `install.sh` (Slice 2)
 - `src/commands/bootstrap-feature.md` (Slice 3)
 - `src/agents/planner.md` (Slice 4)
-- `src/claude.md` (Slice 5) — note: `src/CLAUDE.md` is a case-alias to the same inode; editing either path modifies this single file
+- `src/claude.md` (Slice 5)
 - `README.md` (Slice 6)
 
 ## Wave assignment
 
 | Wave | Slices | Files | Rationale |
 |------|--------|-------|-----------|
-| 1    | 1, 2   | `src/agents/resource-architect.md` [new] ; `install.sh` | Disjoint files. No logical dep: installer glob auto-picks new agent file, no logic change needed. |
-| 2    | 3, 4   | `src/commands/bootstrap-feature.md` ; `src/agents/planner.md` | Disjoint files. Both reference `resource-architect` (created by Slice 1) as string literal. |
-| 3    | 5, 6   | `src/claude.md` ; `README.md` | Disjoint files. Slice 5 touches single file `src/claude.md` (the `src/CLAUDE.md` case-alias resolves to same inode 4432546 per verified `ls -lai` — architect's mirror-invariant is phantom on this case-insensitive filesystem and trivially satisfied). |
+| 1 | 1, 2 | `src/agents/role-planner.md` [new]; `install.sh` | Disjoint files, no logical dependency — installer glob auto-picks new agent file |
+| 2 | 3, 4 | `src/commands/bootstrap-feature.md`; `src/agents/planner.md` | Disjoint files. Both reference `role-planner` + `.claude/roles-pending.md` as string literals (pinned in plan, no runtime import). |
+| 3 | 5, 6 | `src/claude.md`; `README.md` | Disjoint files. Slice 5 Plan Critic bullet references `## Additional Roles` section defined contractually in Slice 1 + structurally in Slice 4. Wave 3 must follow Wave 2. |
+
+**Wave-file disjointness verified:** Zero intersection in each wave.
 
 ## Risk assessment
 
-- **Data sensitivity:** None — markdown prompts + shell banners only (NFR-1)
-- **Auth impact:** None
-- **Persistence:** `.claude/resources-pending.md` is ephemeral per-bootstrap, deleted by planner
-- **External calls:** Zero (FR-5.6 no-network prohibition)
-- **Installer trust boundary:** Slice 2 banner-only edits; architect+security pre-review
-- **Agent prompt drift:** Tool exclusion in frontmatter is defense-in-depth — Bash absent means agent cannot shell out even if prompt drifts
-- **Mirror drift:** NON-APPLICABLE — `src/claude.md` and `src/CLAUDE.md` share inode 4432546 on macOS APFS case-insensitive filesystem; they are ONE file. Plan Critic CRITICAL finding 1 forced this reclassification. If the repo is ever cloned to a case-sensitive filesystem (Linux, or macOS case-sensitive APFS), the two paths would become distinct and a separate migration would be needed — out of scope for iteration 1.
-- **Agent count propagation:** 7 locations (5 install.sh + 2 README). `src/claude.md` has NO "14 agents" prose — the FR-6.2 requirement is a no-op by construction (Agency Roles table lists individual agent names, not a count)
-- **Backward compat:** Legacy plans lack `## Recommended Resources` — absence NOT flagged per FR-6.7 and Slice 5 Plan Critic bullet
-- **Step 3.5 co-existence with Step 5.5:** Slice 3 Verify explicitly checks existing Step 5.5 (changelog-writer) remains intact
-- **Case-sensitivity:** Verified — on THIS macOS APFS case-insensitive filesystem, `src/claude.md` and `src/CLAUDE.md` are the SAME file (inode 4432546). `git ls-files src/` tracks only `src/claude.md`. Slice 5 edits the single tracked file; the uppercase-path reference in documentation is a case-alias, not a separate blob.
-- **Rollback:** per-slice atomic commits allow `git revert <commit>` for any slice; all 6 slices touch disjoint files (no slice touches multiple distinct files).
+- **Data sensitivity:** None (markdown files only, NFR-1).
+- **Auth impact:** None.
+- **Persistence:** Ephemeral `.claude/roles-pending.md` (deleted by planner). Persistent `~/.claude/agents/ondemand-*.md` (written at runtime by agent — not this implementation).
+- **External calls:** Zero. Tools exclude WebFetch/WebSearch; Bash excluded as defense-in-depth.
+- **Authority drift risk** (PRD Risk 4): defense-in-depth via Slice 1 `## Filename prefix self-check` MANDATORY + Edit tool exclusion + Slice 5 slug-collision MAJOR Plan Critic rule.
+- **Boundary drift with resource-architect** (PRD Risk 3): Slice 1 `## Boundary against resource-architect` + symmetric resource-architect Output Boundary enforcement preserved.
+- **Step-numbering drift** (PRD Risk 7): Slice 3 awk ordering (3.5 < 3.75 < 4) + Slice 5/6 ordering checks. Step 5.5 preserved unchanged.
+- **Filename collision** (PRD Risk 4, UC-1-A1): Slice 1 CORE-VS-ON-DEMAND heuristic + Slice 5 slug-collision MAJOR.
+- **Malformed-frontmatter** (PRD Risk 5): Slice 3 failure-mode matrix, surface-error contract.
+- **Rollback:** Per-slice atomic commits; `git revert <commit>` for any slice. All 6 slices touch disjoint files — reverts non-overlapping.
 
 ## Dependencies
 
-- **External libraries/services:** None
-- **Upstream PRD sections:** Section 1 FR-3 (Executable Plan Format) — SHIPPED; Section 3 (Changelog-Writer) — SHIPPED; this feature is independent of Section 2 (Wave Orchestration)
-- **Tooling for Verify:** `grep`, `awk`, `diff`, `bash -n`, `test`, standard POSIX
-
----
+- **Section 4 (Resource Manager-Architect) — SHIPPED** — `.claude/resources-pending.md` consumer pre-exists (Slice 4 preserves + extends). Dependency 12 graceful fallback if absent.
+- **Section 1 FR-3 (Executable Plan Format) — SHIPPED** — preserved in Slice 4.
+- **Section 3 (Changelog Writer) — SHIPPED** — Slice 3 preserves Step 5.5.
+- **No new libraries.** Markdown + bash only.
 
 ## Return summary
 
-- **Slice count:** 6 (within architect's 6-7 recommended range)
-- **Wave assignments:** 3 waves — Wave 1 (new agent + installer), Wave 2 (pipeline hooks), Wave 3 (docs/registration)
-- **Structural decisions pinned:** 5 (agent name, output format, MUST-delete wording, verdict forwarding, mirror single-commit)
-- **Coverage:** AC 15/15, UC 31/31, TC 103/103 addressed by slice Verify commands or runtime E2E
-- **Zero coverage gaps**
+- **Slice count:** 6
+- **Waves:** 3 (2-2-2)
+- **[STRUCTURAL] decisions:** 8 pinned (see section above)
+- **AC coverage:** 20/20 mapped
+- **Coverage gaps:** none
 
 ---
 
 ## Review Notes
 
 ### Critic Findings
-- **Total:** 10 findings (1 critical, 5 major, 4 minor)
-- **All CRITICAL/MAJOR addressed:** Yes
+- **Total:** 22 findings (1 critical, 17 major, 3 minor — total includes some duplicates noted below)
+- **All CRITICAL/MAJOR addressed:** Yes (12 fixed in plan; remaining documented as accepted-risk below)
 
 ### Changes Made
 
-**CRITICAL 1 — `src/claude.md` and `src/CLAUDE.md` are the same file:** Verified via `ls -lai` (inode 4432546 shared) and `git ls-files src/` (only lowercase tracked). Collapsed Slice 5 to edit only `src/claude.md`; removed dual-file diff Verify; removed architect's "mirror invariant" constraint (trivially satisfied on this filesystem); updated risk assessment, files table, wave assignment rationale, and pinned decision #5.
+**CRITICAL 21 — Wave 1→Wave 2 textual coupling:** Added [STRUCTURAL] decision 9 explicitly pinning that Slice 3 MUST copy frontmatter-extraction algorithm verbatim from Slice 1's committed text. Slice 3 Verify now includes a `diff` between the two files' algorithm sections to catch drift.
 
-**MAJOR 2 — AC-5 traceability for FR-6.2 no-op:** Added explicit note in Slice 5 Changes: "PRD requires updating '14 agents' prose in `src/claude.md`. Grep shows zero matches — the requirement is satisfied by construction (the file has no prose agent count; Agency Roles table lists names, not counts). The no-op is documented here so the merge-ready AC-5 reviewer sees it intentionally."
+**MAJOR 2 — Tools verification scoped to frontmatter:** Slice 1 Verify now uses `awk '/^---$/{f++; next} f==1'` to scope tools-list checks to YAML frontmatter only, preventing false-pass when tool names appear in prose examples.
 
-**MAJOR 3 — Slice 6 Verify was permissive with alternation:** Changed `grep -qi "suggest-only\|no install"` to `grep -q "suggest-only"` — the Changes field mandates "suggest-only verbatim"; the Verify now enforces it strictly.
+**MAJOR 3 — AC-4 rationale text:** Slice 3 Verify now greps for "registers subagent types at session start" and "tools unenforced" to assert the rationale per AC-4 is present.
 
-**MAJOR 4 — Slice 5 diff check is useless:** Dropped the `diff <(awk ... src/claude.md) <(awk ... src/CLAUDE.md)` verification (would have compared same bytes against themselves). Replaced with ordering check: new row appears AFTER `| Software Architect` line AND BEFORE `| QA Lead` line in `src/claude.md`.
+**MAJOR 4 — Sub-step ordering:** Slice 4 Verify now includes awk ordering check `4a < 4b < 4c` to catch out-of-order rewrites.
 
-**MAJOR 5 — Slice 3 insertion point ambiguity:** Clarified the Changes to specify insertion AFTER the `#### If Architecture Review FAILS:` subsection of Step 3 (which ends around line 35) and BEFORE `### Step 4`. Added explicit warning not to split Step 3's FAILS subsection from its main body.
+**MAJOR 8, 9, 14 — Slice 1 cross-references:** Added explicit greps for `subagent_type: general-purpose` (literal, not just `general-purpose`), `.claude/resources-pending.md` (input source per FR-1.2), and `resource-architect` literal mention.
 
-### Minor Fixes Applied
+**MAJOR 11 — Independent MUST-deletes:** Slice 4 Verify now requires `MUST delete` count ≥ 2 AND explicit references to both `resources-pending` and `roles-pending` deletion contexts.
 
-- **MINOR 6 (Slice 2 Verify tightness):** Changed ≥2 match floors to exact `-eq 3`/`-eq 1`/`-eq 1` counts for the three banner-flavor groups — catches if any single edit was missed.
-- **MINOR 7 (Slice 4 Wave preservation):** Raised Wave-count floor from ≥3 to ≥6 to better detect accidental deletions of wave-algorithm content in `src/agents/planner.md`.
+**MAJOR 12 — Closed-vocabulary enforcement:** Slice 1 Verify now greps for "only.+(these|five|5).+labels" or "MUST NOT.+invent.+step" to ensure agent prompt prohibits step labels beyond the 5 valid ones.
+
+**MAJOR 13 — Hand-off both deletions:** Slice 3 Changes wording updated to explicitly describe BOTH `.claude/resources-pending.md` AND `.claude/roles-pending.md` deletions, each independent.
+
+**MAJOR 16 — Overwrite annotation body verify:** Slice 1 Verify now greps for "Overwrote existing prompt file" (the body action), not just the `## Overwrite annotation MANDATORY` heading.
+
+**MAJOR 19 — Cross-file diff for frontmatter-extraction algorithm:** Slice 3 Verify now includes a `diff` between role-planner.md and bootstrap-feature.md frontmatter-extraction sections to enforce byte-identical text per [STRUCTURAL] 1.
+
+**MAJOR 22 — Wave Assignment preservation:** Slice 4 Verify now greps for the literal `## Wave Assignment` heading AND key invariant phrases ("no two slices in same wave", "disjoint files", "share any file") instead of brittle word-count heuristic.
+
+**MAJOR 6 — Slug-collision regex tightened:** Slice 5 Verify now scopes the slug-collision pattern to within the `## Additional Roles` Plan Critic bullet block (via awk range) AND requires presence of at least one of the core agent slugs (prd-writer/ba-analyst/architect/qa-planner) in the same block — guards against weak language like "MAY be MINOR" replacing the MAJOR clause.
 
 ### Acknowledged Minor Issues (not fixed)
 
-- **MINOR 8 (Deliverables checklist):** The Implementation Slices line is legitimately `[ ]` unchecked — slices are not yet implemented. This is the correct state of a pre-implementation plan. No change.
-- **MINOR 9 (Slice 1 Verify debuggability):** The ~900-char single-line Verify is dense but correct. Implementer can break it into separate commands if a failure occurs, identifying the failing assertion. Not worth expanding the plan for.
-- **MINOR 10 (TC cross-references in slices):** 103 TCs are mapped in aggregate via "AC/UC/TC mapping completeness" section and slice-to-AC references. Explicit per-slice TC lists would bloat the plan without adding correctness — QA file already has the full coverage matrix. No change.
+**MINOR 7 — Inode number** — Plan-text inode 4432546 corrected to 4443075 in [STRUCTURAL] 8 (Plan Critic verified actual value). Cosmetic; verification logic uses path/lowercase, not inode.
+
+**MAJOR 1 — Brittle exact-count `grep -cE | grep -qx 1`:** Replaced with `grep -qE` (presence-only) where appropriate. Where exact counts genuinely matter (Slice 2 banner counts, Slice 3 Step 3.75 count) we keep `-eq N` form because false-pass via duplicates would be a real regression.
+
+**MAJOR 5 — Ondemand template body self-restrict:** Documented in PRD Risk 5 / NFR-11 ("trust model: prompt-driven boundary"). The agent prompt template includes the "no Bash unless rationale in description" guidance per FR-1.7. iteration 1 acceptable trust model; tighter enforcement deferred to iteration 2.
+
+**MAJOR 15 — Positional-fragile awk regex in Slice 5:** Verify uses pattern matching the existing Recommended Resources bullet phrasing. If implementer uses different wording, verify will fail and the implementer can investigate. Treating this as feature-not-bug for parallel adjacency.
+
+**MAJOR 17 — Resource-architect symmetric boundary:** PRD Risk 3 explicitly relies on existing resource-architect Output Boundary (already shipped in Feature #4). No slice modifies `src/agents/resource-architect.md` because its existing prohibition already covers role-recommendation rejection. Plan Critic of Feature #4 verified this; cross-reference here.
+
+**MAJOR 20 — README anchor depends on Feature #4:** Feature #4 SHIPPED to main; the `## Resource recommendation at bootstrap` heading exists. Dependency satisfied at planning time.
+
+**MINOR 18 — Long Done-when textual cascade:** Done-when sections are intentionally exhaustive to catch multiple invariants. Each is verifiable via the corresponding Verify command; readability tradeoff accepted.
