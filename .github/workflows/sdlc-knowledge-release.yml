@@ -76,7 +76,7 @@ jobs:
             runs-on: macos-14
             target: aarch64-apple-darwin
           - platform: darwin-x64
-            runs-on: macos-13
+            runs-on: macos-15-intel
             target: x86_64-apple-darwin
           - platform: linux-x64
             runs-on: ubuntu-latest

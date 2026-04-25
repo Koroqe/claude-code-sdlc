@@ -31,6 +31,7 @@
 //!
 //! SQL discipline: this module never builds SQL. (Comment retained for grep audit.)
 
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
@@ -83,15 +84,23 @@ fn resolve_pdfium_lib_dir() -> Result<PathBuf, String> {
     }
 
     // M2: directory-mode safety check (HIGH) — reject world-writable dirs.
-    let metadata = std::fs::metadata(&expected_dir)
-        .map_err(|e| format!("cannot stat pdfium lib dir {}: {e}", expected_dir.display()))?;
-    let mode = metadata.permissions().mode();
-    if mode & 0o002 != 0 {
-        return Err(format!(
-            "pdfium library directory {} is world-writable (mode {:o}); refusing to load",
-            expected_dir.display(),
-            mode
-        ));
+    // Unix-only: world-writable bits (`mode & 0o002`) are POSIX semantics.
+    // Windows ACLs differ structurally; the equivalent check is a separate
+    // concern (DACL inspection via win32 API) and is deferred to a future
+    // platform-specific hardening pass. On Windows the existence + canonical-
+    // path checks below remain the load-bearing defense.
+    #[cfg(unix)]
+    {
+        let metadata = std::fs::metadata(&expected_dir)
+            .map_err(|e| format!("cannot stat pdfium lib dir {}: {e}", expected_dir.display()))?;
+        let mode = metadata.permissions().mode();
+        if mode & 0o002 != 0 {
+            return Err(format!(
+                "pdfium library directory {} is world-writable (mode {:o}); refusing to load",
+                expected_dir.display(),
+                mode
+            ));
+        }
     }
 
     // Canonicalize for symlink-safe comparison.
