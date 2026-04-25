@@ -217,6 +217,43 @@ Concrete examples of on-demand roles `role-planner` may suggest:
 
 When `role-planner` determines no additional roles are needed, it explicitly emits "No additional roles required" rather than silently skipping — making the suggest-only decision auditable.
 
+### Iteration 2: cross-feature reuse and automatic teardown
+
+Iteration 2 extends the on-demand layer with **cross-feature reuse** and **post-merge teardown** — without changing the suggest-only contract, the core team count, or the gate count. **No new agents** are introduced (the count stays at 17) and **no new gates** are added (the count stays at 10). Teardown runs as **Step 11** of `/merge-ready`, which is a STEP — not a gate.
+
+**3-stage matching at bootstrap.** When `role-planner` recommends an on-demand role, the bootstrap pipeline performs a **three-stage** match against existing files in `~/.claude/agents/ondemand-*.md` before deciding what to do:
+
+1. **Stage 1 — exact-slug match → automatic reuse.** If a file already exists at `~/.claude/agents/ondemand-<slug>.md` whose slug matches the recommendation exactly, the bootstrap pipeline reuses it automatically with no user prompt. This is the fast path for repeated features that need the same role.
+2. **Stage 2 — purpose match → user prompt with default-deny.** If no exact-slug file exists but one or more files have a similar `purpose:` frontmatter field, the orchestrator prompts the user to confirm reuse. The reply is parsed against an explicit token grammar (see below). **Ambiguous replies are treated as NEGATIVE** (default-deny) — when in doubt, the pipeline creates a new file rather than silently overwriting or merging into an unrelated role.
+3. **Stage 3 — no match → create new (iter-1 behavior preserved).** If neither Stage 1 nor Stage 2 matches, the pipeline falls through to the original iter-1 behavior: write a new `ondemand-<slug>.md` file with the recommended prompt. Iter-1's suggest-only flow is preserved byte-for-byte for unmatched recommendations.
+
+**Affirmative/negative token grammar with default-deny.** Stage-2 user replies are parsed against an explicit, lower-cased token list:
+
+- **Affirmative** (reuse the existing file): `yes`, `y`, `approve`, `ok`, `agreed`, `please do`, `go ahead`.
+- **Negative** (create a new file instead): `no`, `n`, `decline`, `skip`, `not now`.
+- **Ambiguous** (anything not on either list, including empty replies, multi-token mixes, or unrecognized words): treated as **NEGATIVE** under default-deny.
+
+This grammar is enforced at the orchestrator layer so reuse decisions are deterministic and auditable rather than depending on natural-language interpretation.
+
+**Per-file `features:` manifest.** Every iter-2-managed on-demand file carries a `features:` array in its YAML frontmatter:
+
+```
+features: ["<project-name>:<feature-slug>", ...]
+```
+
+The array tracks **which features own each on-demand role**. The `<project-name>` prefix disambiguates entries across multiple projects that share the user's global `~/.claude/agents/` directory — the same feature slug can appear in two projects without collision because the project-name prefix scopes the ownership claim. Stage-1 reuse and Stage-2 confirmed reuse both **append** the current feature's `<project-name>:<feature-slug>` entry to the `features:` array, so the orchestrator can later answer "which features still need this role?" deterministically.
+
+**Post-merge teardown at /merge-ready Step 11.** After Gate 9 of `/merge-ready` passes, the orchestrator runs **Step 11 — on-demand teardown**:
+
+- For every file in `~/.claude/agents/ondemand-*.md`, remove the merged feature's `<project-name>:<feature-slug>` entry from the `features:` array.
+- If the array empties as a result, **delete the file**. If the array still contains entries from other features, **leave the file in place** — another feature still owns it.
+- **Refuses to run from non-feature branches** (e.g., directly on `main`) and **refuses to run from un-merged feature branches**. Defense-in-depth uses `git merge-base --is-ancestor` to confirm the feature branch's tip is actually an ancestor of `main` before any deletion happens — if the merge-ancestry check fails, teardown aborts without touching any file.
+- **Never deletes core-agent files.** Teardown only operates on files matching `~/.claude/agents/ondemand-*.md` — files lacking the `ondemand-` prefix (i.e., the 17 core agents) are out of scope and cannot be removed by Step 11. Files outside `~/.claude/agents/` are also out of scope.
+
+**Legacy file migration.** Files created under iter-1 lack the `features:` array entirely. These legacy files are migrated **opportunistically**: when a current feature's recommendation matches a legacy file (Stage 1 or Stage 2), the orchestrator adds the `features:` array to that file as part of the reuse step, claiming ownership for the current feature. Legacy files **not matched** by any current recommendation are **left unchanged** — iter-2 does not perform a global sweep or rewrite of pre-existing files.
+
+**Headless-default-create.** Non-interactive contexts (CI/CD pipelines, automated runs, any environment where `process.stdin.isTTY === false`) cannot prompt for Stage-2 confirmation. In **headless** mode, the orchestrator **skips the Stage-2 prompt** and defaults to **creating a new file** (Stage-3 behavior) rather than blocking on user input. **Stage-1 automatic reuse still runs** in headless mode because it requires no user input — exact-slug matches are always safe to reuse. This preserves iter-1's existing non-interactive contract while adding the safe portion of iter-2's reuse path.
+
 ---
 
 ## Customization
