@@ -1,52 +1,48 @@
-## Feature: Role Planner — Iteration 2: Cross-Feature Reuse + Automatic Teardown
-## Branch: feat/role-planner-reuse-teardown
-## Status: complete (MERGE READY)
+## Feature: Cognitive Self-Check Protocol — Fact/Assumption Discipline for Thinking Agents
+## Branch: feat/cognitive-self-check
+## Status: implementing wave 1 slice 1/6
 
 ## Plan
 
-### Wave 1 [COMPLETE]
-- [x] Slice 1: `src/agents/role-planner.md` — Authority Boundary 17-agent count + release-engineer + in-place mutation authorization — 9f60c07
-- [x] Slice 3: `src/commands/bootstrap-feature.md` — Step 3.75 iter-2 reuse extension — 1873702
-- [x] Slice 4: `src/commands/merge-ready.md` — Step 11 On-Demand Role Teardown after Gate 9 — 918e9de
-- [x] Slice 5: `src/claude.md` — role-planner Responsibility text + Plan Critic recognition for `## Reuse Decisions` — a050f16
-- [x] Slice 6: `README.md` — iter-2 cross-feature reuse + teardown narrative — 3eb84fb
+### Wave 1 [pending]
+- [ ] Slice 1: Create `src/rules/cognitive-self-check.md` with 6 `##` headings, 4 `###` Facts subsections, 12 in-scope + 5 exempt agents, MERGE_DATE placeholder, bilingual 4-question protocol
 
-### Wave 2 [COMPLETE]
-- [x] Slice 2: `src/agents/role-planner.md` — Reuse mode capability section — 8f83921
+### Wave 2 [pending] (parallel — 3 disjoint slice file-sets)
+- [ ] Slice 2: Doc-writing agents — append `## Cognitive Self-Check (MANDATORY)` to prd-writer, ba-analyst, qa-planner, planner
+- [ ] Slice 3: Stdout reviewer agents — same section + `Emit a \`## Facts\` block to stdout BEFORE your verdict.` line for architect, security-auditor, code-reviewer, verifier
+- [ ] Slice 4: Specialized agents + refactor-cleaner — same section for resource-architect, role-planner, release-engineer, refactor-cleaner
 
-### Quality Gates [COMPLETE]
-- Gate 0: PASS
-- Gate 1: PASS
-- Gate 2: PASS (3 MINOR fixed — 6239eca de-stales iter-1 wording)
-- Gate 3: PASS (2 MINOR fixed — 3f1db5a tightens symlink defense + adds core-slug mutation guard)
-- Gate 4-5: N/A (markdown only)
-- Gate 6: PASS (zero findings)
-- Gate 7: PASS (3 MINOR fixed — 7a854b0 aligns README phrasing with PRD)
-- Gate 8: N/A (no UI)
-- Gate 9: SKIPPED (no CHANGELOG.md, SDLC core repo)
+### Wave 3 [pending] (parallel — 2 disjoint files)
+- [ ] Slice 5: Plan Critic — TWO new `> -` Completeness bullets in `src/claude.md` between `**Completeness:**` and `**Slice Quality:**`, plus file-vs-stdout preamble sentence
+- [ ] Slice 6: README — Hardening table row + new `## Cognitive self-check at authoring time` section
 
-## [STRUCTURAL] decisions (architect's 4)
+## Bootstrap artifacts produced
+- PRD §9 (lines 2082–2333) — 7 numbered subsections (9.1–9.7), 7 FRs, 8 NFRs, 20 ACs, 17 risks/deps
+- `docs/use-cases/cognitive-self-check_use_cases.md` — 16 primary UCs + 12 cross-cutting UC-CCs
+- `docs/qa/cognitive-self-check_test_cases.md` — 110 TCs (per-UC + cross-cutting acceptance)
+- Architect verdict: PASS (3 MINOR refinements inlined in Slices 1, 5; zero [STRUCTURAL] items; zero security pre-review)
+- `.claude/resources-pending.md` — produced and consumed (zero recommendations); deleted
+- `.claude/roles-pending.md` — produced and consumed ("No additional roles required."); deleted
+- changelog-writer Step 5.5 — `no-op: not configured` (SDLC core repo opts out)
 
-1. 8-status enum: stage-1-exact-slug-match, stage-2-purpose-match-approved, stage-2-purpose-match-declined, stage-3-no-match-created, headless-default-create, legacy-migrated, malformed-yaml-skipped, migration-failed-malformed-yaml. Precedence: legacy-migrated supersedes stage-2-purpose-match-approved.
-2. ALL-occurrence removal of `features:` array entries (NOT first-occurrence) — required for NFR-2 idempotency.
-3. Refuse teardown from any non-feature branch (not just `main`) — symmetric with bootstrap FR-1.4.
-4. Atomic delete-only when `features:` array empties — orchestrator MUST `rm` directly, NO intermediate empty-array Write.
+## Architect [STRUCTURAL] decisions
+None. Three MINOR refinements applied inline:
+1. Plan Critic new bullets use literal `> - The …` / `> - Any …` lexical shape
+2. Rule file `## Backward Compatibility` includes MERGE_DATE placeholder convention
+3. Slice 5 Verify check (c) defensively confirms new bullets have no `^### ` headings
 
-## Plan Critic findings
-- 2 CRITICAL — fixed (regex `\\.` escaping; tools-pattern bracket escaping + count)
-- 4 MAJOR — fixed (Slice 1 missing line 63/292; Slice 4 tautological "10 gates"; release-engineer line-vs-match count)
-- 5 MINOR — documented
-
-## Process notes
-- 17 agents stay (no banner change, install.sh + templates/CLAUDE.md untouched)
-- 10 gates stay (Step 11 is a STEP not a gate)
-- Wave 1: 5 atomic commits on 5 disjoint files
-- Wave 2: 1 commit (Slice 2 appended to role-planner.md)
-- 3 fix commits applied for review-gate findings
+## Invariants (load-bearing)
+- 17 core agents — UNCHANGED (no new agents)
+- 10 quality gates — UNCHANGED (no new gates)
+- `install.sh` — BYTE-UNCHANGED (rule auto-distributes via existing copy logic)
+- `templates/rules/` — BYTE-UNCHANGED (rule is global, not project-specific)
+- `templates/CLAUDE.md` — BYTE-UNCHANGED
+- 5 executor agents (`test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer`) — NOT MODIFIED
+- Agency Roles table at `src/claude.md` lines 11–29 — BYTE-UNCHANGED
+- README taglines `17 specialized AI agents` (line 5) and `10 quality gates` (line 35) — BYTE-UNCHANGED
 
 ## Completed
-- All 6 slices + 3 fix commits + bootstrap commit + 2 scratchpad commits
-- Branch ready for merge to main
+- Bootstrap pipeline (Steps 1, 2, 3, 3.5, 3.75, 4, 5, 5.5) — all artifacts produced
 
 ## Blockers
 (none)
