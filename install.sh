@@ -21,6 +21,7 @@ set -euo pipefail
 
 VERSION="2.1.0"
 KNOWLEDGE_VERSION="0.1.0"
+KNOWLEDGE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
@@ -483,11 +484,141 @@ EOF
 }
 
 # ============================================================================
+# Install pdfium dynamic library (Slice 3 — pdfium-pdf-extraction)
+# ============================================================================
+install_pdfium_binary() {
+  # M9: graceful failure — wrap in subshell to insulate from set -e
+  (
+    set +e
+
+    # M10: ordering — re-invoke get_source_dir if SCRIPT_DIR was cleaned up
+    if [ ! -d "$SCRIPT_DIR/templates" ]; then
+      get_source_dir
+    fi
+
+    # M16: deterministic mode bits
+    umask 0022
+
+    local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge/pdfium"
+    local lib_dir="$target_dir/lib"
+    local sentinel="$target_dir/.version"
+
+    # M8: idempotency — skip if existing version matches
+    if [ -f "$sentinel" ]; then
+      local existing
+      existing=$(cat "$sentinel" 2>/dev/null)
+      if [ "$existing" = "$KNOWLEDGE_PDFIUM_VERSION" ]; then
+        log_ok "pdfium binary already at version $KNOWLEDGE_PDFIUM_VERSION"
+        return 0
+      fi
+    fi
+
+    # M12: uname allowlist — fail closed before URL interpolation
+    local platform asset
+    case "$(uname -s)/$(uname -m)" in
+      Darwin/arm64)   platform=darwin-arm64;  asset=pdfium-mac-arm64.tgz   ;;
+      Darwin/x86_64)  platform=darwin-x64;    asset=pdfium-mac-x64.tgz     ;;
+      Linux/x86_64)   platform=linux-x64;     asset=pdfium-linux-x64.tgz   ;;
+      Linux/aarch64)  platform=linux-arm64;   asset=pdfium-linux-arm64.tgz ;;
+      *)
+        log_warn "unsupported platform for pdfium binary: $(uname -s)/$(uname -m); skipping"
+        return 0
+        ;;
+    esac
+
+    # M1: URL hardcoded from constants
+    local url="https://github.com/bblanchon/pdfium-binaries/releases/download/${KNOWLEDGE_PDFIUM_VERSION}/${asset}"
+
+    # M3: download to mktemp
+    local tmp_archive
+    tmp_archive=$(mktemp -t pdfium.XXXXXX) || { log_warn "mktemp failed"; return 0; }
+
+    # M4: extract to mktemp -d staging
+    local staging
+    staging=$(mktemp -d -t pdfium.XXXXXX) || { log_warn "mktemp -d failed"; rm -f "$tmp_archive"; return 0; }
+
+    # cleanup trap
+    trap 'rm -f "$tmp_archive"; rm -rf "$staging" 2>/dev/null' EXIT
+
+    # M2 + M14 + M15: TLS-only download with redirect/timeout bounds; curl primary + wget fallback
+    if command -v curl >/dev/null 2>&1; then
+      if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp_archive"; then
+        log_warn "pdfium download failed (curl); skipping PDF support"
+        return 0
+      fi
+    elif command -v wget >/dev/null 2>&1; then
+      if ! wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=120 -q -O "$tmp_archive" "$url"; then
+        log_warn "pdfium download failed (wget); skipping PDF support"
+        return 0
+      fi
+    else
+      log_warn "neither curl nor wget available; skipping pdfium install"
+      return 0
+    fi
+
+    # M6 pre-extract: reject malicious tar entries (path traversal or absolute paths)
+    if tar -tzf "$tmp_archive" 2>/dev/null | grep -E '^/|(^|/)\.\.(/|$)' >/dev/null; then
+      log_warn "pdfium archive contains traversal entries; refusing to extract"
+      return 0
+    fi
+
+    # M5: tar safety flags
+    if ! tar --no-same-owner --no-same-permissions -xzf "$tmp_archive" -C "$staging" 2>/dev/null; then
+      log_warn "pdfium archive extraction failed"
+      return 0
+    fi
+
+    # M6 post-extract: re-check for traversal artifacts
+    if find "$staging" -path '*..*' -print -quit 2>/dev/null | grep -q .; then
+      log_warn "pdfium archive produced traversal paths post-extract; refusing"
+      return 0
+    fi
+
+    # M7: reject suid/sgid bits
+    if find "$staging" -perm /6000 -print -quit 2>/dev/null | grep -q .; then
+      log_warn "pdfium archive contains setuid/setgid files; refusing"
+      return 0
+    fi
+
+    # bblanchon archive layout: lib/libpdfium.{dylib|so} at top level
+    local extracted_lib
+    extracted_lib=$(find "$staging" -maxdepth 3 -name "libpdfium*" -type f -print -quit 2>/dev/null)
+    if [ -z "$extracted_lib" ]; then
+      log_warn "no libpdfium found in extracted archive"
+      return 0
+    fi
+
+    # Move to canonical location
+    mkdir -p "$lib_dir"
+    cp "$extracted_lib" "$lib_dir/"
+    chmod 0755 "$lib_dir"/libpdfium*
+
+    # Write version sentinel
+    echo "$KNOWLEDGE_PDFIUM_VERSION" > "$sentinel"
+    chmod 0644 "$sentinel"
+
+    # M17: post-install integrity check
+    if ! [ -s "$lib_dir/libpdfium.dylib" ] && ! [ -s "$lib_dir/libpdfium.so" ]; then
+      log_warn "pdfium post-install integrity check failed; cleaning up"
+      rm -rf "$target_dir"
+      return 0
+    fi
+
+    log_ok "pdfium binary installed: ${platform} (version ${KNOWLEDGE_PDFIUM_VERSION})"
+    # M13: hash verification deferral
+    # TODO(iter-3): add pdfium-<arch>.tgz.sha256 sidecar verification
+    return 0
+  )
+  return 0  # always succeed (FR-3.5 graceful degradation)
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 install_user_config
 install_knowledge_binary
 register_bash_allowlist
+install_pdfium_binary
 
 if [ "$INIT_PROJECT" = true ]; then
   scaffold_project
