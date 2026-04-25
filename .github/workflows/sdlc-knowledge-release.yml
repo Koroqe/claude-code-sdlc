@@ -66,6 +66,13 @@ jobs:
     name: build (${{ matrix.platform }})
     needs: lint
     runs-on: ${{ matrix.runs-on }}
+    # Windows-x64 is best-effort per iter-3 / iter-3.1 — pdfium-render +
+    # MSVC target combination has unresolved compile-time issues on the
+    # GHA windows-latest runner. The matrix entry stays so the workflow
+    # exercises the Windows path; continue-on-error lets the release job
+    # publish with the 4 GA platforms even when Windows fails. Local
+    # mingw-based GNU builds are the maintainer fallback.
+    continue-on-error: ${{ matrix.platform == 'windows-x64' }}
     permissions:
       contents: read
     strategy:
@@ -286,4 +293,9 @@ jobs:
             dist/sdlc-knowledge-linux-arm64/sdlc-knowledge-linux-arm64
             dist/sdlc-knowledge-windows-x64/sdlc-knowledge-windows-x64.exe
             claude-code-sdlc-${{ steps.source-tarball.outputs.version }}-source.tar.gz
-          fail_on_unmatched_files: true
+          # Windows-x64 build is best-effort (continue-on-error in matrix).
+          # When that build fails, the .exe artifact is missing — we still
+          # publish the release with the 4 GA platforms + source tarball.
+          # Maintainer attaches the local mingw-built Windows binary
+          # manually after the release is created.
+          fail_on_unmatched_files: false
