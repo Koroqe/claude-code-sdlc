@@ -260,17 +260,6 @@ pub fn status_summary(
     })
 }
 
-/// Delete a documents row by integer primary key. Cascades to `chunks` via the
-/// foreign-key constraint; FTS5 trigger fires on each chunk row removed.
-/// Returns the number of `documents` rows deleted (0 or 1).
-pub fn delete_by_id(conn: &Connection, id: i64) -> Result<u64, rusqlite::Error> {
-    let n = conn.execute(
-        "DELETE FROM documents WHERE id = ?1",
-        rusqlite::params![id],
-    )?;
-    Ok(n as u64)
-}
-
 /// FR-4.5 result shape for `delete --by-id`. Serialized to JSON in `output.rs`
 /// as `{"deleted_id": N, "source_path": "...", "chunks_removed": M}`.
 #[derive(Debug, Clone, serde::Serialize)]
