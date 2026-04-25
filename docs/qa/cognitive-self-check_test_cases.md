@@ -261,7 +261,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 
 ## 2. Planner File-Writing Path
 
-### TC-2.1: Planner appends `## Facts` block to `.claude/plan.md` AFTER `## Review Notes`
+### TC-2.1: Planner emits `## Facts` block NEAR THE TOP of `.claude/plan.md` (after inlined upstream sections, before `## Prerequisites verified`)
 - **Category:** File-Writing Agent (Planner)
 - **Mapped UC:** UC-2
 - **Mapped AC:** AC-6, AC-7, AC-9
@@ -271,12 +271,13 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Inputs:** `/bootstrap-feature` for synthetic feature
 - **Steps:**
   1. Run planner; capture `.claude/plan.md`
-  2. `grep -n "^## Review Notes$" .claude/plan.md` -- record line N
-  3. `grep -n "^## Facts$" .claude/plan.md` -- record line M
-  4. Verify M > N (Facts appears after Review Notes)
-  5. Verify the four subsections appear in literal order after `## Facts`
-  6. Run Plan Critic on `.claude/plan.md`; expect no cognitive-self-check findings
-- **Expected Result:** `## Facts` block follows `## Review Notes`; four subsections in order; Plan Critic Check (a) PASS, Check (b) PASS.
+  2. `grep -n "^## Reuse Decisions$" .claude/plan.md` -- record line R (or use line of last inlined upstream section if Reuse Decisions absent)
+  3. `grep -n "^## Prerequisites verified$" .claude/plan.md` -- record line P
+  4. `grep -n "^## Facts$" .claude/plan.md` -- record line F
+  5. Verify R < F < P (Facts appears between the last inlined upstream section and Prerequisites verified)
+  6. Verify the four subsections appear in literal order after `## Facts`
+  7. Run Plan Critic on `.claude/plan.md`; expect no cognitive-self-check findings
+- **Expected Result:** `## Facts` block sits near the top of the plan, after the inlined upstream sections and before `## Prerequisites verified`; four subsections in order; Plan Critic Check (a) PASS, Check (b) PASS.
 - **Pass Criteria:** Plan satisfies FR-2.7 and FR-4.1.
 
 ### TC-2.2: Plan integrates Stripe SDK with proper `### External contracts` citation
@@ -1072,7 +1073,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 
 ## 13. Code-Reviewer Stdout-Only Path
 
-### TC-13.1: Code-reviewer emits `## Facts` AFTER review
+### TC-13.1: Code-reviewer emits `## Facts` BEFORE verdict
 - **Category:** Stdout-Only Agent (Code-Reviewer)
 - **Mapped UC:** UC-13
 - **Mapped AC:** AC-6, AC-7
@@ -1082,8 +1083,8 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Inputs:** Gate 4 invocation
 - **Steps:**
   1. Capture stdout
-  2. Verify `## Facts` block follows review
-- **Expected Result:** Block present at end.
+  2. Verify `## Facts` block appears at the start of stdout, before the review prose and verdict
+- **Expected Result:** Block present at start of stdout, before review prose and verdict.
 - **Pass Criteria:** FR-2.9 satisfied.
 
 ### TC-13.2: Reviewer detects unverified claim in planner's `## Facts`
@@ -1891,7 +1892,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Preconditions:** Plan file written by planner during this feature's bootstrap
 - **Inputs:** `.claude/plan.md`
 - **Steps:**
-  1. `grep -n "^## Facts$" .claude/plan.md` -- expect 1 match at end (after `## Review Notes`)
+  1. `grep -n "^## Facts$" .claude/plan.md` -- expect 1 match near the top (after `## Reuse Decisions`, before `## Prerequisites verified`)
   2. Confirm four subsections
 - **Expected Result:** Plan dogfoods.
 - **Pass Criteria:** planner discipline applied to THIS feature.

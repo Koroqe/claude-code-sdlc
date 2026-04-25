@@ -103,7 +103,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 ### Error Flows
 
-- **UC-1-E1: Architect forgets to emit `## Facts` to stdout** -- The agent skips the protocol; the verdict is emitted but no `## Facts` block follows
+- **UC-1-E1: Architect forgets to emit `## Facts` to stdout** -- The agent skips the protocol; the verdict is emitted but no `## Facts` block precedes it
   1. Steps 1-3 of the primary flow proceed; the agent emits prose + verdict
   2. At Step 4, the agent omits the `## Facts` block entirely
   3. The orchestrator captures the stdout WITHOUT a `## Facts` block
@@ -162,8 +162,8 @@ Every use case below is precise enough for a test to be derived without re-consu
 1. The planner agent loads its prompt; the `## Cognitive Self-Check (MANDATORY)` section is unmissable on a top-to-bottom read per FR-2.15
 2. The agent runs the 4-question self-check protocol per FR-1.2 before writing the plan
 3. The agent reads the PRD section, use-case file, architect's stdout review (captured in transcript), resource-architect's `.claude/resources-pending.md` (if present), role-planner's `.claude/roles-pending.md` (if present), and qa-planner's `docs/qa/<feature>_test_cases.md`
-4. The agent writes the executable plan to `.claude/plan.md` with the standard plan structure (Context, Feature scope, Deliverables checklist, Recommended Resources [if present, inlined per Section 4 FR-2.6], Auto-Install Results [if present, inlined per Section 7 FR-6.7], Additional Roles + Role invocation plan + Reuse Decisions [if present, inlined per Section 5 FR-2.6 / Section 8 FR-8.1], Implementation slices, Risks and dependencies, Verification, Review Notes)
-5. AFTER the `## Review Notes` section, the agent appends a `## Facts` block per FR-2.7 with all four subsections in the literal order:
+4. The agent writes the executable plan to `.claude/plan.md` in the order: Recommended Resources [inlined per Section 4 FR-2.6], Auto-Install Results [inlined per Section 7 FR-6.7], Additional Roles + Role invocation plan + Reuse Decisions [inlined per Section 5 FR-2.6 / Section 8 FR-8.1], `## Facts` block per FR-2.7 (positioned NEAR THE TOP — after the inlined upstream sections, BEFORE `## Prerequisites verified`), then Prerequisites verified, Slices, Risks and dependencies, Verification, Review Notes
+5. The `## Facts` block (emitted in Step 4 above) contains all four subsections in the literal order:
    ```
    ## Facts
 
@@ -187,7 +187,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 10. Bootstrap Step 5 SUCCEEDS; the orchestrator proceeds to Step 6 (planner's Plan Critic Pass) -> Step 7 (implementation begins)
 
 **Postconditions**:
-- `.claude/plan.md` contains a `## Facts` block at the end with all four subsections in FR-1.3 order
+- `.claude/plan.md` contains a `## Facts` block near the top (after inlined upstream sections, before `## Prerequisites verified` per FR-2.7) with all four subsections in FR-1.3 order
 - The Plan Critic ran both Check (a) and Check (b) and produced no findings related to cognitive-self-check
 - The plan is approved for implementation
 
@@ -222,7 +222,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 - **UC-2-E1: Planner omits `## Facts` block entirely** -- The agent finishes `.claude/plan.md` but skips the protocol; no `## Facts` block at the end
   1. Steps 1-4 proceed; the agent writes the plan body
-  2. The agent forgets to append `## Facts` after `## Review Notes`
+  2. The agent forgets to emit `## Facts` between the inlined upstream sections and `## Prerequisites verified`
   3. The orchestrator runs the Plan Critic per the `## Plan Critic Pass (MANDATORY)` rule
   4. Per FR-4.1, the Plan Critic Check (a) scans `.claude/plan.md` for the `## Facts` heading; it does NOT find one
   5. Per FR-4.2, missing `## Facts` block in a current-cycle file-based artifact is a **MAJOR** finding
@@ -758,7 +758,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 3. AFTER `## Auto-Install Results` (or after `## Recommended Resources` if Auto-Install is absent), the agent appends a `## Facts` block per FR-2.12 with all four subsections in literal order
 4. The `### External contracts` subsection cites sources for every recommended resource per FR-2.12 (e.g., the URL of the MCP registry entry, the npm package page)
 5. The orchestrator captures the file; subsequent steps proceed
-6. At Step 5, the planner inlines `## Recommended Resources`, `## Auto-Install Results`, AND the resource-architect's `## Facts` block into `.claude/plan.md` per Section 4 FR-2.6 / Section 7 FR-6.7 (the planner's own `## Facts` block at the end of the plan covers planner-level decisions; the resource-architect's `## Facts` block within the inlined sections covers resource-recommendation decisions)
+6. At Step 5, the planner inlines `## Recommended Resources`, `## Auto-Install Results`, AND the resource-architect's `## Facts` block into `.claude/plan.md` per Section 4 FR-2.6 / Section 7 FR-6.7 (the planner's own `## Facts` block near the top of the plan covers planner-level decisions; the resource-architect's `## Facts` block within the inlined sections covers resource-recommendation decisions)
 7. Plan Critic Check (a) per FR-4.1 confirms `## Facts` presence in `.claude/plan.md` (the planner's terminal block satisfies this); the resource-architect's inlined block is ALSO present
 8. Plan Critic Check (b) per FR-4.3 scans the inlined `## Recommended Resources` content for external API/SDK identifiers; finds them cited in the resource-architect's inlined `### External contracts`. PASS
 
