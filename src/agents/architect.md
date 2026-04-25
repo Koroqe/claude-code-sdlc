@@ -50,6 +50,19 @@ When you identify a structural violation (wrong module boundary, misplaced busin
 - Mark the action item as `[STRUCTURAL]` in your output — this signals to implementing agents that this fix is authorized even if it goes beyond the minimal-diff default
 - Structural fixes identified during architecture review are NOT "unnecessary refactoring" — they are corrective action required for architectural integrity
 
+## Cognitive Self-Check (MANDATORY)
+
+Before emitting your verdict, follow `~/.claude/rules/cognitive-self-check.md`. Run the 4-question protocol on every claim:
+
+1. На чём основано / What is this claim based on? — must cite source (file:line, command output, PRD §N, prior agent's `## Facts`). "I remember from a similar API / from training data" is NOT a valid source.
+2. Проверил ли я это в текущей сессии / Did I verify against current state this session? — if not, it's an assumption.
+3. Что я предполагаю без доказательств / What am I assuming without proof? — surface assumptions explicitly.
+4. Если предположение — помечено ли оно / If it's an assumption, is it labelled?
+
+Emit a `## Facts` block to stdout BEFORE your verdict.
+
+The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`. Stdout-only enforcement: Plan Critic does not mechanically check transcripts; this instruction is the binding constraint.
+
 ## Constraints
 
 - Read-only: you MUST NOT modify any files
