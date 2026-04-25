@@ -2970,3 +2970,490 @@ Not applicable. This project is a collection of markdown prompt files and a CLI;
 - **Open Question #3 — sha256 verification of the PDFium download.** RESOLVED — DEFERRED to iter-3 per 12.7 item 1 (mirrors §11 iter-1's sdlc-knowledge binary sha256 deferral).
 - **Open Question #4 — Windows binary support.** RESOLVED — OUT OF SCOPE per 12.7 item 3 (consistent with §11 NFR-1.4).
 - **Open Question #5 — Coupling Gate 9 release-engineer to the PDFium binary version bump.** RESOLVED — OUT OF SCOPE per 12.7 item 6 (consistent with §11 FR-12.4).
+
+## 13. Auto-Release Pipeline — Executing-Mode Tagging, Cross-Platform Prebuilt Binaries, and Pre-Push Hooks
+
+**Status:** [IN DEVELOPMENT]
+**Date:** 2026-04-26
+**Priority:** High
+**Related:** Section 11 (Local Knowledge Base for SDLC Agents — iter-1 of `sdlc-knowledge`; this section bootstraps the FIRST `sdlc-knowledge-v0.2.0` release tag that `install.sh` line 368 has been pointing at since §11 shipped, finally closing the chicken-and-egg gap that has been forcing `cargo_source_build_fallback` on every fresh install). Section 12 (Robust PDF Extraction via pdfium-render — iter-2 of the same tool; this section adds Windows to the platform matrix that §12 left at four targets per §12 NFR-7 / 12.7 item 3, and the §12 PDFium binary download in `install.sh:489-613` is the precedent shape for the prebuilt-binary download path of FR-4 below). Section 6 (Changelog Release Packaging — iter-2 of Feature #3; release-engineer Gate 9 is currently SUGGEST-ONLY per the `## NEVER List` at `src/agents/release-engineer.md:67-84` and §6 FR-3.4 / FR-5.6 — this section flips Gate 9 to EXECUTING-MODE under tier-based authority gradation, mirroring resource-architect's iter-2 contract). Section 7 (Resource Manager-Architect — Iteration 2: Auto-Install — the four-tier authority model `Trivial | Moderate | Sensitive | Forbidden` defined at `src/agents/resource-architect.md:185-260` is the SOURCE PATTERN this section adapts for release publication; FR-1 below maps each release operation to one of these four tiers using the same anchored-regex whitelist + headless contract pattern from §7 FR-5). Section 9 (Cognitive Self-Check Protocol — `## Facts` discipline applies; this section's `### External contracts` cite all GitHub Actions identifiers and the `softprops/action-gh-release@v2` action). Section 3 (FR-3 PRD Changelog Field — this section includes the field; this section also dogfoods Section 3 by opting the SDLC core repo INTO the changelog feature it has shipped to downstream projects since iter-1).
+
+Changelog: Users running `bash install.sh` now receive prebuilt `sdlc-knowledge` binaries in seconds on macOS, Linux, and Windows instead of waiting for cargo to compile from source.
+
+### 13.1 Overview
+
+**Problem (evidence from previous iters).** Three intertwined gaps surfaced during iter-1 (§11) and iter-2 (§12) live testing:
+
+1. **First-release chicken-and-egg.** §11 FR-11 shipped a complete cross-platform release workflow at `.github/workflows/sdlc-knowledge-release.yml`, but the workflow only fires on `sdlc-knowledge-v*` tag pushes — and no maintainer has ever pushed that tag. `install.sh:368` therefore hits a 404 on `https://github.com/<owner>/<repo>/releases/download/sdlc-knowledge-v0.1.0/sdlc-knowledge-<platform>` on every install, falls through to `cargo_source_build_fallback` at `install.sh:411`, and silently requires every user to have `cargo` available locally. The iter-1 release infrastructure works in principle but has never executed in production because cutting the first tag is friction the maintainer has not paid.
+2. **§12 inherits the gap.** §12 added PDFium binary download alongside the missing `sdlc-knowledge` binary download. `install_pdfium_binary` at `install.sh:489-613` works (the `bblanchon/pdfium-binaries` upstream tag `chromium/7802` is reachable). But the companion `sdlc-knowledge` binary is still missing for the same chicken-and-egg reason — so a fresh install needs cargo AND PDFium, instead of just PDFium.
+3. **`install.sh:25` REPO_URL is wrong.** `REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"` was set when the project was scoped to a different GitHub owner; the actual remote is `codefather-labs/claude-code-sdlc.git`. The owner-derivation at `install.sh:367` (`echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||'`) computes `Koroqe/claude-code-sdlc`, which 404s on every release-asset URL. Even after the first tag is cut, `install.sh` would not find the asset at the URL it constructs. This is a pre-existing bug independent of the chicken-and-egg gap and must be fixed in lock-step.
+
+**Solution.** Three coordinated changes that close the loop end-to-end.
+
+1. **Flip Gate 9 release-engineer from suggest-only to executing-mode** under a four-tier authority gradation that mirrors `resource-architect.md:185-260` byte-for-byte in shape. The current `release-engineer.md:67-84` `## NEVER List` enumerates 13 forbidden commands (`git push`, `git tag`, `gh release create`, `npm publish`, `cargo publish`, `pypi upload`, etc.) and refuses to execute any of them. After this section ships, the agent classifies each command into Trivial / Moderate / Sensitive / Forbidden and uses an anchored-regex whitelist plus the same headless-contract pattern as §7 FR-5.4 to either auto-execute (Trivial), execute after per-item user approval (Moderate), require explicit user approval per Rule 4 escalation (Sensitive), or refuse entirely (Forbidden). The four-tier model is THE proven precedent in this codebase — see `src/agents/resource-architect.md:201-220` for the canonical decision table.
+
+2. **Add Windows to the cross-platform matrix and bootstrap the first release tag.** The §11 / §12 release workflow currently builds four platforms (`darwin-arm64` / `darwin-x64` / `linux-x64` / `linux-arm64` per `.github/workflows/sdlc-knowledge-release.yml:64-75`). This section adds `windows-x64` (target `x86_64-pc-windows-msvc` on `windows-latest`), bringing the matrix to FIVE platforms. A one-shot bootstrap pass cuts the FIRST `sdlc-knowledge-v0.2.0` tag (the next version after the §12 NFR-9 bump from 0.1.0 → 0.2.0), uploads all five binaries plus a source tarball to GitHub Releases, and updates `install.sh` to download the prebuilt binary as the PRIMARY path with `cargo_source_build_fallback` demoted to a true fallback (only invoked when the host platform is not in the matrix or the network is unavailable).
+
+3. **Dogfood Section 3 on the SDLC core repo.** The SDLC core ships `templates/rules/changelog.md` to every downstream project (per Section 3 FR-4.4 and `templates/rules/changelog.md:37-39` "the presence of this file at `.claude/rules/changelog.md` is the sole signal the `changelog-writer` agent uses to decide whether to run; absence equals opt-out"). The SDLC core repo itself does NOT have `.claude/rules/changelog.md` — it ships the rule to others without using it. This section opts the SDLC core repo INTO its own feature: install the sentinel into the SDLC core's `.claude/rules/`, add a root `CHANGELOG.md` with `[Unreleased]` and the first dated section for this auto-release feature, and let the dogfooded pipeline produce the SDLC core's own release notes from this point forward.
+
+**Why now.** This is the first iteration where ALL the pieces required to execute a real release exist:
+
+- §11 ships the cross-platform workflow file (just needs a tag to fire).
+- §12 ships the PDFium binary download path (just needs the companion `sdlc-knowledge` binary download to be primary).
+- §6 (Changelog Release Packaging iter-2) ships the release-engineer agent that knows how to compute version bumps, rename `[Unreleased]`, and provision `release.yml` (just needs to be flipped to executing-mode).
+- §7 (Resource Auto-Install iter-2) ships the four-tier authority model that gives release-engineer a known-good template for executing dangerous commands safely (just needs to be lifted into release-engineer's prompt).
+- The `templates/rules/changelog.md` opt-in mechanism (Section 3 FR-4.4) ships and is the sole dependency for dogfooding.
+
+Iter-3 connects these existing pieces into a working end-to-end pipeline. No new external dependencies. No new agents. No new gates. The 17-agent / 10-gate / 5-executor invariants are PRESERVED (FR-12 below).
+
+**Two version trains.** This section operates over TWO independent version trains and must not conflate them:
+
+- **`sdlc-knowledge` tool version** — currently `0.1.0` per `tools/sdlc-knowledge/Cargo.toml:3`, bumping to `0.2.0` per §12 NFR-9. Released under the `sdlc-knowledge-v<X.Y.Z>` tag scheme. Targets the `.github/workflows/sdlc-knowledge-release.yml` workflow already in the repo.
+- **SDLC core version** — currently `2.1.0` per `install.sh:22`. Released under the bare `v<X.Y.Z>` tag scheme (the §6 release-engineer's default per `release-engineer.md:26` `Glob('.git/refs/tags/v*.*.*')`). Targets a NEW workflow file `.github/workflows/sdlc-core-release.yml` introduced by FR-11.
+
+The two workflows share their trigger pattern, build-and-upload shape, and `softprops/action-gh-release@v2` step, but they fire on disjoint tag prefixes and produce disjoint GitHub Release pages. FR-11 below documents the dual-tag scheme explicitly so the Plan Critic does not flag it as a conflict.
+
+### 13.2 User Stories
+
+1. **As the maintainer of `codefather-labs/claude-code-sdlc` cutting the FIRST `sdlc-knowledge-v0.2.0` release**, I want the release-engineer agent at `/merge-ready` Gate 9 to execute `git tag -a sdlc-knowledge-v0.2.0 -F .claude/release-notes-0.2.0.md` and `git push origin sdlc-knowledge-v0.2.0` for me (after I approve the Sensitive-tier prompt) so the GitHub Actions release workflow at `.github/workflows/sdlc-knowledge-release.yml` finally fires on a real tag and uploads the five-platform binary set to GitHub Releases — closing the chicken-and-egg gap that has been silently blocking every `install.sh` invocation since §11 shipped.
+
+2. **As a downstream developer working on a feature branch**, I want my project's `/merge-ready` Gate 9 to package the release locally (CHANGELOG date-stamp, release-notes file, version-source bump), automatically run a pre-push validation (typecheck + tests + lint), and then execute the actual `git tag` + `git push` for me when the project is opted in via `.claude/rules/auto-release.md` — so I do not have to copy-paste the structured-summary commands block by hand on every release.
+
+3. **As a Linux-x64 user running `bash install.sh --yes` for the first time**, I want the installer to download the prebuilt `sdlc-knowledge-linux-x64` binary in under 60 seconds instead of forcing me to install Rust and wait for cargo to compile the binary from source — and when the prebuilt binary is unavailable for my platform (e.g., I am on a fresh musl-libc Alpine container), I want the cargo source-build fallback to kick in transparently with a clear log line.
+
+4. **As a CI bot running `/merge-ready` in headless mode** (`AUTO_RELEASE=1` env var set, no interactive TTY), I want release-engineer to auto-execute Trivial-tier and Moderate-tier release commands without prompts (CHANGELOG rewrite, version-source bump, local annotated tag creation), but to refuse Sensitive-tier `git push` operations entirely under headless mode — mirroring `resource-architect.md`'s headless contract from §7 FR-5.5 — so an unattended pipeline cannot accidentally publish to a remote.
+
+5. **As a multilingual project releasing a Russian-language `CHANGELOG.md`** (the project's `.claude/rules/changelog.md` is opted in, the changelog body is authored in Russian per the project's locale), I want the release-engineer agent to byte-preserve the Cyrillic content during the `[Unreleased]` → `[X.Y.Z]` rename and the release-notes file write — UTF-8 boundary safety mirrors §11 FR-2.3's chunker invariant, and the structured summary's commands block must not corrupt non-ASCII characters in `git tag -a -F <release-notes-file>`.
+
+### 13.3 Functional Requirements
+
+#### FR-1: Release-Engineer Executing Mode (Tier-Based Authority)
+
+The release-engineer agent at `src/agents/release-engineer.md` is upgraded from suggest-only (current `## NEVER List` posture) to executing-mode under a four-tier authority gradation that mirrors `resource-architect.md:185-260` byte-for-byte in shape.
+
+1. **FR-1.1: Tool allowlist expansion.** The agent's frontmatter `tools:` line MUST gain `Bash` (it currently lists `["Read", "Write", "Edit", "Glob", "Grep"]` per `release-engineer.md:4`). The frontmatter constraint that previously enforced "no Bash, no network" via tool removal is replaced by a prompt-body anchored-regex whitelist plus tier dispatch.
+
+2. **FR-1.2: Four-tier authority gradation — verbatim.** Every release operation MUST be classified into exactly one of `Trivial | Moderate | Sensitive | Forbidden` per the same most-restrictive-applicable-tier rule defined at `resource-architect.md:222`. The release-engineer's tier table is:
+
+   | # | Operation | Tier | Notes |
+   |---|-----------|------|-------|
+   | 1 | Rewrite `CHANGELOG.md` `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` and insert fresh empty `[Unreleased]` | Trivial | Already in scope per §6; idempotent file-write |
+   | 2 | Write `.claude/release-notes-<X.Y.Z>.md` | Trivial | New file under project CWD; reversible by deletion |
+   | 3 | Provision `.github/workflows/release.yml` when ABSENT | Trivial | Already in scope per §6; idempotent file-write |
+   | 4 | Bump version-source file (`package.json`, `pyproject.toml`, `Cargo.toml`, `VERSION`) | Moderate | Mutates the project's lockfile reference; per-item approval |
+   | 5 | `git add CHANGELOG.md release-notes-<X.Y.Z>.md` + `git commit -m "chore(release): <X.Y.Z>"` | Moderate | Local-only mutation; per-item approval |
+   | 6 | `git tag -a <prefix>v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md` (annotated local tag) | Moderate | Local-only mutation; per-item approval |
+   | 7 | `git push origin <branch>` (push current branch) | Sensitive | Remote mutation; explicit user approval; refused under `AUTO_RELEASE=1` headless |
+   | 8 | `git push origin <prefix>v<X.Y.Z>` (push tag — fires the GH Actions workflow) | Sensitive | Remote mutation; explicit user approval; refused under `AUTO_RELEASE=1` headless |
+   | 9 | `gh release create` (manual GH Release page mutation) | Forbidden | The GH Actions workflow file does this on tag push; manual `gh release create` is redundant and bypasses CI verification — never executed |
+   | 10 | `npm publish` / `cargo publish` / `gem push` / `pypi upload` / `twine upload` | Forbidden | Public-registry publication; iter-3 OUT OF SCOPE per 13.7 item 1 |
+   | 11 | Force-push (`git push --force` / `git push -f` / `git push +<ref>`) | Forbidden | Destructive remote-state mutation; never executed |
+   | 12 | `git push origin main` / `git push origin master` (push to default branch) | Sensitive | Direct-to-default-branch push; explicit user approval; refused under headless mode |
+
+   When a recommendation matches multiple rows, apply the most-restrictive-applicable-tier (verbatim contract from `resource-architect.md:222`).
+
+3. **FR-1.3: Anchored-regex whitelist (defense-in-depth).** Before executing ANY shell command via `Bash`, the agent MUST validate the command against a hardcoded anchored-regex whitelist. The whitelist is a list of `^...$` regexes; commands that do not exactly match an entry are REFUSED with the literal stderr line `error: command not in release-engineer whitelist: <command>` and the run aborts. The eight anchored regexes are: (a) `^git add CHANGELOG\.md( \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md)?$`; (b) `^git commit -m "chore\(release\): [0-9]+\.[0-9]+\.[0-9]+"$`; (c) `^git tag -a (sdlc-knowledge-)?v[0-9]+\.[0-9]+\.[0-9]+ -F \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md$`; (d) `^git push origin (sdlc-knowledge-)?v[0-9]+\.[0-9]+\.[0-9]+$`; (e) `^git push origin (feat|fix|chore)/[a-z0-9-]+$`; (f) `^npm version (patch|minor|major)$`; (g) `^cargo set-version [0-9]+\.[0-9]+\.[0-9]+$`; (h) `^poetry version (patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$`. Any command containing shell metacharacters (`;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `<`) MUST be REFUSED unconditionally — the agent never composes commands; it executes literal patterns from the whitelist.
+
+4. **FR-1.4: Headless contract (`AUTO_RELEASE=1`).** When the environment variable `AUTO_RELEASE=1` is set, the agent operates in headless mode mirroring `resource-architect.md`'s headless contract per §7 FR-5.5:
+   - **Trivial** operations execute without prompt.
+   - **Moderate** operations execute without prompt (no per-item approval needed; the env var is the implicit batch approval signal).
+   - **Sensitive** operations are REFUSED with the literal line `aborted-headless-sensitive: <operation> requires interactive approval; rerun without AUTO_RELEASE=1` and the run exits 0 (NOT 1 — headless skip is not an error per §7 FR-5.5 contract). The structured summary's `Warnings` section records the skipped operation so a human follow-up run can complete it.
+   - **Forbidden** operations are REFUSED unconditionally (independent of headless state) with the literal line `aborted-forbidden: <operation> never executed`.
+
+   When `AUTO_RELEASE` is unset or set to any value other than the literal string `1`, the agent operates in interactive mode and prompts on each Sensitive-tier operation.
+
+5. **FR-1.5: Per-tier prompt format (interactive mode).** For each Sensitive-tier operation in interactive mode, the agent MUST emit a labeled prompt of the form:
+   ```
+   [Sensitive — release-engineer] About to execute: <verbatim-command>
+     Tier rationale: <one-line tier table justification from FR-1.2>
+     Reversibility: <e.g., "git tag -d <tag> + git push origin --delete <tag>" | "non-reversible without remote support">
+   Approve? [y/N]:
+   ```
+   The exact byte shape mirrors `resource-architect.md`'s per-item approval prompt format (anchored to enable Plan Critic grep). A response other than the literal lowercase `y` followed by newline is treated as DENY and the operation is skipped per FR-1.4 Sensitive-skip semantics.
+
+6. **FR-1.6: Authority Boundary expansion.** The current `release-engineer.md:32-59` `## Authority Boundary` is updated to add a fourth set: EXECUTE-allowed paths (the project CWD's `.git/` for `git tag`/`git push` operations through Bash; the project's version-source file via project-specific bumper commands per FR-1.3 entry (f)/(g)/(h)). The previously WRITE-allowed and READ-only sets are PRESERVED byte-for-byte. The previously FORBIDDEN set EXPANDS to add `npm publish`, `cargo publish`, `gem push`, `pypi upload`, `twine upload`, `gh release create`, force-push variants — these are the FR-1.2 row 9-11 operations.
+
+7. **FR-1.7: NEVER List shrinkage.** The current `release-engineer.md:67-84` `## NEVER List` (13 forbidden commands) is REWRITTEN to enumerate only the FR-1.2 Forbidden-tier operations (rows 9-11): registry publishes, force-pushes, `gh release create`. The other commands (`git push`, `git tag`, `git push origin <tag>`) move from NEVER to Sensitive-tier with explicit-approval semantics. This is the central behavior change of FR-1.
+
+8. **FR-1.8: Output Contract preserved.** The agent's structured 10-section summary contract from `release-engineer.md:118+` is PRESERVED. The `Commands to run` section is no longer purely informational — it now ALSO indicates which commands the agent has executed in the current run vs. which remain for the developer (e.g., for a Sensitive-tier skip under headless mode). A new `Tier breakdown` section is appended after `Warnings` summarizing how many operations fired in each tier this run (`<N> Trivial; <N> Moderate; <N> Sensitive (auto-approved); <N> Sensitive (skipped); <N> Forbidden (refused)`), mirroring the §7 FR-2.5 breakdown line shape.
+
+#### FR-2: CHANGELOG → Tag Annotation → GitHub Release Body Pipeline
+
+The release pipeline is wired end-to-end so the CHANGELOG `[X.Y.Z]` body becomes the tag annotation message AND the GitHub Release page body, with no intermediate hand-editing.
+
+1. **FR-2.1:** When `release-engineer` renames `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` per §6 FR-2 (UNCHANGED), it MUST also write a new file at `.claude/release-notes-<X.Y.Z>.md` containing the body of the freshly renamed `[X.Y.Z]` section verbatim (category subheadings + entries; NOT the `[X.Y.Z] - YYYY-MM-DD` heading itself). This mirrors the existing §6 contract — UNCHANGED in shape.
+
+2. **FR-2.2:** The annotated tag created via `git tag -a <prefix>v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md` (FR-1.2 row 6) MUST consume the release-notes file as the tag message. Per `git-tag(1)` documentation, `-F <file>` reads the message verbatim including UTF-8 multibyte characters; the multilingual user story (§13.2 #5) depends on this UTF-8 preservation.
+
+3. **FR-2.3:** The GitHub Actions release workflow's `softprops/action-gh-release@v2` step MUST set its `body_path:` field to `.claude/release-notes-<X.Y.Z>.md` (relative to the repo root) so the GitHub Release page body is the same byte content as the CHANGELOG `[X.Y.Z]` body and the tag annotation. Per FR-11.1 below, BOTH workflow files (`sdlc-knowledge-release.yml` and `sdlc-core-release.yml`) get this addition.
+
+4. **FR-2.4:** The release-notes file MUST NOT be mutated after tag-creation. Once the tag exists, the file is immutable — re-running `/merge-ready` on an already-released version produces the SKIPPED outcome per §6 FR-7.2 (CHANGELOG `[Unreleased]` is empty after the prior run); the existing file at `.claude/release-notes-<X.Y.Z>.md` is left in place as historical record.
+
+#### FR-3: Cross-Platform Binary Matrix — Add Windows-x64
+
+The §11 FR-11 / §12 FR-7 matrix expands from four platforms to five, adding `windows-x64`.
+
+1. **FR-3.1:** `.github/workflows/sdlc-knowledge-release.yml:62-75` matrix `include:` MUST gain a fifth entry: `platform: windows-x64`, `runs-on: windows-latest`, `target: x86_64-pc-windows-msvc`. The existing four entries are BYTE-UNCHANGED.
+
+2. **FR-3.2:** The `Determine pdfium asset name` step at `sdlc-knowledge-release.yml:91-101` MUST gain a fifth case branch: `windows-x64) echo "asset=pdfium-win-x64.tgz" >> "$GITHUB_OUTPUT" ;;`. The four existing branches are BYTE-UNCHANGED. (The `bblanchon/pdfium-binaries` upstream ships `pdfium-win-x64.tgz` per the same release scheme as the four existing assets — verified: no — assumption per `## Facts` below.)
+
+3. **FR-3.3:** The `Download pdfium dynamic library` step at `sdlc-knowledge-release.yml:103-116` MUST work on Windows runners. The `shell: bash` directive (already on the step per line 107) routes through `bash` even on `windows-latest` (Git for Windows is preinstalled on the runner), so the `curl` + `tar` + `find` + `cp` invocations work without modification. The library extraction target `$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/` MUST resolve to the user's Windows home path (`C:/Users/runneradmin/.claude/...`). The library filename on Windows is `pdfium.dll` (NOT `libpdfium.dll`) — the `find -name 'libpdfium*'` glob at line 115 MUST be widened to `-name 'pdfium*' -name 'libpdfium*'` style alternation to capture both naming conventions.
+
+4. **FR-3.4:** The `Cargo build (release)` step MUST work on `windows-latest` with target `x86_64-pc-windows-msvc`. This requires the MSVC toolchain (`cl.exe` linker) — `dtolnay/rust-toolchain@stable` per `sdlc-knowledge-release.yml:81-83` configures `cargo` for the target but does not install MSVC; the `windows-latest` runner image preinstalls the Visual Studio 2022 Build Tools, so the linker is available without a separate setup step. **Verified: no — assumption** per `## Facts`.
+
+5. **FR-3.5:** The artifact upload at `sdlc-knowledge-release.yml:163-176` MUST stage the Windows binary at `dist/sdlc-knowledge-windows-x64.exe` (NOTE: the `.exe` suffix — Cargo emits the binary with the `.exe` extension on `*-pc-windows-*` targets; the staging copy line at 168 MUST use `cp "$BIN.exe" "dist/sdlc-knowledge-${{ matrix.platform }}.exe"` for the Windows branch, gated by an `if: matrix.platform == 'windows-x64'` step or by inline shell branching).
+
+6. **FR-3.6:** The release job's `files:` list at `sdlc-knowledge-release.yml:208-213` MUST gain a fifth line: `dist/sdlc-knowledge-windows-x64/sdlc-knowledge-windows-x64.exe`. The four existing lines are BYTE-UNCHANGED.
+
+7. **FR-3.7:** The release job MUST ALSO upload a source tarball asset (`sdlc-knowledge-source-<X.Y.Z>.tar.gz`) created by `git archive --format=tar.gz --prefix=sdlc-knowledge-<X.Y.Z>/ -o dist/sdlc-knowledge-source-<X.Y.Z>.tar.gz HEAD` so users on platforms not in the matrix (e.g., FreeBSD, Alpine musl, linux-arm32) can build from source via `cargo install --path .` after extraction. The source tarball is appended to the `files:` list as the sixth asset.
+
+#### FR-4: install.sh Prebuilt-Binary Download Path (Replace Cargo as Primary)
+
+`install.sh:332-406` `install_knowledge_binary` is updated so the prebuilt-binary download is the PRIMARY path (no longer falls through to `cargo_source_build_fallback` on every install) once the first release tag exists.
+
+1. **FR-4.1:** `install.sh:354-363` `case "$(uname -ms)"` MUST gain a fifth branch: `"MINGW64_NT-* x86_64") platform="windows-x64" ;;`. The existing four branches are BYTE-UNCHANGED. (Git Bash on Windows reports `uname -s` as `MINGW64_NT-10.0` or similar — verified: no — assumption per `## Facts`. If the actual `uname -s` shape on Windows runners differs, the architect Step 3 picks the correct allowlist pattern before Slice 4 ships.)
+
+2. **FR-4.2:** The asset URL at `install.sh:368` constructs `https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}` — UNCHANGED in shape. After FR-5 below fixes `REPO_URL` to `codefather-labs/claude-code-sdlc.git` and FR-6 below cuts the FIRST `sdlc-knowledge-v0.2.0` tag, the URL resolves to a real asset on every fresh install.
+
+3. **FR-4.3:** For the Windows branch, the asset URL MUST append `.exe` to the platform suffix: `sdlc-knowledge-windows-x64.exe`. The existing four platforms append nothing (the binaries are extension-less on Unix). Conditional construction MUST be done with an `if [ "$platform" = "windows-x64" ]; then suffix=".exe"; else suffix=""; fi` block before URL composition.
+
+4. **FR-4.4:** The `cargo_source_build_fallback` at `install.sh:411` is PRESERVED byte-for-byte as the secondary path. It is invoked only when (a) the prebuilt-binary download fails (network outage, asset 404, sha256 mismatch in iter-4), (b) the host platform is not in the FR-4.1 allowlist (e.g., FreeBSD, linux-arm32), or (c) `--version` smoke-test fails on the downloaded binary per `install.sh:396-401`. The fallback's existence is the safety net that lets the prebuilt path be PRIMARY without breaking edge-case platforms.
+
+5. **FR-4.5:** Re-running `bash install.sh --yes` on a host where `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` already returns the `KNOWLEDGE_VERSION` string MUST be a no-op (no re-download, no rebuild) per `install.sh:343-350` (UNCHANGED idempotency check).
+
+6. **FR-4.6:** When the prebuilt binary download succeeds, the install summary at the end of `install.sh` MUST report the platform tag and the resolved release version (e.g., `tools/sdlc-knowledge/sdlc-knowledge (linux-x64 — sdlc-knowledge-v0.2.0 prebuilt)`). When the cargo-source fallback runs, the summary continues to report `tools/sdlc-knowledge/sdlc-knowledge (built from source)` per `install.sh:441` (UNCHANGED).
+
+#### FR-5: install.sh REPO_URL Fix
+
+The pre-existing bug at `install.sh:25` is fixed in lock-step with the auto-release feature so the FR-4 download path resolves to the correct GitHub owner.
+
+1. **FR-5.1:** `install.sh:25` MUST change from `REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"` to `REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"`. The change is one line.
+
+2. **FR-5.2:** The Quick install URL in the comment block at `install.sh:12` (`curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash`) MUST be updated to `curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash` for consistency.
+
+3. **FR-5.3:** All other occurrences of the literal string `Koroqe` in the repo MUST be audited. `grep -r 'Koroqe' .` MUST return zero matches after this section ships. (Pre-flight verification: a single `grep` over the repo at section-author time identifies any other occurrences for the implementer to fix in Slice 5.)
+
+4. **FR-5.4:** The fix is BACKWARD-INCOMPATIBLE for any existing checkout that hardcoded the old `REPO_URL` value (e.g., a maintainer's local script that read `REPO_URL` and forwarded it elsewhere). Risk R-3 below documents the migration. A repo-root `MIGRATION.md` SHOULD note "if you forked the repo before <merge-date>, update your local checkout's `install.sh:25` REPO_URL to `codefather-labs/claude-code-sdlc.git`".
+
+5. **FR-5.5:** README.md badges, Quick install instructions, and any other top-level documentation referencing the old GitHub owner MUST be updated. The README taglines at lines 5 and 35 MUST be BYTE-UNCHANGED (consistent with §11 FR-12.1 / FR-12.2 / §12 FR-9.4).
+
+#### FR-6: Bootstrap First Release for sdlc-knowledge Tool
+
+A one-shot bootstrap pass cuts the FIRST `sdlc-knowledge-v0.2.0` tag (resolving R-7 below — the same chicken-and-egg risk that §11 R-2 / §12 R-2 documented but did not action).
+
+1. **FR-6.1:** A new `install.sh` function `bootstrap_first_release` MUST be added (at the end of the install.sh function block, before the `# Main` section). It is invoked ONLY when `--bootstrap-release <X.Y.Z>` is passed as a command-line flag — it is NOT invoked on a normal install. The flag is documented in `print_help` at `install.sh:47-80`.
+
+2. **FR-6.2:** The bootstrap function MUST verify pre-conditions: (a) the current directory is the SDLC core repo (heuristic: `Cargo.toml` exists at `tools/sdlc-knowledge/Cargo.toml` AND `.git` exists at the repo root); (b) the working tree is clean (`git status --porcelain` returns empty); (c) the supplied `<X.Y.Z>` matches the version in `tools/sdlc-knowledge/Cargo.toml:3` (so the tag is consistent with the source tree). Failure on any pre-condition exits 1 with a clear stderr message and DOES NOT mutate state.
+
+3. **FR-6.3:** The bootstrap function MUST execute the FR-1.2 Sensitive-tier sequence: (a) create `.claude/release-notes-<X.Y.Z>.md` from a brief stub summarizing the iter-1 + iter-2 + iter-3 cumulative changes (the maintainer hand-edits this stub before the next step); (b) `git tag -a sdlc-knowledge-v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md`; (c) `git push origin sdlc-knowledge-v<X.Y.Z>`. The bootstrap-flag invocation BYPASSES the `release-engineer` agent (the agent is for release-engineer Gate 9 in normal `/merge-ready` runs); the bootstrap is a one-time install.sh operation gated by the `--bootstrap-release` flag.
+
+4. **FR-6.4:** The bootstrap function MUST emit the literal warning `[BOOTSTRAP] this is a one-time first-release operation; subsequent releases use /merge-ready Gate 9 with release-engineer in executing mode (FR-1)` to stderr before executing the tag/push. This signals to the maintainer that the next release flows through release-engineer, not through `--bootstrap-release`.
+
+5. **FR-6.5:** The bootstrap flag MUST NOT push if the user replies anything other than `y` to the literal prompt `[BOOTSTRAP] About to execute: git push origin sdlc-knowledge-v<X.Y.Z> — this fires the GH Actions release workflow at .github/workflows/sdlc-knowledge-release.yml. Approve? [y/N]:`. The prompt format mirrors FR-1.5.
+
+#### FR-7: SDLC Core CHANGELOG Opt-In
+
+The SDLC core repo opts INTO the changelog feature it ships to downstream projects, dogfooding Section 3.
+
+1. **FR-7.1:** The file `.claude/rules/changelog.md` MUST be created at the SDLC core repo root, byte-identical to `templates/rules/changelog.md` (line-by-line copy). This is the activation sentinel per `templates/rules/changelog.md:37-39`.
+
+2. **FR-7.2:** A new file `.claude/rules/auto-release.md` MUST be created at the SDLC core repo root, codifying the executing-mode contract from FR-1 in rule form. Contents: the FR-1.2 tier table, the FR-1.3 anchored-regex whitelist, the FR-1.4 headless contract, and the FR-1.5 prompt format. The file is the runtime source-of-truth for the release-engineer's executing-mode behavior; the agent prompt at `src/agents/release-engineer.md` references it.
+
+3. **FR-7.3:** `templates/rules/auto-release.md` MUST be created as a sibling to `templates/rules/changelog.md`, byte-identical to FR-7.2's `.claude/rules/auto-release.md`. The template is what `install.sh --init-project` installs into downstream projects. Like the changelog rule (Section 3 FR-4.4), the presence of `.claude/rules/auto-release.md` in a downstream project is the OPT-IN sentinel — absence preserves §6's suggest-only behavior byte-for-byte.
+
+4. **FR-7.4:** A new `CHANGELOG.md` MUST be created at the SDLC core repo root with two sections: (a) `## [Unreleased]` (empty); (b) `## [3.0.0] - 2026-04-26 — Auto-Release Pipeline` (per Section 3 Keep-a-Changelog format) summarizing FR-1 through FR-12 of THIS section in user-facing language. The version `3.0.0` reflects the major-version bump from the current `install.sh:22 VERSION="2.1.0"` because executing-mode flips a previously suggest-only contract — this is a breaking authority-boundary change and SemVer demands a major bump.
+
+5. **FR-7.5:** `install.sh:22` MUST be updated from `VERSION="2.1.0"` to `VERSION="3.0.0"` to match FR-7.4. The `print_help` cat-heredoc at `install.sh:48-80` MUST also have its first line updated from `Claude Code SDLC Installer v2.1.0` to `Claude Code SDLC Installer v3.0.0`.
+
+6. **FR-7.6:** The README.md MUST be updated to add ONE row to the existing Hardening table referencing this iter-3 auto-release feature. The README taglines at lines 5 and 35 MUST be BYTE-UNCHANGED (consistent with FR-12 invariants).
+
+#### FR-8: Pre-Push Integration
+
+Gate 9 release-engineer runs as part of `/merge-ready` AND a lightweight pre-push validation runs before any `git push` invocation in downstream projects.
+
+1. **FR-8.1:** A new pre-push validation function `pre_push_validate` MUST be added to the release-engineer's executing-mode flow. It runs IMMEDIATELY before any FR-1.2 row 7 / row 8 (`git push origin <branch>` / `git push origin <tag>`) execution. The validation runs the project's typecheck, test, and lint commands as specified in `./CLAUDE.md` `## Commands` section (the same conventions consumed by `build-runner` at Gate 6).
+
+2. **FR-8.2:** Validation failure MUST abort the push. The agent emits `pre-push validation failed: <command> exited <N>` and skips the push (Sensitive-tier deny semantics per FR-1.4). The CHANGELOG / release-notes / tag artifacts already created in earlier FR-1.2 rows are PRESERVED — they are local mutations and the developer can fix the validation failure and re-run `/merge-ready` (the prior tag is reused; tag creation is idempotent because `git tag -a <name>` exits non-zero if the tag exists, and the release-engineer detects this and reuses the existing tag).
+
+3. **FR-8.3:** Pre-push validation is OPTIONAL for the SDLC core repo itself (no `npm test` / `pytest` / `cargo test` setup at the repo root because the SDLC core ships markdown agent prompts, not application code; the only Rust crate is `tools/sdlc-knowledge/`). When the project root has no `## Commands` block in `./CLAUDE.md`, the validation is SKIPPED with the literal log line `pre-push validation skipped: no Commands block in ./CLAUDE.md`.
+
+4. **FR-8.4:** Pre-push validation MUST NOT make network calls or run E2E tests. Only typecheck + unit-test + lint commands are in scope (the same commands `build-runner` runs at Gate 6). E2E tests (Gate 7) are explicitly OUT OF SCOPE for pre-push because they are slow, often require external services, and Gate 7 has already passed by the time release-engineer runs at Gate 9.
+
+5. **FR-8.5:** Downstream projects SHOULD additionally install a git pre-push hook at `.git/hooks/pre-push` that re-runs the FR-8.1 validation as a defense-in-depth layer (catches manual `git push` invocations that bypass `/merge-ready`). The hook installation is OPTIONAL and is invoked by `install.sh --init-project` when the user is opted INTO auto-release per FR-7.3. The hook script is shipped at `templates/hooks/pre-push` and is a thin wrapper over the project's `npm test` / `pytest` / `cargo test` (same convention as FR-8.1).
+
+#### FR-9: Headless CI Contract
+
+The agent's behavior under CI invocation (`AUTO_RELEASE=1`) is fully specified per FR-1.4 above; this FR consolidates the CI-specific guarantees.
+
+1. **FR-9.1:** A CI bot running `/merge-ready` with `AUTO_RELEASE=1` set MUST be able to complete the entire Gate 9 flow (CHANGELOG rewrite + version bump + commit + local tag) WITHOUT prompts and WITHOUT pushing the tag. The pushed-tag operation is Sensitive and is REFUSED under headless mode per FR-1.4.
+
+2. **FR-9.2:** The structured summary's `Commands to run` section under headless mode MUST list the un-executed Sensitive-tier commands (the `git push` lines) so a downstream human run can pick them up. The summary's `Tier breakdown` section per FR-1.8 reports `<N> Sensitive (skipped)`.
+
+3. **FR-9.3:** Headless mode MUST NOT inject any auto-detection of CI environment variables (no checking for `CI=true` / `GITHUB_ACTIONS=true` / `GITLAB_CI=true`). Activation is GATED EXPLICITLY by `AUTO_RELEASE=1` only. This prevents accidental headless behavior on developer laptops where CI tools occasionally set `CI=true`.
+
+4. **FR-9.4:** When `AUTO_RELEASE=1` is set AND `.claude/rules/auto-release.md` is ABSENT in the project, the agent operates in suggest-only mode (the FR-7.3 sentinel gates the entire executing-mode behavior; absence equals opt-out per Section 3 precedent). The headless contract is layered on top of the opt-in sentinel — both must be present for headless executing-mode.
+
+#### FR-10: Bash Whitelist for Git Tag/Push (Defense-in-Depth)
+
+The `~/.claude/settings.json` Bash allowlist gains explicit entries for the FR-1.3 anchored regexes, mirroring `install.sh:447-484` `register_bash_allowlist` from §11 Slice 5 and `resource-architect.md` FR-5.4.
+
+1. **FR-10.1:** `install.sh` MUST gain a new function `register_release_bash_allowlist` (sibling to `register_bash_allowlist` at line 447) that adds the FR-1.3 whitelist entries to `~/.claude/settings.json`. The eight entries match the FR-1.3 anchored regexes verbatim — `git add CHANGELOG.md *`, `git commit -m "chore(release): *"`, `git tag -a *`, `git push origin v*`, `git push origin sdlc-knowledge-v*`, `git push origin feat/*`, `git push origin fix/*`, `git push origin chore/*` (Claude Code's allowlist syntax uses `*` glob, not regex anchors — the regex anchors are enforced INSIDE the agent's prompt body per FR-1.3, the allowlist is the OUTER defense-in-depth gate).
+
+2. **FR-10.2:** The function MUST be invoked from `# Main` block at `install.sh:619` AFTER `register_bash_allowlist` (line 620) so both knowledge-base and release-engineer allowlists are written. The function is invoked unconditionally on a normal `bash install.sh` run (it only adds entries for the release-engineer; whether the agent uses them is gated by the FR-7.3 sentinel).
+
+3. **FR-10.3:** The function MUST follow the same jq-based atomic merge pattern as `register_bash_allowlist` per `install.sh:463-483` — fail-closed if `jq` is absent, idempotent on re-run via `unique` deduplication. Settings file format (`{"permissions":{"allow":[...]}}`) is BYTE-UNCHANGED.
+
+#### FR-11: Dual-Tag Scheme — sdlc-knowledge-v\* vs v\*
+
+The two version trains (`sdlc-knowledge` tool and SDLC core) MUST each have their own GitHub Actions release workflow firing on disjoint tag prefixes.
+
+1. **FR-11.1:** The existing `.github/workflows/sdlc-knowledge-release.yml` (triggered on `sdlc-knowledge-v*` per line 16) is PRESERVED with FR-3 additions (Windows branch, source tarball). Trigger pattern UNCHANGED.
+
+2. **FR-11.2:** A new workflow file `.github/workflows/sdlc-core-release.yml` MUST be added, triggered on `v*` tag pushes (matching the bare `v<X.Y.Z>` scheme per `release-engineer.md:26`). The workflow's job is simpler than `sdlc-knowledge-release.yml` because the SDLC core ships markdown agent prompts (not Rust binaries):
+   - Job 1: actionlint self-check (mirrors `sdlc-knowledge-release.yml:33-43`).
+   - Job 2: package the SDLC core as a source tarball: `git archive --format=tar.gz --prefix=claude-code-sdlc-<X.Y.Z>/ -o claude-code-sdlc-<X.Y.Z>.tar.gz HEAD`.
+   - Job 3: upload the tarball and `install.sh` (standalone) to GitHub Releases via `softprops/action-gh-release@v2` with `body_path: .claude/release-notes-<X.Y.Z>.md` and `tag_name: ${{ github.ref_name }}`.
+
+3. **FR-11.3:** The two workflows MUST NOT share the `concurrency` group (`sdlc-knowledge-release-${{ github.ref }}` for the tool workflow; `sdlc-core-release-${{ github.ref }}` for the core workflow) so a tool release and a core release in the same time window do not cancel each other.
+
+4. **FR-11.4:** The two workflows have DIFFERENT trigger filters: `sdlc-knowledge-v*` is strictly more specific than `v*`. A `sdlc-knowledge-v0.2.0` tag MUST NOT fire the SDLC-core workflow — `v*` is a glob, but `sdlc-knowledge-v*` does NOT match `v*` (the prefix is not `v`). GitHub Actions tag filters are literal-prefix globs; this disjointness is verified by the GH Actions tag-filter contract.
+
+5. **FR-11.5:** The `release-engineer` agent's tag-prefix detection MUST disambiguate the two trains. When invoked at `/merge-ready` Gate 9 in the SDLC core repo with the version-source pointing at `tools/sdlc-knowledge/Cargo.toml`, the agent MUST emit a Sensitive-tier prompt that explicitly states which workflow will fire (e.g., `tag prefix: sdlc-knowledge-v — will fire .github/workflows/sdlc-knowledge-release.yml`) so the maintainer cannot accidentally cut a tool release expecting a core release.
+
+#### FR-12: Invariants Enforced
+
+Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a dogfood opt-in. The agent count, gate count, executor count, and README taglines are PRESERVED.
+
+1. **FR-12.1: 17 agents UNCHANGED.** `ls src/agents/*.md | wc -l` MUST return 17. No agent file is added; no agent file is removed. The release-engineer prompt is REWRITTEN per FR-1 but the file path and frontmatter `name:` field are BYTE-UNCHANGED.
+
+2. **FR-12.2: 10 gates UNCHANGED.** `grep -Fxc "10 quality gates" README.md` MUST return ≥ 1. Gate 9 (Release Packaging) is the only gate this section touches; its semantics change from suggest-only to executing-mode, but it remains a single gate at position 9 in the gate sequence.
+
+3. **FR-12.3: 5 executors UNCHANGED.** The five executor agents (`test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer`) are BYTE-UNCHANGED. This section makes no edits to executor prompts.
+
+4. **FR-12.4: README taglines UNCHANGED.** README.md lines 5 and 35 (the two taglines) are BYTE-UNCHANGED, consistent with §11 FR-12.1 / §12 FR-9.4.
+
+5. **FR-12.5: TEMPLATES UNCHANGED — INTENTIONAL RELAXATION.** Iter-1 (§11) and iter-2 (§12) preserved the `templates/` directory byte-for-byte except for `templates/rules/changelog.md` which was added by Section 3. THIS section relaxes that invariant by adding `templates/rules/auto-release.md` (FR-7.3) and `templates/hooks/pre-push` (FR-8.5). The relaxation is INTENTIONAL and is the dogfood mechanism that makes auto-release available to downstream projects via `install.sh --init-project`. The Plan Critic SHOULD NOT flag this as a templates-invariant violation; this PRD section is the authoritative scope expansion.
+
+6. **FR-12.6: Cognitive self-check UNCHANGED.** `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED. The in-scope agent list (12 thinking) and exempt list (5 executors) are unchanged. Release-engineer is in the 12-thinking list and continues to emit `## Facts` blocks per Section 9.
+
+7. **FR-12.7: §11 / §12 invariants UNCHANGED.** All §11 FR-9 and §12 FR-9 invariants remain in force: five `sdlc-knowledge` subcommands (`ingest`, `search`, `list`, `status`, `delete`), `--project-root` security gate, JSON output shape, `knowledge-base:` citation literal, FTS5 + WAL schema, agent activation block in 12 thinking agents.
+
+8. **FR-12.8: SDLC core CHANGELOG.md is NEW — INTENTIONAL.** The repo root has no `CHANGELOG.md` today (`ls /Users/aleksandra/Documents/claude-code-sdlc/CHANGELOG.md` returns no such file). FR-7.4 ADDS this file. The Plan Critic SHOULD NOT flag the new file as a "files-not-listed-in-affected-files" gap; it is enumerated explicitly in 13.8 below.
+
+### 13.4 Non-Functional Requirements
+
+1. **NFR-1: Tag-creation latency.** Local tag creation (FR-1.2 row 6) MUST complete in ≤ 30 s on a 2024-class developer laptop. This excludes the upstream CI build time (FR-3 + FR-11) which runs ASYNCHRONOUSLY on GitHub Actions after the tag is pushed and is bounded by NFR-5 below.
+
+2. **NFR-2: install.sh prebuilt-binary download latency.** `bash install.sh --yes` on each of the five supported platforms MUST produce a working `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` binary in ≤ 60 s when the network is reachable and the asset exists at the FR-4.2 URL. (Inherited from §11 AC-3 / NFR-1.4 — the four existing platforms retain their existing budget; Windows-x64 is the new platform.)
+
+3. **NFR-3: Backward compatibility — opt-out preserves suggest-only.** Projects WITHOUT `.claude/rules/auto-release.md` MUST receive the §6 byte-identical suggest-only behavior. The release-engineer's structured 10-section summary, the FORBIDDEN list semantics, the no-Bash posture (well — `Bash` is now in `tools:` per FR-1.1 but the agent self-restricts from invoking it absent the sentinel) all match §6 contracts when the sentinel is absent. This is the headline backward-compat contract and is exercised by AC-8 below.
+
+4. **NFR-4: Tier-based dispatch matches resource-architect contract.** The four-tier model (Trivial / Moderate / Sensitive / Forbidden), the most-restrictive-applicable rule, the anchored-regex whitelist (defense-in-depth), and the headless contract (`AUTO_RELEASE=1`) MUST match the §7 FR-5 shape byte-for-byte where they overlap. The same Plan Critic enforcement that flags `resource-architect` malformed tier strings (§7 FR-5.3 / Section 4 / `src/CLAUDE.md` Plan Critic rules) MUST apply to release-engineer's tier emissions.
+
+5. **NFR-5: Cross-platform CI matrix wall-clock.** The full `.github/workflows/sdlc-knowledge-release.yml` matrix run (5 platform builds + actionlint + release job) on a tagged `sdlc-knowledge-v*` push MUST complete in ≤ 15 min. The four existing platforms currently complete in ~6-10 min on `fail-fast: false` per the iter-1 / iter-2 release procedures; Windows MSVC builds are typically slower due to MSVC link time. The 15 min budget gives headroom for Windows.
+
+6. **NFR-6: Windows binary size.** The Windows binary `sdlc-knowledge-windows-x64.exe` MUST be ≤ 12 MB after `strip = true` and `lto = true` per `tools/sdlc-knowledge/Cargo.toml:34-38` (UNCHANGED profile flags from §11 NFR-1.1 / §12 NFR-1). The 12 MB budget is LOOSER than the 10 MB Linux/macOS budget per `sdlc-knowledge-release.yml:125-137` because Windows MSVC produces larger binaries due to runtime overhead (MSVCRT linkage, COFF section padding). The four existing platforms retain their 10 MB budget BYTE-UNCHANGED.
+
+7. **NFR-7: UTF-8 boundary safety in CHANGELOG / release-notes.** The `[Unreleased]` → `[X.Y.Z]` rename and the release-notes file write MUST preserve UTF-8 multibyte character sequences byte-for-byte. The `git tag -a -F <file>` invocation MUST consume the file as UTF-8 without re-encoding. (Inherited contract from §11 FR-2.3 chunker UTF-8 safety; load-bearing for the multilingual user story 13.2 #5.)
+
+8. **NFR-8: Determinism of tag annotation.** The same `[X.Y.Z]` CHANGELOG body, the same release-notes file, and the same upstream `softprops/action-gh-release@v2` step MUST produce a byte-identical GitHub Release page body across multiple invocations on the same tag. (Tag re-pushes are Forbidden per FR-1.2 row 11 force-push prohibition; this NFR is the contract for the FIRST push.)
+
+9. **NFR-9: SDLC core version bump.** This feature triggers a MAJOR version bump on the SDLC core: `2.1.0` → `3.0.0` per FR-7.5. The major bump is justified because release-engineer flips from suggest-only to executing-mode, which is a breaking authority-boundary change visible to any user who has scripts depending on the agent's prior no-Bash, never-publishes posture.
+
+### 13.5 Acceptance Criteria
+
+1. **AC-1: Local tag creation works under release-engineer executing mode.** On the SDLC core repo with `.claude/rules/auto-release.md` present, running `/merge-ready` Gate 9 with non-empty `[Unreleased]` content produces, in ≤ 30 s, (a) a renamed `[X.Y.Z] - YYYY-MM-DD` CHANGELOG section, (b) a `.claude/release-notes-<X.Y.Z>.md` file, (c) a local annotated git tag `<prefix>v<X.Y.Z>` whose annotation message matches the release-notes file byte-for-byte. Verified via `git cat-file tag <tag-name>`.
+
+2. **AC-2: Tag push fires the GH Actions release workflow.** After the maintainer approves the FR-1.5 Sensitive-tier prompt, `git push origin sdlc-knowledge-v0.2.0` completes successfully and the `.github/workflows/sdlc-knowledge-release.yml` workflow is observed firing within 5 min of the push (verified via `gh run list --workflow=sdlc-knowledge-release.yml`).
+
+3. **AC-3: GitHub Release body matches CHANGELOG body.** The GitHub Release page for `sdlc-knowledge-v0.2.0` MUST display the contents of `.claude/release-notes-0.2.0.md` byte-for-byte (modulo GitHub's markdown rendering — the SOURCE bytes are identical). Verified by `gh release view sdlc-knowledge-v0.2.0 --json body --jq .body`.
+
+4. **AC-4: Five-platform binary matrix produces five binaries plus source tarball.** After AC-2 fires, the `sdlc-knowledge-v0.2.0` GitHub Release page MUST list six release assets: `sdlc-knowledge-darwin-arm64`, `sdlc-knowledge-darwin-x64`, `sdlc-knowledge-linux-x64`, `sdlc-knowledge-linux-arm64`, `sdlc-knowledge-windows-x64.exe`, `sdlc-knowledge-source-0.2.0.tar.gz`. Each binary asset MUST be non-zero size; each platform binary MUST pass `<binary> --version` returning `sdlc-knowledge 0.2.0`.
+
+5. **AC-5: install.sh prebuilt-binary download succeeds on each platform.** `bash install.sh --yes` on each of the five supported platforms produces `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (or `.exe` on Windows) of non-zero size in ≤ 60 s. The install summary MUST report `tools/sdlc-knowledge/sdlc-knowledge (<platform> — sdlc-knowledge-v0.2.0 prebuilt)` per FR-4.6.
+
+6. **AC-6: install.sh fallback works when release is missing.** With network connectivity but the asset URL returning 404 (simulate by pointing `KNOWLEDGE_VERSION` at `99.99.99`), `bash install.sh --yes` MUST log the 404 warning, invoke `cargo_source_build_fallback`, and produce a working binary built from source. Verified by `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` returning `sdlc-knowledge 0.2.0`.
+
+7. **AC-7: Headless CI mode skips Sensitive operations.** Setting `AUTO_RELEASE=1` and running `/merge-ready` Gate 9 with non-empty `[Unreleased]` content MUST produce: (a) the local CHANGELOG / release-notes / annotated-tag artifacts (Trivial + Moderate operations executed), (b) NO `git push` invocation (Sensitive operations refused), (c) the literal stderr line `aborted-headless-sensitive: git push origin <tag> requires interactive approval; rerun without AUTO_RELEASE=1`, (d) exit code 0 (headless skip is not an error), (e) Tier breakdown line `<N> Sensitive (skipped)`.
+
+8. **AC-8: Opt-out backward compatibility.** With `.claude/rules/auto-release.md` ABSENT, running `/merge-ready` Gate 9 MUST produce the §6 byte-identical suggest-only output (structured 10-section summary; no Bash invocation; no tag creation). Compared against a §6 reference run on the same `[Unreleased]` content, the structured-summary OUTPUT bytes (excluding the timestamp) MUST be IDENTICAL. This is the headline backward-compat AC and is verified by a literal `diff` against a captured §6 baseline.
+
+9. **AC-9: REPO_URL fixed end-to-end.** `grep -r 'Koroqe' .` on the SDLC core repo root returns ZERO matches after this section ships. The `bash install.sh --yes` install summary references `codefather-labs/claude-code-sdlc` consistently. The Quick install URL in `install.sh:12` resolves to a real `raw.githubusercontent.com` path returning HTTP 200.
+
+10. **AC-10: SDLC core CHANGELOG.md present and dated.** The file `/Users/aleksandra/Documents/claude-code-sdlc/CHANGELOG.md` exists at the repo root after this section ships. It contains `## [Unreleased]` and `## [3.0.0] - 2026-04-26 — Auto-Release Pipeline` headings per FR-7.4. The `[3.0.0]` body summarizes FR-1 through FR-12 in user-facing language consistent with `templates/rules/changelog.md` audience rules (line 5: product owners and end users).
+
+11. **AC-11: Release-engineer tier dispatch — verified per-tier counts.** A `/merge-ready` run that triggers (a) CHANGELOG rewrite (Trivial), (b) version-source bump (Moderate), (c) `git tag` creation (Moderate), (d) `git push origin <branch>` (Sensitive auto-approved), (e) `git push origin <tag>` (Sensitive auto-approved) MUST produce a Tier breakdown line reporting `1 Trivial; 2 Moderate; 2 Sensitive (auto-approved); 0 Sensitive (skipped); 0 Forbidden (refused)`. The breakdown line MUST be grep-able by Plan Critic per the §7 FR-2.5 / NFR-4 contract.
+
+12. **AC-12: Multilingual CHANGELOG round-trips byte-for-byte.** A `[X.Y.Z]` CHANGELOG body containing Cyrillic characters (e.g., `### Добавлено\n- Поддержка автоматического выпуска релизов`) MUST round-trip byte-for-byte through release-notes-file write + `git tag -a -F` + `softprops/action-gh-release@v2` body. Verified by `gh release view <tag> --json body --jq .body` returning the source Cyrillic bytes verbatim.
+
+13. **AC-13: Invariants preserved.** After this section ships: `ls src/agents/*.md | wc -l` returns 17; `grep -Fxc "10 quality gates" README.md` returns ≥ 1; `diff <(ls src/agents/{test-writer,build-runner,e2e-runner,doc-updater,changelog-writer}.md.pre-iter3) <(ls src/agents/{test-writer,build-runner,e2e-runner,doc-updater,changelog-writer}.md)` returns empty (executor-prompt bytes unchanged). README.md lines 5 and 35 are BYTE-UNCHANGED against a pre-iter3 git-show baseline.
+
+### 13.6 Risks and Dependencies
+
+1. **R-1: `git push` is destructive — wrong tier classification.** A misclassified operation in FR-1.2 (e.g., `git push origin main` accidentally tagged Trivial instead of Sensitive) would lead to unwanted publication. **Mitigation:** the FR-1.2 tier table is hard-coded in `src/agents/release-engineer.md` (not user-editable at runtime); the FR-1.3 anchored-regex whitelist is a defense-in-depth gate that REFUSES any command not exactly matching one of eight regexes; security-auditor pre-reviews the release-engineer rewrite slice; the `AUTO_RELEASE=1` headless contract REFUSES Sensitive operations entirely under unattended runs. Triple defense: tier classification + whitelist + headless deny.
+
+2. **R-2: GitHub Actions release-workflow drift between `sdlc-knowledge-v*` and `v*` tag schemes.** A change to one workflow (e.g., bumping `softprops/action-gh-release@v2` to `@v3`) might silently miss the other. **Mitigation:** both workflows share a common subset (actionlint job, `softprops/action-gh-release` step shape); a repo-root `.github/workflows/_RELEASE_DRIFT_CHECK.md` documents the shared identifiers and is updated lock-step on workflow changes; FR-11.4 documents the trigger disjointness so a human reviewer can spot drift in PR review.
+
+3. **R-3: `install.sh` REPO_URL change breaks pre-fix checkouts.** Anyone who forked the repo or deep-copied `install.sh` before FR-5.1 ships would see their local copy's `REPO_URL` continue to point at the old `Koroqe/...` URL. **Mitigation:** documented in FR-5.4 — repo-root `MIGRATION.md` notes the change; the impact is limited because the old URL was never functional (the Koroqe repo does not exist), so anyone affected was already in a broken state.
+
+4. **R-4: SDLC core CHANGELOG retroactive backfill.** Should we backfill the CHANGELOG with historical sections for Feature 1-12 (which shipped before this opt-in), or start clean from `[3.0.0]` for the auto-release feature itself? **Mitigation:** RESOLVED — start clean from `[3.0.0]` per FR-7.4. Historical PRD sections (1-12) document the prior work; backfilling user-facing CHANGELOG entries for them is out of scope and would be a separate iter-4 pass if requested. The decision is justified because (a) most prior sections are internal infrastructure (cognitive-self-check, role-planner, resource-architect) that would be `skip — internal` per Section 3 audience rules, and (b) the changelog audience is product owners and end users who interact with iter-3 onward.
+
+5. **R-5: Cross-platform binary build failures on uncommon edge cases.** glibc version mismatch on `linux-x64` (the `ubuntu-latest` runner uses glibc 2.35; users on glibc 2.31 fail the dynamic-link check), or MSVC runtime version mismatch on Windows (`vcruntime140.dll` not found). **Mitigation:** `cargo_source_build_fallback` per FR-4.4 is the universal escape hatch — when the prebuilt binary fails any smoke test, install.sh falls through to the source build. The fallback is explicitly tested in AC-6.
+
+6. **R-6: Tag-collision (two parallel `develop-feature` runs both compute `v3.2.1`).** Two engineers running `/merge-ready` simultaneously could both compute the same next-version tag and try to push it. **Mitigation:** `git push origin <tag>` is atomic and the second push fails with `! [rejected] (already exists)`; the FR-8.2 pre-push validation surfaces the failure cleanly; the `concurrency:` group in the workflow file (`sdlc-knowledge-release-${{ github.ref }}`) cancels the second workflow invocation. Recovery is to bump the version-source by one and re-run `/merge-ready`.
+
+7. **R-7: Chicken-and-egg first release.** RESOLVED — the maintainer one-shot bootstrap per FR-6 cuts the FIRST `sdlc-knowledge-v0.2.0` tag explicitly. Subsequent releases flow through `release-engineer` Gate 9 in executing mode. The bootstrap is documented as a one-time operation per FR-6.4.
+
+8. **R-8: Revert/rollback semantics.** What happens if a published `sdlc-knowledge-v0.2.0` release contains a regression that bricks `install.sh`? **Mitigation:** the maintainer cuts a `sdlc-knowledge-v0.2.1` patch release with the fix per the same Gate 9 flow. The broken `0.2.0` release page can be marked as a pre-release via the GitHub UI (manual action; out of scope for the agent). Yanking the GitHub Release entirely is a Forbidden operation (it is a remote-state mutation outside the FR-1.2 whitelist) — the maintainer performs it manually if needed. Auto-revert on regression detection is OUT OF SCOPE per 13.7 item 5.
+
+9. **R-9: Plan Critic false-positive on `templates/` invariant relaxation.** The Plan Critic could flag `templates/rules/auto-release.md` and `templates/hooks/pre-push` as new files that violate a perceived "templates UNCHANGED" invariant (which §11 / §12 informally implied). **Mitigation:** FR-12.5 explicitly relaxes the invariant with rationale; this PRD section is the authoritative scope expansion. The Plan Critic SHOULD treat the explicit FR-12.5 statement as the dispositive source.
+
+10. **R-10: `softprops/action-gh-release@v2` action being yanked or compromised.** The action is community-maintained; a yank or supply-chain attack could break the upload step. **Mitigation:** pin the action by SHA in iter-4 (currently pinned by major-version `@v2` per `sdlc-knowledge-release.yml:202` — UNCHANGED in iter-3); the workflow file is auditable at PR review time; the `softprops/action-gh-release` repo is widely used and well-audited.
+
+11. **Dependency: Section 6 (Changelog Release Packaging — iter-2).** This section's FR-1 / FR-2 build directly on §6's release-engineer agent and Gate 9 wiring. If §6 has not shipped at iter-3 implementation time, iter-3 cannot start. (§6 shipped per the merge commit history before 2026-04-25.)
+
+12. **Dependency: Section 7 (Resource Manager-Architect — Iteration 2: Auto-Install).** This section's FR-1.2 / FR-1.3 / FR-1.4 directly mirror §7's tier model and headless contract. The `most-restrictive-applicable-tier` rule, the anchored-regex whitelist pattern, and the headless contract are all lifted from `src/agents/resource-architect.md:185-260`. If §7 has not shipped, iter-3 cannot reuse the precedent.
+
+13. **Dependency: Section 11 (Local Knowledge Base — iter-1).** The FIRST `sdlc-knowledge-v0.2.0` tag bootstrap (FR-6) presupposes that the §11 / §12 binary at `tools/sdlc-knowledge/` is build-able. The `.github/workflows/sdlc-knowledge-release.yml` workflow file from §11 is the integration point for FR-3.
+
+14. **Dependency: Section 12 (Robust PDF Extraction via pdfium-render — iter-2).** The Cargo.toml version bump to `0.2.0` (per §12 NFR-9) is the version that this section ships. The PDFium binary download path at `install.sh:489-613` is the precedent shape for the FR-4 prebuilt-binary download path.
+
+15. **Dependency: Section 3 (Product Changelog Maintenance — iter-1).** The `templates/rules/changelog.md` sentinel mechanism is the sole dependency for FR-7 (SDLC core opt-in). If §3 had not shipped, FR-7 would have no rule to install.
+
+16. **Dependency: Section 9 (Cognitive Self-Check Protocol).** This section's `## Facts` block, the `### External contracts` citations of `softprops/action-gh-release@v2` / GitHub Actions runners / Cargo cross-compile targets, and the Plan Critic enforcement all depend on §9 being live.
+
+### 13.7 Out of Scope (iter-3)
+
+The following items are explicitly deferred to iter-4 or beyond and MUST NOT be implemented as part of iter-3:
+
+1. **npm / cargo / PyPI / gem registry publishing.** The Forbidden tier (FR-1.2 row 10) refuses these operations. A future iter-4 PRD section would lift specific publishers (e.g., `cargo publish` for the `sdlc-knowledge` crate) into a Sensitive-tier flow with credential management. Iter-3 ships the GitHub Releases pipeline only.
+
+2. **sha256 / sigstore signature verification of binaries.** The §11 iter-1 deferral and §12 iter-2 deferral remain in force — iter-3 trusts GitHub Releases TLS + the GH Actions provenance attestations attached to releases. Signature verification is iter-4 scope.
+
+3. **Additional platform targets — linux-arm32, musl-libc, FreeBSD.** The matrix expands to five platforms in iter-3 (adding Windows). Further platforms are iter-4 scope. The cargo-source-build fallback per FR-4.4 covers users on unsupported platforms in the meantime.
+
+4. **CHANGELOG i18n / auto-translation.** The multilingual user story (13.2 #5) describes BYTE-PRESERVATION of non-ASCII content (UTF-8 round-trip). It does NOT include automatic translation between English and Russian (or any other language pair). Translation infrastructure is out of scope.
+
+5. **Auto-revert on regression detection.** The Risk R-8 mitigation is manual — the maintainer cuts a patch release with the fix. Automatic regression detection (e.g., post-release smoke tests + auto-yank) requires metrics infrastructure and is out of scope for iter-3.
+
+6. **GitHub Releases body rich rendering.** The body is plain Keep-a-Changelog markdown per FR-2.3 / FR-11.2. Rich rendering (release video embeds, custom CSS, contributor avatars) is out of scope.
+
+7. **Coupling auto-release to other gates.** Gate 9 is the only gate this section touches. Gates 0-8 are UNCHANGED. Wiring auto-release into Gate 6 (build-runner) or Gate 7 (e2e-runner) for pre-release smoke validation is iter-4 scope; iter-3's pre-push validation per FR-8.1 is a NARROW addition that runs the same project commands as Gate 6 but is invoked from within Gate 9 — it is not a new gate.
+
+8. **Pre-push hook installation on non-opted-in projects.** The FR-8.5 pre-push hook script ships in `templates/hooks/` and is installed by `install.sh --init-project` only when the project is opted INTO auto-release per FR-7.3. Forcing the hook on opt-out projects is out of scope.
+
+These items are listed explicitly so the Plan Critic does not flag their absence as an iter-3 gap.
+
+### 13.8 Affected Endpoints / Schema / UI
+
+#### Affected Endpoints
+
+Not applicable. This project has no HTTP API. The `sdlc-knowledge` CLI subcommand surface is BYTE-UNCHANGED (per FR-12.7 / §11 FR-9.1 / §12 FR-9.1). The release-engineer agent's structured 10-section output contract is BYTE-UNCHANGED in shape (only the `Commands to run` section content and the new `Tier breakdown` section per FR-1.8 differ in semantics).
+
+#### Schema Changes
+
+NONE in the SQLite database (`<project>/.claude/knowledge/index.db` is BYTE-UNCHANGED in schema per §11 FR-9.7 / §12 FR-9.7). The only schema-like additions are markdown rule files and a CHANGELOG, enumerated in `New Files` below.
+
+#### UI Changes
+
+Not applicable. This project is a collection of markdown agent prompts, a Rust CLI, and a bash installer; no graphical user interface.
+
+#### New Files
+
+| File | Purpose | Related Requirements |
+|------|---------|---------------------|
+| `.claude/rules/auto-release.md` | Activation sentinel for executing-mode at the SDLC core repo. Contents codify FR-1.2 tier table, FR-1.3 anchored-regex whitelist, FR-1.4 headless contract, FR-1.5 prompt format. | FR-7.2 |
+| `.claude/rules/changelog.md` | Activation sentinel for the changelog-writer agent at the SDLC core repo (dogfood opt-in). Byte-identical to `templates/rules/changelog.md`. | FR-7.1 |
+| `templates/rules/auto-release.md` | Template installed into downstream projects via `install.sh --init-project`. Byte-identical to `.claude/rules/auto-release.md`. | FR-7.3 |
+| `templates/hooks/pre-push` | Pre-push hook script (thin wrapper over project's typecheck/test/lint). Installed by `install.sh --init-project` when auto-release is opted in. | FR-8.5 |
+| `CHANGELOG.md` (repo root) | SDLC core CHANGELOG with `[Unreleased]` and `[3.0.0] - 2026-04-26 — Auto-Release Pipeline` sections. | FR-7.4, FR-12.8, AC-10 |
+| `.claude/release-notes-3.0.0.md` | Release-notes file for the SDLC core's first auto-release run. Body of the `[3.0.0]` CHANGELOG section. | FR-2.1 |
+| `.claude/release-notes-0.2.0.md` | Release-notes file for the FIRST `sdlc-knowledge-v0.2.0` bootstrap. Body summarizes iter-1 + iter-2 + iter-3 cumulative changes. | FR-6.3 |
+| `.github/workflows/sdlc-core-release.yml` | New GH Actions workflow triggered on `v*` tags. Mirrors `sdlc-knowledge-release.yml` shape; produces source tarball + install.sh asset; uses `softprops/action-gh-release@v2`. | FR-11.2 |
+| `MIGRATION.md` (repo root) | Documents the `Koroqe → codefather-labs` REPO_URL change for users with pre-fix checkouts. | FR-5.4 |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `src/agents/release-engineer.md` | REWRITE: frontmatter `tools:` gains `Bash`; `## Authority Boundary` gains EXECUTE-allowed set; `## NEVER List` shrinks to FR-1.2 Forbidden-tier rows only; new `## Tier-Based Authority Gradation` section codifying FR-1.2 / FR-1.3 / FR-1.4 / FR-1.5; `## Output Contract` gains `Tier breakdown` section. The agent prompt frontmatter `name:` field is BYTE-UNCHANGED. | FR-1.1 through FR-1.8 |
+| `install.sh` | Update `VERSION="2.1.0"` → `"3.0.0"` (line 22); update `REPO_URL` (line 25) Koroqe → codefather-labs; update Quick install URL (line 12); update `print_help` heredoc first line (line 49); add Windows branch to `case "$(uname -ms)"` allowlist (line 354-363); add `.exe` suffix logic to URL composition (line 368); add `register_release_bash_allowlist` function; add `bootstrap_first_release` function; invoke both new functions from `# Main` block. | FR-3 series, FR-4 series, FR-5 series, FR-6 series, FR-7.5, FR-10 series |
+| `.github/workflows/sdlc-knowledge-release.yml` | Add Windows-x64 to matrix `include:` list (line 64-75); add Windows case to pdfium asset name step (line 91-101); widen libpdfium glob to capture Windows DLL naming (line 115); add `.exe` suffix to Windows artifact staging (line 168); add Windows binary to release `files:` list (line 208-213); add source tarball asset and upload; add `body_path: .claude/release-notes-${{ github.ref_name }}.md` to `softprops/action-gh-release@v2` step. | FR-3 series, FR-2.3, FR-11.1 |
+| `README.md` | Add ONE new row to the Hardening table referencing iter-3 auto-release. Update any Quick install URL referencing `Koroqe`. Lines 5 and 35 (taglines) BYTE-UNCHANGED. | FR-5.5, FR-7.6, FR-12.4 |
+| `~/.claude/rules/knowledge-base-tool.md` | UNCHANGED. (This section makes no rule edits to the knowledge-base rule.) | — |
+| `~/.claude/rules/knowledge-base.md` | UNCHANGED. | — |
+| `~/.claude/rules/cognitive-self-check.md` | UNCHANGED per FR-12.6. | — |
+| `tools/sdlc-knowledge/RELEASING.md` | Document the dual-tag scheme (FR-11), the bootstrap procedure (FR-6), the Windows binary addition (FR-3), the install.sh fallback semantics (FR-4.4). | FR-3, FR-4, FR-6, FR-11 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/{prd-writer,ba-analyst,architect,qa-planner,planner,security-auditor,test-writer,code-reviewer,build-runner,e2e-runner,verifier,doc-updater,refactor-cleaner,changelog-writer,resource-architect,role-planner}.md` | The 16 non-release-engineer agents are BYTE-UNCHANGED per FR-12.1. |
+| `src/rules/cognitive-self-check.md` | BYTE-UNCHANGED per FR-12.6. |
+| `src/rules/git.md`, `src/rules/scratchpad.md`, `src/rules/error-recovery.md`, `src/rules/tool-limitations.md` | Independent rules, unaffected. |
+| `tools/sdlc-knowledge/src/*.rs` | BYTE-UNCHANGED — iter-3 makes no Rust code changes (the Cargo.toml version is bumped to `0.2.0` by §12; iter-3 ships the FIRST release of that version). |
+| `tools/sdlc-knowledge/Cargo.toml` | BYTE-UNCHANGED — version `0.2.0` already set by §12 NFR-9. |
+| `templates/rules/changelog.md` | BYTE-UNCHANGED — already in templates per Section 3 FR-4.4. |
+| `templates/rules/architecture.md`, `templates/rules/security.md`, `templates/rules/testing.md` | UNCHANGED — independent templates. |
+| `templates/CLAUDE.md` | UNCHANGED. |
+| `src/commands/*.md` | All slash commands UNCHANGED. The `/merge-ready` command continues to invoke release-engineer at Gate 9 with the same call shape; the agent's executing-mode behavior is gated by `.claude/rules/auto-release.md` presence per FR-9.4. |
+| `src/claude.md` | Plan Critic UNCHANGED. The existing `### External contracts` heuristic continues to cover the GitHub Actions / `softprops/action-gh-release` / Cargo target citations. The FR-12.5 templates relaxation is documented in this PRD section so the Plan Critic does NOT need a rule update. |
+| `docs/PRD.md` Sections 1-12 | UNCHANGED. Iter-3 appends Section 13 only. |
+| `docs/use-cases/`, `docs/qa/` | Iter-3 will add new feature-specific files via `/bootstrap-feature` (ba-analyst + qa-planner agents); no edits to existing files. |
+
+## Facts
+
+### Verified facts
+
+- The PRD file `/Users/aleksandra/Documents/claude-code-sdlc/docs/PRD.md` ends at line 2972 immediately before Section 13 is appended; the last existing section is Section 12 ("Robust PDF Extraction via pdfium-render") starting at line 2696 — verified by `grep -n "^## "` and `wc -l` in the current session.
+- `install.sh:22` declares `VERSION="2.1.0"`; `install.sh:23` declares `KNOWLEDGE_VERSION="0.1.0"`; `install.sh:24` declares `KNOWLEDGE_PDFIUM_VERSION="chromium/7802"`; `install.sh:25` declares `REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"` (the bug FR-5.1 fixes) — verified by Read of lines 1-80 in this session.
+- `install.sh:332-406` `install_knowledge_binary` constructs the asset URL `https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}` at line 368, with a four-platform allowlist at lines 354-363 (Darwin arm64 / x86_64, Linux x86_64 / aarch64) and falls through to `cargo_source_build_fallback` at lines 411-442 on download failure — verified by Read in this session.
+- `install.sh:489-613` `install_pdfium_binary` is the precedent shape for the new `download_release_binary` function: subshell wrapped with `set +e`, `umask 0022`, mktemp staging, TLS-only `curl`/`wget` fallback, `tar` traversal/setuid checks, version sentinel at `$target_dir/.version` — verified by Read in this session.
+- `install.sh:447-484` `register_bash_allowlist` is the precedent shape for `register_release_bash_allowlist` per FR-10.1: jq-based atomic merge with `unique` deduplication; fail-closed when jq absent; missing-file create with literal JSON — verified by Read in this session.
+- `src/agents/release-engineer.md:4` was Read in this session and showed `tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]` — but the prompt body at lines 12, 16, 30, and 63 contradicts this by explicitly stating "no Bash tool" and asserting the NEVER List is enforced "via tool removal". This is a documented frontmatter-vs-body contract drift in the current `release-engineer.md` file. FR-1.1's behavior depends on the resolution: if `Bash` is already in the frontmatter, FR-1.1 is a documentation-accuracy edit to the prompt body; if `Bash` is absent, FR-1.1 adds it. Either path satisfies the FR contract — see Open Question #1 below.
+- `src/agents/release-engineer.md:67-84` enumerates the 13-line NEVER List inside a fenced code block — verified by Read in this session. The list contains: `git push`, `git push origin <anything>`, `git push origin v<anything>`, `git tag`, `git tag -a vX.Y.Z`, `git tag -a vX.Y.Z -F .claude/release-notes-X.Y.Z.md`, `gh release create`, `gh release create vX.Y.Z`, `npm publish`, `yarn publish`, `pnpm publish`, `cargo publish`, `pypi upload`, `twine upload`, `poetry publish`, `gem push`.
+- `src/agents/resource-architect.md:185-260` defines the four-tier authority gradation (Trivial / Moderate / Sensitive / Forbidden), the most-restrictive-applicable-tier rule (line 222), the 18-row classification decision table (lines 201-220), the 7th-field `Tier:` requirement (line 224-228), and the Forbidden-tier canonical handling (lines 248-256) — verified by `grep -n "Trivial\|Moderate\|Sensitive\|Forbidden\|Tier" src/agents/resource-architect.md` in this session.
+- `templates/rules/changelog.md:37-39` documents the activation sentinel rule: "the presence of this file at `.claude/rules/changelog.md` is the sole signal the `changelog-writer` agent uses to decide whether to run; absence equals opt-out" — verified by Read of the entire 43-line file in this session.
+- `.github/workflows/sdlc-knowledge-release.yml:13-16` triggers on `tags: 'sdlc-knowledge-v*'`; lines 64-75 declare the four-platform matrix (`darwin-arm64`/`macos-14`, `darwin-x64`/`macos-13`, `linux-x64`/`ubuntu-latest`, `linux-arm64`/`ubuntu-22.04-arm`); line 202 uses `softprops/action-gh-release@v2`; lines 208-213 list the four binary `files:` paths — verified by Read of the entire 213-line file in this session.
+- `.github/workflows/sdlc-knowledge-release.yml:91-101` `Determine pdfium asset name` step has FOUR case branches matching the four matrix platforms; this is the precedent shape FR-3.2 extends with a fifth Windows branch — verified by Read in this session.
+- `.github/workflows/sdlc-knowledge-release.yml:103-116` `Download pdfium dynamic library` step uses `shell: bash`, `curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120`, `tar --no-same-owner --no-same-permissions -xzf`, and `find ... -name 'libpdfium*' -type f -exec cp {} ...` — the same shape FR-3.3 widens for Windows DLL naming — verified by Read in this session.
+- The repo's actual GitHub remote is `codefather-labs/claude-code-sdlc.git` per the user task and the gitStatus environment context; the install.sh value `Koroqe/claude-code-sdlc.git` is incorrect — verified by reconciling the user task description against `install.sh:25`.
+- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `sdlc-knowledge status --json` in this session.
+- Knowledge-base contains BOTH English and Russian content: live probes returned `the` matching `Building AI Agents With LLMs RAG And Knowledge Graphs.pdf` and `Hands-On Machine Learning with Pytorch.pdf` (both English); `не` matching `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf` (both Russian) — verified via `sdlc-knowledge search "the" --top-k 2 --json` and `sdlc-knowledge search "не" --top-k 2 --json` in this session.
+
+### External contracts
+
+- **`softprops/action-gh-release@v2` GitHub Action** — symbol: `inputs.tag_name`, `inputs.name`, `inputs.body_path`, `inputs.files`, `inputs.draft`, `inputs.prerelease`, `inputs.fail_on_unmatched_files` — source: `.github/workflows/sdlc-knowledge-release.yml:201-213` (consumed in this repo by the §11 / §12 release workflow) — verified: yes (the input shape is observed in the existing workflow file). Risk: action upgrade `@v2 → @v3` could change the `inputs.body_path` semantics; iter-3 pins `@v2` per FR-2.3 / FR-11.2 unchanged from §11.
+- **GitHub Actions runner image `windows-latest`** — symbol: runner-label string used in `runs-on:` field; preinstalls Visual Studio 2022 Build Tools (`cl.exe`), Git for Windows (`git`, `bash`), `curl`, `tar`, `find` — source: GitHub Actions docs (NOT opened in this session) — verified: **no — assumption**. Risk: the `windows-latest` runner image's preinstalled tooling could change between GitHub-managed runner-image releases. Verification path: architect Step 3 verifies the runner image's tooling version against the GitHub-managed-runner-images repo before Slice 4 ships; Slice 4 done-condition includes a Windows matrix run that exercises `cargo build --target x86_64-pc-windows-msvc` AND the bash-shell tar/curl/find pipeline.
+- **Cargo cross-compile target `x86_64-pc-windows-msvc`** — symbol: rustup target name; requires MSVC linker (`link.exe`); produces `.exe` suffix on output binaries — source: rustup docs (NOT opened in this session) — verified: **no — assumption**. Risk: target name precision (`x86_64-pc-windows-msvc` vs `x86_64-pc-windows-gnu`); the MSVC variant is correct for `windows-latest` per industry convention. Verification path: architect Step 3 confirms `dtolnay/rust-toolchain@stable` accepts the target; Slice 4 first matrix run verifies on the actual GH runner.
+- **`bblanchon/pdfium-binaries` Windows asset filename `pdfium-win-x64.tgz`** — symbol: asset filename in GitHub Releases for the `chromium/<version>` tag scheme — source: §12 PRD assumption (`pdfium-mac-arm64.tgz`, `pdfium-mac-x64.tgz`, `pdfium-linux-x64.tgz`, `pdfium-linux-arm64.tgz` are confirmed; the Windows asset name is extrapolated by pattern) — verified: **no — assumption**. Risk: the actual asset name could be `pdfium-windows-x64.tgz` or `pdfium-win-x64.zip` — the upstream project ships ZIPs for Windows in some releases. Verification path: architect Step 3 opens the `bblanchon/pdfium-binaries` releases page for the pinned `chromium/7802` tag and pins the exact asset filename before Slice 4 ships.
+- **Windows DLL naming convention `pdfium.dll` (no `lib` prefix)** — symbol: filename of the dynamic library on Windows; differs from `libpdfium.dylib` (macOS) and `libpdfium.so` (Linux) — source: Windows PE convention; `bblanchon/pdfium-binaries` releases — verified: **no — assumption**. Risk: the find-glob in `sdlc-knowledge-release.yml:115` searches `libpdfium*` which may MISS the Windows `pdfium.dll`; FR-3.3 explicitly widens the glob. Verification path: Slice 4 first Windows matrix run logs the post-extract directory listing; the architect inspects to confirm the filename.
+- **`uname -s` shape on Git Bash for Windows runners** — symbol: typically `MINGW64_NT-10.0-22631` or similar; the `case` pattern in `install.sh:354-363` matches by exact string per the existing four-platform allowlist — source: Git for Windows documentation (NOT opened in this session) — verified: **no — assumption**. Risk: the actual `uname -ms` shape on the `windows-latest` runner under Git Bash could differ from the FR-4.1 assumption. Verification path: architect Step 3 runs `uname -ms` on a Windows runner; Slice 4 done-condition includes `bash install.sh --yes` on the runner asserting the case branch matches.
+- **`git tag -a -F <file>` UTF-8 byte-preservation** — symbol: `git-tag(1)` `-F <file>` flag; the message file is read verbatim as UTF-8 bytes — source: git-tag manpage (NOT opened in this session) — verified: **no — assumption**, but well-documented industry contract. Risk: locale-dependent re-encoding on rare systems. Verification path: AC-12 multilingual round-trip test exercises Cyrillic content end-to-end.
+- **GitHub Actions tag-filter glob semantics** — symbol: `on.push.tags` accepts glob patterns where `*` matches any character sequence; `sdlc-knowledge-v*` is a literal-prefix glob that does NOT match plain `v*` — source: GitHub Actions workflow syntax docs (NOT opened in this session) — verified: **no — assumption**, but heavily relied on by the iter-1 release workflow at `sdlc-knowledge-release.yml:13-16`. Risk: tag-filter cross-firing between the two workflows. Verification path: FR-11.4 documents the disjointness; Slice 8 first dual-tag run verifies disjoint firing.
+- **`git archive --format=tar.gz --prefix=<name>/ -o <file> HEAD`** — symbol: `git-archive(1)` flags producing a deterministic source tarball — source: git docs (NOT opened in this session) — verified: **no — assumption**, but standard git plumbing. Risk: low. Verification path: Slice 4 done-condition includes the tarball production and `tar -tzf` listing.
+- **`knowledge-base` CLI for §13 authoring** — symbol: `sdlc-knowledge status --json`, `sdlc-knowledge list --json`, `sdlc-knowledge search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes. Multilingual-mandate compliance: status returned 28 docs / 51542 chunks; English probe `the` returned hits in `Building AI Agents With LLMs RAG.pdf` and `Hands-On Machine Learning with Pytorch.pdf`; Russian probe `не` returned hits in `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf`; English topical probes `release engineering tag push`, `GitHub Actions release workflow`, `semver versioning`, `git tag annotated signed`, `release rollback regression` returned ZERO hits each (corpus is ML/AI + RU SE/SRE/Chaos books, not release-engineering literature); English topical probes `continuous deployment` and `blue green canary` returned hits in `Practical MLOps_ Operationalizing Machine Learning Models.pdf` (chunks 921, 131, 534, 1872, 1875, 1865) and `dokumen_pub_building_applications_with_ai_agents_designing_and_implementing.pdf` (chunks 9186, 9181); Russian topical probes `релиз тегирование`, `выпуск версий релиз`, `канареечный релиз`, `канареечное развертывание`, `развертывание production`, `откат релиза версия`, `версионирование система` returned ZERO hits each; Russian probes `автоматизация развертывания` and `непрерывная интеграция` returned hits in `Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf` (chunks 9962, 11012, 9906) and `841031560_Современная_программная_инженерия_2023.pdf` (chunks 46287, 46286, 45676, 45687, 45529) and `dokumen.pub_9785446114610-9781492054788.pdf` (chunk 16841). Two load-bearing citations follow because they specifically informed the FR-1 / R-8 design (canary/blue-green as deployment-strategy precedent and reversibility/CI-CD as the underlying release-safety pattern):
+- knowledge-base: Practical MLOps_ Operationalizing Machine Learning Models.pdf:534 — query: "blue green canary" — BM25: 23.402437612783395 — verified: yes
+- knowledge-base: Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf:9906 — query: "непрерывная интеграция" — BM25: 17.24736581105278 — verified: yes
+
+### Assumptions
+
+- **The four-tier authority gradation lifted from `resource-architect.md` is a clean fit for release operations.** Risk: the `resource-architect` tier table targets dependency / MCP / cloud-credential operations; release operations (`git tag`, `git push`, `gh release`) have different blast-radii. The most-restrictive-applicable-tier rule is the same; the ROW SET differs. How to verify: architect Step 3 reviews the FR-1.2 12-row table against `resource-architect.md:201-220` 18-row table and reconciles classification logic before Slice 1 ships.
+- **`AUTO_RELEASE=1` is the right env-var name (not `RELEASE_HEADLESS=1` or `CI_RELEASE=1`).** Risk: low — the name is local to this section and consistent with §7 FR-5.5's `AUTO_INSTALL=1` (assumed; confirm). How to verify: architect Step 3 grep-confirms the §7 env-var name and aligns FR-1.4 accordingly.
+- **The bootstrap one-shot `bash install.sh --bootstrap-release 0.2.0` is acceptable as a dedicated install.sh code path rather than a separate script (`bootstrap_release.sh`).** Risk: install.sh becomes a kitchen-sink utility. How to verify: architect Step 3 picks one approach with cited rationale; FR-6 documents the choice.
+- **Pre-existing `install.sh` cleanup of `Koroqe` is contained — no other scripts in the repo hardcode the value.** Risk: the README, `tools/sdlc-knowledge/RELEASING.md`, or hidden CI files could reference the old owner. How to verify: FR-5.3 mandates `grep -r 'Koroqe' .` returning zero matches before Slice 5 done-condition.
+- **The Windows pdfium dynamic library (`pdfium.dll`) is loadable by `pdfium-render` v0.9 from `~/.claude/tools/sdlc-knowledge/pdfium/lib/pdfium.dll` via `Pdfium::bind_to_system_library` plus `PATH` manipulation.** Risk: Windows uses `PATH` for DLL lookup, not `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; the `pdfium-render` resolver may need a different invocation on Windows. How to verify: §12 Open Question #1 carries forward — architect Step 3 selects `bind_to_library(path: &Path)` with the explicit Windows path if the system-library variant fails on Windows.
+- **The `templates/` invariant relaxation (FR-12.5) does not break any downstream consumer that grep's the templates dir for a fixed file count.** Risk: a downstream project's pre-existing CI step `[ "$(ls templates/ | wc -l)" -eq 4 ]` would fail. How to verify: not load-bearing — `templates/` is a one-way scaffold; downstream consumers do not import the templates programmatically.
+- **The CHANGELOG `[3.0.0]` body for the SDLC core's first release is authored manually in the bootstrap step.** Risk: a hand-authored stub may drift from the FR-1 through FR-12 list. How to verify: AC-10 verifies presence and date-stamp; the body content is checked manually by the maintainer at Slice 9 done-condition.
+
+### Open questions
+
+- **Knowledge-base direct topical searches on `release engineering tag push`, `GitHub Actions release workflow`, `semver versioning`, `git tag annotated signed`, `release rollback regression` returned ZERO hits each across the 28-book corpus.** Per the knowledge-base multilingual mandate this is a documented negative result. The English MLOps and AI-Agents books cover blue-green/canary deployment patterns generically; the Russian SRE/Chaos/Modern-SE books cover continuous integration / canary releases / version control as reversibility techniques generically; NEITHER side directly covers `git tag` / `gh release create` / `softprops/action-gh-release` semantics. Action: consider adding a release-engineering reference (e.g., the `git-tag(1)` manpage, the GitHub Actions release-management docs, the Keep a Changelog spec) to the `<project>/.claude/knowledge/sources/` corpus if iter-4 work continues. No action required for iter-3 — the source-of-truth is the existing release-engineer agent prompt, the existing workflow file, and the resource-architect tier-model precedent.
+- **Open Question #1 — Frontmatter `tools:` of `release-engineer.md` already includes `Bash`?** The `release-engineer.md:4` line was read in this session as `tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]` — but the prompt body explicitly states "no Bash tool" and the `## NEVER List` is structurally enforced "via tool removal" per line 63. Resolution: architect Step 3 verifies the actual frontmatter byte content in the working tree before Slice 1 ships. If `Bash` is already present, FR-1.1 is a documentation accuracy fix (rewrite the prompt body claims) rather than a frontmatter modification. If `Bash` is absent, FR-1.1 adds it. Either path satisfies the FR contract; the architect's job is to pick the cleaner edit.
+- **Open Question #2 — Exact `bblanchon/pdfium-binaries` Windows asset filename and archive format.** Could be `pdfium-win-x64.tgz`, `pdfium-windows-x64.tgz`, or `pdfium-win-x64.zip` (some platforms ship ZIPs). RESOLUTION: architect Step 3 opens the GitHub Releases page for `chromium/7802` and pins the exact filename and format before Slice 4 ships. If ZIP, the FR-3.3 `tar -xzf` invocation widens to a format-detection branch.
+- **Open Question #3 — `softprops/action-gh-release@v2` `body_path` field accepts a release-notes file outside the workflow's checkout dir?** The body_path is relative to the GH Actions workspace; the file `.claude/release-notes-<X.Y.Z>.md` is committed in the repo and present in the checkout, so the path resolves. Edge: if the tag is pushed without the release-notes file being committed (e.g., the file is gitignored by accident), the action fails with a clear error. RESOLUTION: FR-2.3 requires the file to be committed alongside the CHANGELOG rewrite per FR-1.2 row 5 (`git add CHANGELOG.md .claude/release-notes-<X.Y.Z>.md`); a missing file fails Slice 7 done-condition.
+- **Open Question #4 — sha256 verification of release binaries.** RESOLVED — DEFERRED to iter-4 per 13.7 item 2 (mirrors §11 iter-1 / §12 iter-2 deferrals).
+- **Open Question #5 — Auto-publish to npm/cargo/PyPI.** RESOLVED — OUT OF SCOPE per 13.7 item 1 (Forbidden tier in iter-3).
+- **Open Question #6 — Whether to backfill historical CHANGELOG sections for Features 1-12.** RESOLVED per R-4 — start clean from `[3.0.0]`; backfill is deferred to iter-4 if requested.
+
