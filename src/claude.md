@@ -14,6 +14,7 @@ This workflow mirrors a professional software development team:
 | Business Analyst | `ba-analyst` | Use cases in `docs/use-cases/<feature>_use_cases.md` |
 | Software Architect | `architect` | Architecture review, technical design validation |
 | Resource Manager-Architect | `resource-architect` | Recommend external resources (MCP, cloud, APIs, services, libraries, hardware) at bootstrap time |
+| Role Planner | `role-planner` | Recommend project-specific specialized roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 |
 | QA Lead | `qa-planner` | Test cases in `docs/qa/<feature>_test_cases.md` |
 | Tech Lead | `planner` | Implementation plan (5-9 slices) |
 | Security Engineer | `security-auditor` | Security review for sensitive slices |
@@ -110,6 +111,7 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Implementation slices are numbered with: description, files affected, testable done-condition
 > - Risks and dependencies section exists and is substantive
 > - The `## Recommended Resources` section (if present at the top of the plan, before `## Prerequisites verified`) is a valid top-level section produced by `resource-architect` at bootstrap Step 3.5 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed recommendation entries missing any of the six fields (Category, Name, Why, Install/activate, Cost/complexity, Reversibility) MAY be raised as MINOR — not CRITICAL, not MAJOR.
+> - The `## Additional Roles` section (if present at the top of the plan, after `## Recommended Resources` if any and before `## Prerequisites verified`) is a valid top-level section produced by `role-planner` at bootstrap Step 3.75 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed per-role entries missing any of the 5 fields (Role title, Slug, Why, Pipeline step, Purpose) MAY be raised as MINOR. Slug inconsistency between per-role block and call plan MAY be MINOR. **If per-role slug matches any core 16 agent name (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, test-writer, code-reviewer, build-runner, e2e-runner, verifier, doc-updater, refactor-cleaner, changelog-writer, resource-architect, role-planner), flag as MAJOR — semantic collision indicates FR-1.8 overlap-check failure.**
 >
 > **Slice Quality:**
 > - No slice is too large (>200 lines of production code) — flag for splitting
