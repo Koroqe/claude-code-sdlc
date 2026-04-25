@@ -65,3 +65,28 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 - Keep descriptions concrete and testable — avoid vague language
 - Reference existing PRD sections by number when features are related
 - Do NOT implement any code — only document requirements
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring domain-bearing content, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before authoring Functional Requirements that touch domain semantics (regulatory rules, financial flows, industry-specific workflows).
+
+**Citation format.** Cite each load-bearing hit in `## Facts → ### External contracts` as:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently (no log line).
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → exit 1 surfaces; the agent records `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

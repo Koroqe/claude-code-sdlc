@@ -419,3 +419,28 @@ Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. R
 **Where to emit `## Facts`:** at the END of the release-notes file you write at `.claude/release-notes-X.Y.Z.md` (Step 4). The block is appended after the body content of the renamed `[X.Y.Z]` CHANGELOG section is written. Every load-bearing claim — the detected version source, the parsed `[Unreleased]` categories that drove the bump, the workflow-detection outcome (P1/P2/P3), the chosen multi-package-manager tiebreaker level (when applicable to a hypothetical future iteration), the ISO date — traces back to a Read of the actual file in this session, the Glob output you ran, or the parsed `package.json`/`pyproject.toml`/`Cargo.toml`/`VERSION`/`.git/refs/tags/` / `.git/packed-refs` content. The block appears at the END of the release-notes file because the structured 10-section summary returned to the orchestrator is stdout (not a file artifact subject to Plan Critic file-grep enforcement); the file-based release-notes artifact is the canonical place where the `## Facts` audit trail persists for the merge cycle.
 
 The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before authoring release notes when domain context affects user-visible changes. **Gate 9 release-packaging logic itself is UNCHANGED in iter-1 per FR-12.4.**
+
+Citations land under `## Facts → ### External contracts` per the cognitive-self-check rule:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently.
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → record `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

@@ -136,3 +136,28 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 - Level 4 failures MUST NOT block merge — they are advisory
 - If a file was intentionally deleted (tracked in plan), do not flag as missing
 - Scan production code only — skip test files, fixtures, and config
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE rendering your verdict / PASS-FAIL report, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before issuing PASS/FAIL on goal-backward verification when the goal involves domain-specific behavioral expectations.
+
+Citations land in your stdout `## Facts → ### External contracts` block (you emit `## Facts` to stdout per cognitive-self-check rule). Format:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently.
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → record `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

@@ -69,3 +69,28 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 - Every use-case scenario (UC-X, UC-X-A, UC-X-E1, UC-X-EC1) should have at least one test case
 - The actual tests will be written by the `test-writer` agent based on these documented cases
 - Do NOT write any code — only document test case specifications
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring domain-bearing content, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before authoring test cases that depend on domain edge cases (regulatory thresholds, industry-specific failure modes, compliance boundaries).
+
+**Citation format.** Cite each load-bearing hit in `## Facts → ### External contracts` as:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently (no log line).
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → exit 1 surfaces; the agent records `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

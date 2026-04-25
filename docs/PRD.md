@@ -2331,3 +2331,362 @@ Define how this section treats artifacts created before its merge date.
 ### Open questions
 
 (none) — the plan at `/Users/aleksandra/.claude/plans/sleepy-exploring-tome.md` provides sufficient specification for PRD authoring. Implementation-time decisions (exact Plan Critic preamble wording, exact README Hardening table row text, exact placement of `## Cognitive Self-Check (MANDATORY)` section within each agent prompt) are deferred to architect/planner per the existing SDLC pipeline and do not require user input at PRD-authoring time.
+
+---
+
+## 11. Local Knowledge Base for SDLC Agents
+
+**Status:** [IN DEVELOPMENT]
+**Date:** 2026-04-25
+**Priority:** Medium
+**Related:** Section 1 (FR-3: Executable Plan Format — slice fields are unchanged; the new slash command and rule reuse the established format), Section 3 (FR-3: PRD Changelog Field — this section includes the field per that contract), Section 6 (Release Engineer — Gate 9 release-engineer behavior is UNCHANGED in iter-1; the first `sdlc-knowledge-v0.1.0` tag is cut manually by maintainer per `tools/sdlc-knowledge/RELEASING.md`), Section 9 (Cognitive Self-Check Protocol — `knowledge-base:` is an additive citation source convention that slots into `### External contracts`; `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED by this section)
+
+Changelog: Projects can point SDLC agents at a folder of domain books, articles, and PDFs; agents read the relevant material before writing PRDs, plans, and reviews so authored content reflects the project's actual domain instead of generic knowledge.
+
+### 11.1 Description
+
+Add a per-project, file-based knowledge base that the twelve thinking SDLC agents consult before authoring domain-bearing content (PRD requirements, use-case scenarios, architectural decisions, security rationales, plan slices that depend on domain semantics). The retrieval tool — a Rust CLI binary named `sdlc-knowledge` — lives globally under `~/.claude/tools/sdlc-knowledge/` so it is shared across all projects on the developer's machine. The data — a `.claude/knowledge/sources/` folder of user-supplied documents and a single `.claude/knowledge/index.db` SQLite file — lives per-project so each project's domain is isolated and the database never leaves the project directory.
+
+Search uses SQLite FTS5 with BM25 ranking — pure lexical retrieval, NO vector embeddings in iter-1. The binary is invoked via Bash (no MCP server, no daemon) with exactly one allowlist entry registered in `~/.claude/settings.json` by `install.sh`. A new slash command `/knowledge-ingest <path>` raises the SDLC command count from 5 to 6 and gives the developer a one-line entry point for indexing a folder of domain documents.
+
+**Why:** Section 9 (Cognitive Self-Check Protocol) blocks agents from inventing facts, but does nothing to *give* them domain facts. Today the only way to inject domain knowledge is to paste it into chat, which is non-persistent and per-session. Each downstream project should be able to maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all twelve thinking agents consult before authoring — making cited domain knowledge as routine as cited code.
+
+**Outcome:** A user runs `bash install.sh` once and gets `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`. They scaffold a project, drop their domain PDFs/MD/TXT into `.claude/knowledge/sources/`, run `/knowledge-ingest .claude/knowledge/sources` once, and from that point every relevant agent in `/bootstrap-feature` and `/develop-feature` queries the knowledge base before writing and cites hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+
+**Design decisions (locked in this session):**
+1. Approach C: Rust binary + SQLite FTS5 (BM25 lexical search). No vector embeddings in iter-1.
+2. No MCP server. Plain CLI invoked via Bash. One allowlist entry in `~/.claude/settings.json`.
+3. iter-1 input formats: Markdown, plain text, PDF.
+4. New slash command `/knowledge-ingest <path>` raises command count 5 → 6.
+5. Software lives in global `~/.claude/`; data lives per-project under `<project>/.claude/knowledge/`.
+6. Total agent count REMAINS at 17. Total `/merge-ready` gate count REMAINS at 10. README taglines BYTE-UNCHANGED.
+7. The cognitive-self-check rule (Section 9) is BYTE-UNCHANGED — the new `knowledge-base:` citation prefix is an additive convention compatible with the existing `### External contracts` schema.
+
+### 11.2 User Stories
+
+1. **As a developer building a feature in a regulated finance project**, I want my project to maintain a local index of regulatory PDFs and internal handbooks so the PRD writer cites real domain rules in my project's PRD sections instead of hallucinating generic finance terminology.
+
+2. **As a maintainer of an SDLC-using project that has no domain library**, I want the pipeline to behave exactly as it does today when no `index.db` exists, so adopting the SDLC does not require setting up a knowledge base on day one.
+
+3. **As a developer working offline or on a fresh clone before the first binary release exists**, I want `install.sh` to fall back to a `cargo build --release` source build when a release binary is unavailable, so I can still get a working `sdlc-knowledge` binary without waiting for a release tag.
+
+### 11.3 Functional Requirements
+
+#### FR-1: `sdlc-knowledge` CLI Surface
+
+A single Rust binary that exposes ingestion, search, and management subcommands. The binary is the only runtime surface — there is no daemon and no MCP server.
+
+1. **FR-1.1:** A new Rust crate MUST exist at `tools/sdlc-knowledge/` (monorepo placement) with `Cargo.toml`, `src/main.rs`, and module files. The compiled artifact MUST be a single executable named `sdlc-knowledge` installed at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`.
+2. **FR-1.2:** The CLI MUST expose exactly five subcommands plus `--version`:
+   - `sdlc-knowledge ingest <path> [--project-root <dir>] [--json]`
+   - `sdlc-knowledge search <query> [--top-k 5] [--project-root <dir>] [--json]`
+   - `sdlc-knowledge list [--project-root <dir>] [--json]`
+   - `sdlc-knowledge status [--project-root <dir>] [--json]`
+   - `sdlc-knowledge delete <source-id> [--project-root <dir>] [--json]`
+   - `sdlc-knowledge --version`
+3. **FR-1.3:** `--project-root` MUST default to the process's current working directory. The binary MUST ALWAYS read and write under `<project-root>/.claude/knowledge/` and MUST NEVER touch global state outside that path. The binary MUST NOT mutate `~/.claude/` at runtime.
+4. **FR-1.4:** `--json` MUST produce machine-readable output for agent consumption. Default output (no `--json`) MUST be human-readable text suitable for terminal use.
+5. **FR-1.5:** `--project-root` MUST be canonicalized (symlinks resolved, `..` segments normalized). Paths that resolve OUTSIDE the process's current working directory MUST be rejected with exit code 2 and the literal error message `error: project-root must resolve under current working directory`.
+6. **FR-1.6:** Every subcommand reading the index MUST validate the index file's schema before reading rows. A corrupt or truncated `index.db` MUST exit 1 with the literal message `error: index database invalid; re-ingest required`. The binary MUST NOT panic on corrupt input — `panicked at` MUST NOT appear in stderr under any malformed-input scenario.
+
+#### FR-2: Ingestion (Markdown, Plain Text, PDF)
+
+The `ingest` subcommand reads supported file formats, chunks the extracted text, and writes rows to the SQLite index.
+
+1. **FR-2.1:** `sdlc-knowledge ingest <path>` MUST accept either a single file or a directory. When given a directory, the binary MUST recursively process every supported file. Supported extensions in iter-1: `.md`, `.txt`, `.pdf`.
+2. **FR-2.2:** Text extraction MUST be format-aware: Markdown and plain text are read as UTF-8; PDF is extracted via the architect-selected PDF crate (default candidate `pdf-extract`; fallback `lopdf` — see Open Question #1 in `## Facts`).
+3. **FR-2.3:** Extracted text MUST be split into chunks using a sliding window of ~500 characters with ~100-character overlap. The chunker MUST be deterministic — the same input file MUST produce the same chunk boundaries on every run.
+4. **FR-2.4:** Each ingested file MUST produce one row in the `documents` table and one or more rows in the `chunks` table. The `documents` row MUST record `source_path`, `mtime`, `sha256`, and `ingested_at` so re-ingest is idempotent.
+5. **FR-2.5:** Re-running `ingest` on a file whose `(source_path, mtime, sha256)` triple is unchanged MUST be a no-op — the binary MUST NOT re-chunk and MUST log `unchanged: <path>`. When `sha256` differs, the binary MUST re-chunk and replace the previous rows transactionally per-document via `BEGIN IMMEDIATE`.
+6. **FR-2.6:** Ingestion of a directory MUST be transactional per-document, NOT per-batch. A corrupt or unreadable file (truncated PDF, malformed UTF-8) MUST be reported with a clear per-file error and the binary MUST continue processing remaining files in the batch.
+7. **FR-2.7:** SQLite WAL mode MUST be enabled (`PRAGMA journal_mode=WAL`) at index initialization so reads (`search`) can interleave with writes (`ingest`) without blocking.
+
+#### FR-3: Search (BM25 over FTS5)
+
+The `search` subcommand returns the top-K chunks ranked by BM25 lexical similarity.
+
+1. **FR-3.1:** `sdlc-knowledge search <query>` MUST query the FTS5 virtual table `chunks_fts` using `MATCH` and rank results by `bm25(chunks_fts)` descending.
+2. **FR-3.2:** `--top-k <N>` MUST default to 5 and MUST be clamped to a reasonable upper bound (≤100) to prevent runaway result sets.
+3. **FR-3.3:** `--json` MUST emit a JSON array where each element has the shape `{"source": "<source_path>", "chunk_id": <int>, "ord": <int>, "score": <float>, "snippet": "<string>"}`. The array length MUST be ≤ `--top-k`.
+4. **FR-3.4:** When no chunks match the query, the binary MUST exit 0 with an empty JSON array `[]` (or a human-readable "no results" message in default output mode). No-results is NOT an error condition.
+
+#### FR-4: Storage Schema and Migrations
+
+The index uses a single SQLite file with a small, future-extensible schema.
+
+1. **FR-4.1:** The index file MUST be a single SQLite database at `<project-root>/.claude/knowledge/index.db`. WAL sidecar files (`index.db-shm`, `index.db-wal`) are managed by SQLite itself.
+2. **FR-4.2:** The schema MUST include exactly these tables in iter-1:
+   - `documents(id INTEGER PRIMARY KEY, source_path TEXT UNIQUE, mtime INTEGER, sha256 TEXT, ingested_at INTEGER)`
+   - `chunks(id INTEGER PRIMARY KEY, doc_id INTEGER REFERENCES documents(id), ord INTEGER, text TEXT)`
+   - `chunks_fts` — FTS5 virtual table with `content='chunks'` and `content_rowid='id'`, plus standard insert/update/delete triggers to keep FTS5 in sync with `chunks`.
+   - `schema_version(version INTEGER NOT NULL)` — seeded to `1` at index init.
+3. **FR-4.3:** The `chunks` table MUST permit a future `embedding BLOB` column without requiring a destructive migration — iter-2 hybrid (sqlite-vec) is intended to ADD a column, not replace tables.
+4. **FR-4.4:** A migration module MUST exist with a single v1 migration in iter-1, structured so iter-2 can append v2 without rewriting v1.
+
+#### FR-5: Agent Activation in 12 Thinking Agents
+
+Each of the twelve thinking agents (the same in-scope set as Section 9) gains a small activation block referencing the knowledge-base CLI.
+
+1. **FR-5.1:** The following twelve agent prompt files MUST be UPDATED with a new `## Knowledge Base (when present)` section, appended at the end of the existing prompt body: `src/agents/prd-writer.md`, `src/agents/ba-analyst.md`, `src/agents/architect.md`, `src/agents/qa-planner.md`, `src/agents/planner.md`, `src/agents/security-auditor.md`, `src/agents/code-reviewer.md`, `src/agents/verifier.md`, `src/agents/refactor-cleaner.md`, `src/agents/resource-architect.md`, `src/agents/role-planner.md`, `src/agents/release-engineer.md`.
+2. **FR-5.2:** Each `## Knowledge Base (when present)` section MUST: (a) reference the rule file `~/.claude/rules/knowledge-base.md`, (b) state that the agent MUST query the index BEFORE authoring domain-bearing content WHEN the activation sentinel `<project>/.claude/knowledge/index.db` exists, (c) include the literal CLI invocation `~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json`, (d) specify that load-bearing hits MUST be cited in `## Facts → ### External contracts` using the `knowledge-base:` source prefix per FR-7.1.
+3. **FR-5.3:** Each activation block MUST be ADDITIVE — it MUST NOT delete, replace, or reorder any existing prompt content (including the `## Cognitive Self-Check (MANDATORY)` section added by Section 9). The block MUST live at the end of the prompt file so its placement is unambiguous and easily diffable.
+4. **FR-5.4:** The five executor agents (`test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer`) MUST NOT be modified by this section. The exemption mirrors Section 9's executor exemption — these agents do not author domain content.
+5. **FR-5.5:** When the activation sentinel is ABSENT, the activation block MUST be a no-op — the agent MUST proceed with its existing authoring flow with no behavioral change. When the sentinel is present but the binary is absent, the agent MUST log the literal line `knowledge-base: tool not installed; skipping` and add a corresponding entry to its `### Open questions` subsection (per Section 9 `## Facts` schema).
+
+#### FR-6: Slash Command `/knowledge-ingest`
+
+A new SDLC slash command provides the user-facing entry point for ingestion.
+
+1. **FR-6.1:** A new file `src/commands/knowledge-ingest.md` MUST exist describing a slash command that takes one required argument `<path>` and runs `~/.claude/tools/sdlc-knowledge/sdlc-knowledge ingest <path> --json`.
+2. **FR-6.2:** The command MUST stream the binary's per-file JSON output to chat as ingestion progresses, then emit a final summary line with the chunk count and source count returned by the binary.
+3. **FR-6.3:** When the binary is absent, the command MUST report a clear actionable message including the literal text `bash install.sh --yes` and exit without error.
+4. **FR-6.4:** After this section ships, `ls src/commands/*.md | wc -l` MUST return 6 (was 5 — `bootstrap-feature`, `context-refresh`, `develop-feature`, `implement-slice`, `merge-ready` plus the new `knowledge-ingest`).
+
+#### FR-7: New Rule File `src/rules/knowledge-base.md`
+
+A new global rule file documents the CLI usage contract, citation format, and fallback semantics for agents.
+
+1. **FR-7.1:** A new file `src/rules/knowledge-base.md` MUST exist with sections covering: `## When to query`, `## CLI invocation contract` (lists all five subcommands verbatim), `## Citation format` (specifies the literal `knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes` shape), `## Activation sentinel` (defines `<project>/.claude/knowledge/index.db` as the activation sentinel), `## Fallback behavior` (binary absent / index absent / corrupt index handling), `## Application Scope` (enumerates the 12 in-scope agents and the 5 exempt executors verbatim), `## Facts` (per Section 9 schema). The file MUST be ≤ 200 lines to stay readable.
+2. **FR-7.2:** The rule MUST be GLOBAL (lives under `src/rules/`, NOT `templates/rules/`) because it applies to the SDLC repo's own internal authoring AND to every downstream project's authoring. It is auto-distributed by the existing `src/rules/*` copy logic in `install.sh`.
+3. **FR-7.3:** The rule's `## Citation format` MUST instruct agents to add the citation under `### External contracts` per Section 9's `## Facts` schema. The `knowledge-base:` source prefix is an ADDITIVE convention compatible with Section 9's existing schema — Section 9's rule file `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED.
+
+#### FR-8: `install.sh` Integration
+
+`install.sh` gains binary download, allowlist registration, project scaffold extension, and a cargo source-build fallback. Existing behavior is preserved.
+
+1. **FR-8.1:** `install.sh` MUST detect the host platform via `uname -ms` and download the matching binary release artifact from the project's GitHub Releases. Supported iter-1 platforms: darwin-arm64, darwin-x64, linux-x64, linux-arm64. Windows is OUT OF SCOPE for iter-1 (see 11.7).
+2. **FR-8.2:** After download, the binary MUST be placed at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` with executable mode (`chmod +x`). Re-running `install.sh` when the binary is already present at the expected version MUST be a no-op (idempotent install).
+3. **FR-8.3:** `install.sh` MUST register exactly ONE Bash allowlist entry in `~/.claude/settings.json` whose value is the literal `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *`. The merge MUST be idempotent — re-running install MUST NOT duplicate the entry. Where `jq` is available it SHOULD be used; otherwise a heredoc-merge that preserves existing keys MUST be used.
+4. **FR-8.4:** When a release binary is unavailable for the detected platform AND `cargo` is on `PATH`, `install.sh` MUST run `cargo build --release -p sdlc-knowledge` from the local checkout and copy the artifact to the global path. This is the cargo source-build fallback that handles the first-release chicken-and-egg per AC-13.
+5. **FR-8.5:** When neither a release binary nor `cargo` is available, `install.sh` MUST log a clear warning of the form `binary unavailable; install cargo or wait for first release` and continue. install.sh MUST NOT abort the rest of the install on this condition (graceful degradation).
+6. **FR-8.6:** `install.sh --init-project` MUST extend the project scaffold by copying `templates/knowledge/.gitignore` to `<cwd>/.claude/knowledge/.gitignore` and creating `<cwd>/.claude/knowledge/sources/` with a `.gitkeep` placeholder so the directory exists in the scaffold.
+7. **FR-8.7:** The `install.sh` `VERSION` constant MUST remain unchanged in this section's commits. The pre-existing repo divergence between `install.sh` line 22 (`VERSION="2.1.0"`) and the README badge (`version-3.1.0-green.svg`) is independent of this feature; the release-engineer at Gate 9 reconciles version baselines separately.
+
+#### FR-9: New `templates/knowledge/` Directory
+
+A new template directory ships the per-project `.gitignore` for the knowledge folder.
+
+1. **FR-9.1:** A new directory `templates/knowledge/` MUST exist with two files: `.gitignore` and `.gitkeep`. The `.gitignore` MUST contain exactly the lines `sources/`, `index.db`, `index.db-shm`, `index.db-wal` (one per line) so user-supplied source documents and the SQLite database (plus its WAL sidecars) are excluded from version control by default.
+2. **FR-9.2:** The four pre-existing template surfaces MUST be UNCHANGED: `templates/CLAUDE.md`, `templates/scratchpad.md`, `templates/settings.json`, and every file under `templates/rules/`. The ONLY template addition is the new `templates/knowledge/` directory.
+
+#### FR-10: Backward Compatibility Sentinels
+
+Define how the activation surface degrades gracefully when the binary or the index is absent.
+
+1. **FR-10.1:** The activation sentinel for agent behavior is the existence of `<project>/.claude/knowledge/index.db`. When the sentinel is ABSENT, every in-scope agent MUST produce output that is BEHAVIORALLY identical to current main — no failed tool calls, no error traces in stdout, no missing-citation Plan Critic findings tied to knowledge-base absence. (The agent prompt files themselves grow by ~25 lines per FR-5.1; that is a prompt-text change, not a behavioral change in authored artifacts.)
+2. **FR-10.2:** When the binary at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is ABSENT (e.g., install.sh has not run, or the user removed the binary), agents that attempt to query MUST log the literal line `knowledge-base: tool not installed; skipping` exactly once and proceed with their existing authoring flow without citations.
+3. **FR-10.3:** Section 9's Plan Critic checks for missing `### External contracts` citations MUST NOT fire on knowledge-base absence — the activation sentinel makes the citation conditional, not unconditional. The Plan Critic itself in `src/claude.md` is UNCHANGED by this section (no new bullet); the existing `### External contracts` heuristic continues to operate as Section 9 specified.
+4. **FR-10.4:** The cognitive-self-check rule file `src/rules/cognitive-self-check.md` MUST be BYTE-UNCHANGED — the new `knowledge-base:` source prefix is an additive citation convention, not a rule schema change.
+
+#### FR-11: Cross-Platform Release Pipeline
+
+A GitHub Actions workflow builds release binaries for the four supported platforms.
+
+1. **FR-11.1:** A new file `.github/workflows/sdlc-knowledge-release.yml` MUST exist. The workflow MUST trigger on tags matching `sdlc-knowledge-v*` and run a build matrix covering: `macos-14` (darwin-arm64), `macos-13` (darwin-x64), `ubuntu-latest` (linux-x64), and `ubuntu-22.04-arm` (linux-arm64).
+2. **FR-11.2:** Each matrix job MUST build with `cargo build --release` using release profile flags `strip = true`, `lto = true`, `codegen-units = 1` to meet the binary-size budget (NFR-1.1). Each job MUST upload its produced binary as a release artifact.
+3. **FR-11.3:** A new file `tools/sdlc-knowledge/RELEASING.md` MUST document the release process, including the maintainer-only one-time bootstrap that cuts the FIRST `sdlc-knowledge-v0.1.0` tag MANUALLY before the SDLC release that introduces this feature merges. Until that first tag exists, `install.sh` falls back to the cargo source-build path (FR-8.4).
+
+#### FR-12: Invariants — Counts, Taglines, Executor Files
+
+Enumerate strings, counts, and files this section MUST NOT change.
+
+1. **FR-12.1:** Total agent count MUST REMAIN at 17. The README tagline at line 5 (`17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.`) MUST be BYTE-UNCHANGED. Verifiable via `grep -Fxc "17 specialized AI agents." README.md` returning ≥ 1.
+2. **FR-12.2:** Total `/merge-ready` gate count MUST REMAIN at 10. The README tagline at line 35 (`10 quality gates`) MUST be BYTE-UNCHANGED.
+3. **FR-12.3:** The five executor agent prompt files (`src/agents/test-writer.md`, `src/agents/build-runner.md`, `src/agents/e2e-runner.md`, `src/agents/doc-updater.md`, `src/agents/changelog-writer.md`) MUST be BYTE-UNCHANGED for this section's commits.
+4. **FR-12.4:** The release-engineer agent prompt at `src/agents/release-engineer.md` GAINS the `## Knowledge Base (when present)` activation block per FR-5.1 but its Gate 9 release-packaging logic MUST be UNCHANGED in iter-1. Coupling the release-engineer to the binary release pipeline is OUT OF SCOPE for iter-1 (see 11.7).
+5. **FR-12.5:** The cognitive-self-check rule file `src/rules/cognitive-self-check.md` MUST be BYTE-UNCHANGED per FR-10.4.
+
+### 11.4 Non-Functional Requirements
+
+1. **NFR-1.1: Binary size.** The compiled `sdlc-knowledge` binary MUST be < 10 MB after `strip = true` and `lto = true` on every supported platform. Estimated breakdown: rusqlite-bundled ~3 MB + chosen PDF crate ~2 MB + clap+serde+sha2 ~1 MB ≈ 6–8 MB total.
+2. **NFR-1.2: Search latency.** `sdlc-knowledge search "<query>" --top-k 5 --json` MUST complete in ≤ 500 ms over a 10 000-chunk seeded fixture database on a 2024-class laptop / CI runner. This is the latency budget agents experience at authoring time.
+3. **NFR-1.3: Ingest throughput.** `sdlc-knowledge ingest fixture.pdf` for a 5 MB PDF MUST complete in ≤ 60 s on a 2024-class laptop. Larger documents scale roughly linearly; throughput is bounded by the PDF crate's extraction speed.
+4. **NFR-1.4: Cross-platform support.** The binary MUST build and run on darwin-arm64, darwin-x64, linux-x64, and linux-arm64. Windows is OUT OF SCOPE for iter-1 (see 11.7).
+5. **NFR-1.5: Single-file database constraint.** The index MUST be a single SQLite file (`index.db`) plus the SQLite-managed WAL sidecars. Spreading state across multiple files (e.g., separate vector store, separate metadata file) is forbidden in iter-1 to keep the per-project data model trivial to back up, copy, or delete.
+6. **NFR-1.6: WAL mode.** SQLite WAL mode MUST be enabled at index initialization so reads can interleave with writes. This is load-bearing for parallel-wave execution where one slice may ingest while a sibling slice queries.
+7. **NFR-1.7: Idempotency on re-ingest.** Re-running `ingest` on unchanged inputs MUST be a no-op (mtime+sha256 check). Re-running on changed inputs MUST replace prior chunks atomically per-document via `BEGIN IMMEDIATE`.
+8. **NFR-1.8: No network at runtime.** The `sdlc-knowledge` binary MUST NOT make network calls during `ingest`, `search`, `list`, `status`, or `delete`. All inputs are local files. Network access is restricted to `install.sh`'s one-time release download.
+9. **NFR-1.9: Allowlist scope.** The Bash allowlist entry registered by `install.sh` MUST be exactly `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *` — no broader wildcards, no other tool paths added. Defense-in-depth: the binary itself enforces project-root canonicalization (FR-1.5) so even an attacker-controlled CLI argument cannot escape the project sandbox.
+10. **NFR-1.10: Version bump.** This feature triggers a minor version bump (additive, no breaking changes). Pipeline behavior on projects that do not initialize a knowledge base is unchanged per FR-10.1.
+
+### 11.5 Acceptance Criteria
+
+1. **AC-1: Install on four platforms.** `bash install.sh --yes` on darwin-arm64, darwin-x64, linux-x64, and linux-arm64 produces a working `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` exit 0 within 60 seconds (download + chmod).
+2. **AC-2: Bash allowlist registered.** After install, `~/.claude/settings.json` has exactly one allow entry matching `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *`. No other paths are added.
+3. **AC-3: Project scaffold extension.** `bash install.sh --init-project` creates `<cwd>/.claude/knowledge/.gitignore` containing the literal lines `sources/`, `index.db`, `index.db-shm`, `index.db-wal` (one per line, byte-for-byte matching `templates/knowledge/.gitignore`).
+4. **AC-4: Ingest a 5 MB PDF.** `sdlc-knowledge ingest fixture.pdf` completes in ≤ 60 s on a 2024-class laptop, writes ≥ 1 row to `documents` and ≥ 100 rows to `chunks`. Re-running on the same file is a no-op (logs `unchanged: <path>`, exit 0).
+5. **AC-5: Search returns ranked results within latency budget.** `sdlc-knowledge search "<query>" --top-k 5 --json` returns a valid JSON array of ≤ 5 chunks ordered by BM25 score descending; latency ≤ 500 ms over a 10 000-chunk database.
+6. **AC-6: Path traversal rejected.** `sdlc-knowledge ingest ./books --project-root ../../../etc` exits 2 with the literal stderr message `error: project-root must resolve under current working directory`.
+7. **AC-7: Corrupt index handled.** Truncating `index.db` to 100 bytes and running `search` returns exit 1 with the literal stderr message `error: index database invalid; re-ingest required`. The binary MUST NOT panic — `panicked at` MUST NOT appear in stderr.
+8. **AC-8: Backward compat without index.** When `<project>/.claude/knowledge/index.db` is absent, all 12 thinking agents produce output behaviorally identical to current main (no failed tool calls, no error traces in stdout). Verifiable by running `/bootstrap-feature` on a synthetic feature with and without the index and diffing the produced PRD/use-case/plan files.
+9. **AC-9: Backward compat without binary.** When `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is absent, agents that attempt to query log the literal line `knowledge-base: tool not installed; skipping` and proceed without citations. The pipeline does NOT abort on the missing binary.
+10. **AC-10: Citation format correctness.** When the index IS present, the 12 thinking agents MUST cite at least one `knowledge-base:` source in `### External contracts` for any task that exercises domain semantics. The literal citation shape is `knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes`.
+11. **AC-11: Invariants preserved.** `ls src/agents/*.md | wc -l` returns 17. README contains the literal line `17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.` at line 5 BYTE-UNCHANGED and the literal phrase `10 quality gates` at line 35 BYTE-UNCHANGED. The five executor agents have ZERO diff vs current main.
+12. **AC-12: Commands count.** `ls src/commands/*.md | wc -l` returns 6 (was 5).
+13. **AC-13: First-release bootstrap with cargo source-build fallback.** A maintainer-only one-shot bootstrap step documented in `tools/sdlc-knowledge/RELEASING.md` cuts the FIRST `sdlc-knowledge-v0.1.0` tag manually BEFORE the SDLC release that introduces this feature merges, so subsequent users of `install.sh` find a release to download. Until that first tag exists, `install.sh` falls back to `cargo build --release` from the local checkout when `cargo` is on `PATH`; otherwise it emits the literal warning `binary unavailable; install cargo or wait for first release` and continues.
+
+### 11.6 Risks and Dependencies
+
+1. **Risk: Cross-platform Rust build matrix drift.** GitHub Actions runner labels (`macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`) evolve over time; an ARM-Linux label rename could break Slice 4. Mitigation: pin labels at workflow authoring time; `actionlint` in the workflow's done-condition catches label typos. Windows DEFERRED to iter-2 (saves CI cost).
+2. **Risk: PDF extraction quality.** `pdf-extract` is the iter-1 default (pure Rust, ~2 MB binary contribution); fallback to `lopdf` if quality is poor on real-world fixtures. System `pdftotext` binding is DEFERRED to iter-2 (avoids external runtime dep). The architect picks one with cited rationale at architect Step 3 (BEFORE Slice 2 ships) per Open Question #1.
+3. **Risk: Binary size budget (NFR-1.1 < 10 MB).** rusqlite-bundled ~3 MB + pdf-extract ~2 MB + clap+serde ~1 MB ≈ 6–8 MB after `strip = true` and `lto = true`. Mitigation: verified at the cross-platform release dry-run; if exceeded, switch PDF crate or vendor a smaller SQLite distribution.
+4. **Risk: Bash allowlist scope.** Granting `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *` allows arbitrary CLI args to the binary. Mitigation: the binary itself enforces project-root canonicalization (FR-1.5 + AC-6); `..` traversal, symlink escapes, and absolute paths outside cwd are rejected with exit 2. Security-auditor pre-reviews the install.sh slice.
+5. **Risk: Agent prompt bloat.** The 12 in-scope agents already grew by ~30 lines each with cognitive-self-check (Section 9); +~25 more lines from this feature → ~55 lines of additive prompt per agent. Mitigation: the rule body lives in `src/rules/knowledge-base.md`; per-agent activation block is short and references the rule.
+6. **Risk: Plan Critic false positives.** Section 9's `### External contracts` heuristic could flag absent `knowledge-base:` citations when no index exists. Mitigation: FR-10.3 makes citations conditional on the activation sentinel; the Plan Critic in `src/claude.md` is UNCHANGED.
+7. **Risk: Version baseline divergence.** Pre-existing repo state — `install.sh` line 22 has `VERSION="2.1.0"` while README badge shows `version-3.1.0-green.svg`. Mitigation: FR-8.7 explicitly leaves `install.sh` `VERSION` unchanged in this section's commits; the release-engineer at Gate 9 reconciles version baselines independently.
+8. **Risk: First-run UX & first-release chicken-and-egg.** Without the binary, `/knowledge-ingest` fails with a clear actionable message including `bash install.sh --yes` (FR-6.3). Between merge of this feature and the maintainer cutting the FIRST `sdlc-knowledge-v0.1.0` tag, install.sh's binary download fails; the cargo source-build fallback (FR-8.4) handles this when `cargo` is on PATH; otherwise install.sh warns and skips silently (FR-8.5).
+9. **Risk: Idempotency drift on file rename.** Idempotency keys on `(source_path, mtime, sha256)`; renaming an unchanged file forces re-chunking. Acceptable cost in iter-1; iter-2 may switch to content-hash-only keying.
+10. **Risk: Concurrent index access in parallel waves.** SQLite WAL mode handles read concurrency; writes (ingest) are serialized via SQLite's lock. Mitigation: ingest holds a write lock per-document via `BEGIN IMMEDIATE`, not per-batch — typical 50-chunk doc < 50 ms allowing search interleaving on long full-corpus ingests.
+11. **Risk: Scope creep — vectors / hybrid search.** Adding sqlite-vec-based embeddings is straightforward later but explicitly OUT OF SCOPE in iter-1 (see 11.7). Mitigation: FR-4.3 reserves the `chunks.embedding BLOB` column for future addition without destructive migration.
+12. **Risk: First-release tag scheme & release-engineer invariant.** In iter-1, `release-engineer` Gate 9 itself is UNCHANGED. The maintainer manually cuts `sdlc-knowledge-v<X.Y.Z>` tags ad-hoc per `tools/sdlc-knowledge/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope (see 11.7).
+13. **Risk: macOS case-insensitive filesystem path collisions.** Every path in this section uses lowercase basenames matching on-disk files; no case-collision risk in iter-1.
+14. **Dependency: Section 9 (Cognitive Self-Check Protocol).** This section's `### External contracts` citation convention attaches to the `## Facts` block schema introduced by Section 9. Section 9 is [IN DEVELOPMENT] concurrently — if Section 9 has not shipped at the time this section's implementation starts, the implementer MUST sequence Section 9 first.
+15. **Dependency: Section 1 FR-3 (Executable Plan Format).** Slice fields are unchanged; the new slash command and rule reuse the established format. Section 1 is [SHIPPED], dependency satisfied.
+16. **Dependency: Section 6 (Release Engineer).** The agent count baseline (17) used in FR-12.1 assumes Section 6 has shipped. If Section 6 has not shipped at the time this section's implementation starts, the count baseline shifts and the FR-12.1 / NFR-1.10 / AC-11 no-count-change claims must be re-verified — the claims still hold, just at different baselines.
+17. **Dependency: Section 3 FR-3 (PRD Changelog Field).** This PRD section includes a `Changelog:` field per Section 3 FR-3. Section 3 is [IN DEVELOPMENT] concurrently; if it has not shipped, the field is documentation-only and does not affect this section's functional requirements.
+
+### 11.7 Out of Scope (iter-1)
+
+The following items are deferred to a future iter-2 PRD section ("Local Knowledge Base — Iteration 2: Hybrid Search and Automated Release Coupling") and MUST NOT be implemented as part of iter-1:
+
+1. **Vector embeddings (sqlite-vec hybrid search).** iter-1 is BM25-only. iter-2 adds an `embedding BLOB` column to `chunks` and a sqlite-vec extension for hybrid lexical+semantic search.
+2. **MCP server interface.** iter-1 invokes the binary via Bash. An MCP server wrapper (if ever needed) is iter-2 scope.
+3. **`resource-architect` auto-recommendation.** iter-1 only adds the `## Knowledge Base (when present)` activation block to `resource-architect`. Auto-recommend behavior on detecting domain PDFs in `<project>/.claude/knowledge/sources/` is iter-2 PRD scope.
+4. **Windows binary builds.** iter-1 supports darwin-arm64, darwin-x64, linux-x64, linux-arm64. Windows is iter-2.
+5. **Changes to `release-engineer` Gate 9.** iter-1 keeps Gate 9 UNCHANGED. The first `sdlc-knowledge-v0.1.0` tag is cut manually by the maintainer per `tools/sdlc-knowledge/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope.
+6. **Plan Critic edits in `src/claude.md`.** The existing `### External contracts` Plan Critic check from Section 9 covers `knowledge-base:` citations as a valid source format. No new Plan Critic bullet is added in iter-1.
+7. **`src/rules/cognitive-self-check.md` edits.** The cognitive-self-check rule file is BYTE-UNCHANGED. The `knowledge-base:` source prefix is an additive citation convention only.
+8. **Auto-tuning chunk size.** iter-1 ships fixed ~500-char windows with ~100-char overlap. A configurable flag is iter-2 if real-world retrieval quality demands tuning.
+
+These items are listed explicitly so the Plan Critic does not flag their absence as an iter-1 gap.
+
+### 11.8 Affected Endpoints / Schema / UI
+
+#### Affected Endpoints
+
+Not applicable. This project has no HTTP API. The "endpoints" of this feature are the `sdlc-knowledge` CLI subcommands enumerated in FR-1.2 and the `/knowledge-ingest` slash command in FR-6.
+
+#### Schema Changes
+
+A NEW SQLite database is introduced at `<project-root>/.claude/knowledge/index.db`. The schema is per-project (each project has its own database) and consists of exactly four tables in iter-1 (per FR-4.2):
+
+| Table | Columns | Purpose |
+|-------|---------|---------|
+| `documents` | `id INTEGER PRIMARY KEY`, `source_path TEXT UNIQUE`, `mtime INTEGER`, `sha256 TEXT`, `ingested_at INTEGER` | One row per ingested file; `(mtime, sha256)` keys idempotency. |
+| `chunks` | `id INTEGER PRIMARY KEY`, `doc_id INTEGER REFERENCES documents(id)`, `ord INTEGER`, `text TEXT` | One row per ~500-char chunk; `ord` preserves intra-document order. |
+| `chunks_fts` | FTS5 virtual table, `content='chunks'`, `content_rowid='id'` | BM25-ranked full-text index over `chunks.text`. |
+| `schema_version` | `version INTEGER NOT NULL` | Seeded to `1` at init; iter-2 will append a v2 migration. |
+
+The `chunks` table reserves room for a future `embedding BLOB` column without destructive migration (FR-4.3). No tables in iter-1 are dropped or altered.
+
+#### UI Changes
+
+Not applicable. This project is a collection of markdown prompt files with no graphical user interface. The user-visible surface is the new `/knowledge-ingest` slash command (FR-6) and the `sdlc-knowledge` CLI's terminal output (FR-1.4).
+
+#### New Files
+
+| File | Purpose | Related Requirements |
+|------|---------|---------------------|
+| `tools/sdlc-knowledge/Cargo.toml` | Rust crate manifest declaring all dependencies. | FR-1.1 |
+| `tools/sdlc-knowledge/src/main.rs` | clap-derive entry point wiring the five subcommands. | FR-1.2 |
+| `tools/sdlc-knowledge/src/cli.rs` | Subcommand structs and project-root canonicalization. | FR-1.3, FR-1.5 |
+| `tools/sdlc-knowledge/src/ingest.rs` | Chunker (~500/100 sliding window) and `SourceReader` trait. | FR-2.1 through FR-2.5 |
+| `tools/sdlc-knowledge/src/text.rs` | Markdown and plain-text readers. | FR-2.2 |
+| `tools/sdlc-knowledge/src/pdf.rs` | PDF reader using the architect-selected crate. | FR-2.2 |
+| `tools/sdlc-knowledge/src/store.rs` | Schema definition, FTS5 triggers, idempotency, `validate_schema()`. | FR-2.4 through FR-2.7, FR-4.1 through FR-4.4 |
+| `tools/sdlc-knowledge/src/migrations.rs` | v1 migration; future-extensible for v2 hybrid. | FR-4.4 |
+| `tools/sdlc-knowledge/src/search.rs` | FTS5 `MATCH` + `bm25()` ranking. | FR-3.1 through FR-3.4 |
+| `tools/sdlc-knowledge/src/output.rs` | Text and JSON serializers. | FR-1.4, FR-3.3 |
+| `tools/sdlc-knowledge/tests/...` | Unit and `assert_cmd`-based E2E test suite. | All FR / NFR / AC |
+| `tools/sdlc-knowledge/RELEASING.md` | Release process + first-tag bootstrap. | FR-11.3, AC-13 |
+| `.github/workflows/sdlc-knowledge-release.yml` | Cross-platform release pipeline. | FR-11.1, FR-11.2 |
+| `templates/knowledge/.gitignore` | Per-project scaffold — ignores `sources/` and `index.db*`. | FR-9.1, AC-3 |
+| `templates/knowledge/.gitkeep` | Ensures `templates/knowledge/` is tracked. | FR-9.1 |
+| `src/rules/knowledge-base.md` | Global rule documenting CLI usage, citation format, fallback, scope. | FR-7.1, FR-7.2, FR-7.3 |
+| `src/commands/knowledge-ingest.md` | New slash command spec. | FR-6.1 through FR-6.4 |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `install.sh` | Add binary download function, allowlist registration, scaffold extension, cargo source-build fallback. `VERSION` constant unchanged. | FR-8.1 through FR-8.7 |
+| `src/agents/prd-writer.md` | Append `## Knowledge Base (when present)` activation block. | FR-5.1, FR-5.2 |
+| `src/agents/ba-analyst.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/architect.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/qa-planner.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/planner.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/security-auditor.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/code-reviewer.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/verifier.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/refactor-cleaner.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/resource-architect.md` | Append activation block ONLY. Auto-recommendation behavior is OUT OF SCOPE per 11.7 item 3. | FR-5.1, FR-5.2 |
+| `src/agents/role-planner.md` | Append activation block. | FR-5.1, FR-5.2 |
+| `src/agents/release-engineer.md` | Append activation block. Gate 9 release-packaging logic UNCHANGED per FR-12.4. | FR-5.1, FR-5.2, FR-12.4 |
+| `README.md` | Add ONE row to the existing Hardening table; add ONE row to the Commands table; add a new top-level `## Local knowledge base` section. README taglines at lines 5 and 35 BYTE-UNCHANGED. | FR-12.1, FR-12.2 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/test-writer.md` | Executor agent — exempt per FR-5.4 and FR-12.3. |
+| `src/agents/build-runner.md` | Executor agent — exempt. |
+| `src/agents/e2e-runner.md` | Executor agent — exempt. |
+| `src/agents/doc-updater.md` | Executor agent — exempt. |
+| `src/agents/changelog-writer.md` | Executor agent — exempt. |
+| `src/rules/cognitive-self-check.md` | BYTE-UNCHANGED per FR-10.4 / FR-12.5. The `knowledge-base:` source prefix is an additive citation convention. |
+| `src/claude.md` | Plan Critic UNCHANGED per FR-10.3. The existing `### External contracts` heuristic covers the new citation format. |
+| `templates/CLAUDE.md` | UNCHANGED per FR-9.2. |
+| `templates/scratchpad.md` | UNCHANGED per FR-9.2. |
+| `templates/settings.json` | UNCHANGED per FR-9.2. The Bash allowlist entry is added to `~/.claude/settings.json` at install time, not to the template. |
+| `templates/rules/architecture.md` | UNCHANGED per FR-9.2. |
+| `templates/rules/changelog.md` | UNCHANGED per FR-9.2. |
+| `templates/rules/security.md` | UNCHANGED per FR-9.2. |
+| `templates/rules/testing.md` | UNCHANGED per FR-9.2. |
+| `src/rules/git.md` | Git workflow rules independent of knowledge-base feature. |
+| `src/rules/scratchpad.md` | Scratchpad format independent. |
+| `src/rules/error-recovery.md` | Error recovery rules independent. |
+| `src/rules/tool-limitations.md` | Tool-limitation awareness independent. |
+| `src/commands/bootstrap-feature.md` | Command orchestrates agents that internally activate the knowledge base; no command-level change required. |
+| `src/commands/develop-feature.md` | Same as bootstrap-feature. |
+| `src/commands/implement-slice.md` | No command-level change required. |
+| `src/commands/merge-ready.md` | Gate 9 release-engineer behavior UNCHANGED per FR-12.4. |
+| `src/commands/context-refresh.md` | Context refresh independent of knowledge base. |
+
+## Facts
+
+### Verified facts
+
+- The PRD file `/Users/aleksandra/Documents/claude-code-sdlc/docs/PRD.md` ends at line 2334 and the last existing section before this addition is Section 9 ("Cognitive Self-Check Protocol — Fact/Assumption Discipline for Thinking Agents") — verified by Read of the file's final lines in the current session.
+- The PRD format uses numbered top-level sections (`## N. Title`), a header block (`Status:`, `Date:`, `Priority:`, `Related:`), a `Changelog:` line one blank line below the `Related:` line, and numbered subsections (`### N.1`, `### N.2`, ...) — verified by Read of Section 1 (lines 7–148), Section 8 (lines 1819-2080), and Section 9 (lines 2084–2333) in the current session.
+- `install.sh` line 22 has `VERSION="2.1.0"` and `README.md` line 8 has `version-3.1.0-green.svg` (the pre-existing version-baseline divergence cited in Risk #7) — verified by Read of `install.sh:20-24` and `README.md:1-40` in the current session.
+- The README tagline `17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.` is at `README.md` line 5 — verified by Read in the current session. The phrase `10 quality gates` is at `README.md` line 35 (start of the bullet "10 quality gates — git hygiene, docs completeness, ...") — verified by Read in the current session.
+- The 12 in-scope thinking agents and 5 exempt executor agents enumerated in FR-5.1 / FR-5.4 match the Section 9 application-scope list verbatim — verified by Read of `docs/PRD.md` Section 9 FR-1.5 (line 2131) in the current session.
+- The approved plan at `/Users/aleksandra/.claude/plans/fuzzy-juggling-ocean.md` defines the feature scope, the locked-in Approach C (Rust + SQLite FTS5, no MCP, no vectors), the 13 acceptance criteria, the 8 implementation slices across 5 waves, and the 13 risks and dependencies — verified by Read of the entire plan in the current session.
+- The cognitive-self-check rule file `src/rules/cognitive-self-check.md` shipped on or before 2026-04-25 (recent merge commit `9220903 Merge branch 'feat/cognitive-self-check'`) and mandates the four-subsection `## Facts` schema (`### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`) used at the bottom of this section — verified via the system context and via reading Section 9 in the PRD this session.
+
+### External contracts
+
+- **`rusqlite` crate (Rust SQLite binding) — symbol: `rusqlite::Connection::open_with_flags`, `Connection::execute_batch`, `Connection::prepare`; SQLite FTS5 virtual table syntax `CREATE VIRTUAL TABLE chunks_fts USING fts5(text, content='chunks', content_rowid='id')`; ranking function `bm25(chunks_fts)`** — source: rusqlite docs https://docs.rs/rusqlite/ + SQLite FTS5 docs https://www.sqlite.org/fts5.html — verified: **no — assumption**. Risk: API drift between rusqlite major versions; FTS5 column-weight argument ordering not confirmed. Verification path: architect Step 3 review BEFORE Slice 3 ships (per Open Question #5 in the plan).
+- **`pdf-extract` crate — symbol: `pdf_extract::extract_text(path: &Path) -> Result<String, _>`** — source: https://crates.io/crates/pdf-extract — verified: **no — assumption**. Risk: extraction quality on multi-column / scanned PDFs; default iter-1 choice. Verification path: architect Step 3 picks one (`pdf-extract` vs `lopdf`) with cited rationale BEFORE Slice 2 ships (Open Question #1 in the plan).
+- **`clap` crate v4.x — symbols: `clap::Parser` derive macro, `#[command(subcommand)]`, `clap::Subcommand`** — source: https://docs.rs/clap/4 — verified: **no — assumption**. Risk: minor wording drift between 4.x patch versions. Verification path: any `cargo build` failure in Slice 1 reveals API mismatches immediately.
+- **GitHub Actions runner labels for the four-platform build matrix — `macos-14` (darwin-arm64), `macos-13` (darwin-x64), `ubuntu-latest` (linux-x64), `ubuntu-22.04-arm` (linux-arm64)** — source: https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners — verified: **no — assumption**. Risk: ARM-Linux label rename; runner labels evolve. Verification path: pin labels at Slice 4 implementation; `actionlint` in workflow done-condition catches typos.
+- **SQLite `bm25()` ranking function — symbol: `bm25(fts_table_name [, weight1, weight2, ...])`** — source: https://www.sqlite.org/fts5.html#the_bm25_function — verified: **no — assumption**. Risk: column-weight argument ordering not confirmed in this session. Verification path: architect Step 3 review BEFORE Slice 3 ships; Slice 3's done-condition includes a working end-to-end search query.
+- **`assert_cmd` and `predicates` test crates — symbols: `assert_cmd::Command`, `predicates::str::contains`** — source: https://docs.rs/assert_cmd / https://docs.rs/predicates — verified: **no — assumption**. Risk: minor; de-facto Rust CLI test idiom. Verification path: caught at first `cargo test`.
+- **`actionlint` — invocation `actionlint .github/workflows/*.yml`** — source: https://github.com/rhysd/actionlint — verified: **no — assumption**. Risk: version drift; not yet in repo. Verification path: Slice 4 pins a specific `actionlint` version in the workflow itself or in a `.actionlint` config.
+
+### Assumptions
+
+- **Rust crate placement is monorepo (`tools/sdlc-knowledge/` inside the SDLC repo)** — risk: if architect prefers a separate repository, install.sh's release-download URL changes but the binary surface is identical; verification path: architect Step 3 reviews repo placement.
+- **Default chunk size of ~500 characters with ~100-character overlap is reasonable for BM25 retrieval over technical books** — risk: too-small chunks fragment phrasing; too-large chunks dilute BM25 scores; verification path: Slice 2 includes a fixture-based golden test (`sample.md` ~3 KB → exactly 8 chunks); a configurable flag is iter-2 (per 11.7 item 8).
+- **The `## Knowledge Base (when present)` activation block (~25 lines) appended at the END of each of the 12 in-scope agent prompt files fits without disturbing existing sections (including the `## Cognitive Self-Check (MANDATORY)` section from Section 9)** — risk: large-prompt agents (`resource-architect.md` ~585 LOC, `role-planner.md` ~467 LOC) hit attention-budget limits; verification path: read each agent file before edit; if rejected, the rule file `src/rules/knowledge-base.md` carries the verbose details and per-agent blocks shrink to a 5-line pointer.
+- **Idempotency keying on `(source_path, mtime, sha256)` is sufficient for re-ingest** — risk: files renamed but unchanged are re-chunked unnecessarily; verification path: Slice 2's idempotency test covers the unchanged-file case; renamed-file is acceptable cost in iter-1.
+- **The Plan Critic in `src/claude.md` does NOT need a new bullet for `knowledge-base:` citations because the existing Section 9 `### External contracts` heuristic covers the new prefix** — risk: if architect or Plan Critic auditor disagrees, iter-2 PRD adds a soft-MINOR bullet; verification path: architect Step 3 explicit confirmation that no Plan Critic edit is required.
+- **Section 11 is the next available top-level section number** — risk: low; based on the last existing section being Section 9 in the file (no Section 10 exists in the PRD body — Section 9's parent says "1 through 8" but the file ends at Section 9, and the user task explicitly directs me to add Section 11). The `Section 10` referenced in the user task may be an off-by-one in the user's mental model; verified at file-end-line 2334 that no Section 10 currently exists. Verification path: re-Read of the PRD's section headings if a Section 10 lands during a concurrent merge.
+
+### Open questions
+
+- **Open Question #1 — Which PDF crate?** `pdf-extract` (pure Rust, simpler, lower-fidelity) vs `lopdf` (lower-level, more code) vs system `pdftotext` binding (best fidelity, external runtime dep). RESOLUTION: architect Step 3 picks ONE with cited rationale; iter-1 default is `pdf-extract` per Risk #2. Decision must land BEFORE Slice 2 ships.
+- **Open Question #2 — rusqlite + FTS5 syntax verification.** Five of seven `### External contracts` are `verified: no — assumption`. RESOLUTION: architect Step 3 MUST verify rusqlite's FTS5 virtual-table syntax and `bm25()` argument ordering against current docs BEFORE Slice 3 ships (load-bearing for store + search). Pre-Slice-3 prerequisite.
+- **Open Question #3 — `release-engineer` Gate 9 coupling to binary releases.** RESOLVED — out of scope for iter-1 per 11.7 item 5. Iter-1 keeps Gate 9 unchanged; the maintainer manually cuts `sdlc-knowledge-v<X.Y.Z>` tags ad-hoc per `tools/sdlc-knowledge/RELEASING.md`.
+- **Open Question #4 — `resource-architect` auto-recommendation behavior.** RESOLVED — out of scope for iter-1 per 11.7 item 3. Iter-1 only adds the `## Knowledge Base (when present)` activation block to `resource-architect`. Auto-recommend behavior on detecting domain PDFs is iter-2 PRD scope.
+- **Open Question #5 — Per-project `sources/` directory `.gitignored` by default?** RESOLVED for iter-1: `templates/knowledge/.gitignore` ships with `sources/`, `index.db`, `index.db-shm`, `index.db-wal` excluded by default per FR-9.1. Teams that want to track shared compliance docs in git opt in by removing entries from the per-project `.gitignore`.

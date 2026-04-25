@@ -1,0 +1,38 @@
+[package]
+name = "sdlc-knowledge"
+version = "0.1.0"
+edition = "2021"
+description = "Local knowledge base CLI for SDLC agents — ingest, search, list, status, delete"
+license = "MIT"
+
+[dependencies]
+# CLI parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# Storage / FTS5 (bundled SQLite avoids platform divergence; vtab enables FTS5)
+rusqlite = { version = "0.31", features = ["bundled", "vtab"] }
+
+# PDF text extraction (Slice 2). Pinned per Phase 1.5 Security MUST #7 / Slice 2 MUST #8.
+pdf-extract = "0.7"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hashing (content-hash dedupe in Slice 2)
+sha2 = "0.10"
+
+# Error plumbing
+anyhow = "1"
+thiserror = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = 3

@@ -1,0 +1,289 @@
+//! Storage layer: schema initialization, WAL pragma, FTS5 trigger wiring,
+//! and `validate_schema` corruption probe.
+//!
+//! SQL discipline: ONLY ?N parameterized statements; never format!/+ for user data.
+//!
+//! Phase 1.5 Security MUSTs implemented here:
+//!   #4  All SQL is either a static `&str` literal (CREATE/PRAGMA) or a parameterized
+//!       statement using `rusqlite::params!`. Never `format!`/`write!`/`+` to build SQL.
+//!
+//! `open_or_init` opens the SQLite file (creating its parent dirs as needed),
+//! flips `journal_mode` to WAL (NFR-1.6 / FR-2.7), and runs the v1 schema.
+//! `validate_schema` confirms the four-table shape and `schema_version=1`.
+
+use std::path::Path;
+
+use rusqlite::Connection;
+use thiserror::Error;
+
+use crate::output::{DocumentSummary, StatusInfo};
+
+#[derive(Debug, Error)]
+pub enum StoreError {
+    #[error("database error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum IndexError {
+    #[error("index database invalid; re-ingest required")]
+    Corrupt,
+    #[error("database error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+/// V1 schema — kept as a static `&str` literal; no user data interpolated.
+const SCHEMA_V1: &str = r#"
+CREATE TABLE IF NOT EXISTS documents (
+  id INTEGER PRIMARY KEY,
+  source_path TEXT UNIQUE NOT NULL,
+  mtime INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  ingested_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+  id INTEGER PRIMARY KEY,
+  doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  ord INTEGER NOT NULL,
+  text TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+  text,
+  content='chunks',
+  content_rowid='id'
+);
+
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
+
+CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+  INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+  INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+  INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
+  INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+END;
+"#;
+
+/// Open (or create) the SQLite database at `db_path`, ensure parent directories exist,
+/// flip journal_mode to WAL, and apply the v1 schema. Idempotent — safe to call on
+/// an already-initialized database.
+pub fn open_or_init(db_path: &Path) -> Result<Connection, StoreError> {
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let conn = Connection::open(db_path)?;
+    // WAL is per-database persistent so this only matters first-run, but the call is
+    // idempotent and very cheap.
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.execute_batch(SCHEMA_V1)?;
+    Ok(conn)
+}
+
+/// Confirm the four expected objects exist, `schema_version` row is in `1..=2`
+/// (forward-compat for iter-2), and `chunks_fts` is an FTS5 virtual table.
+///
+/// Returns `IndexError::Corrupt` on ANY structural mismatch — including raw
+/// rusqlite errors raised during the probe (a truncated database file, a file
+/// that isn't a SQLite database at all, schema-master corruption, etc.).
+/// Mapping all failure modes to a single variant prevents information leak
+/// and lets the caller print the literal user-facing message
+/// `error: index database invalid; re-ingest required` per FR-1.6 / AC-7.
+pub fn validate_schema(conn: &Connection) -> Result<(), IndexError> {
+    validate_schema_inner(conn).map_err(|_| IndexError::Corrupt)
+}
+
+/// Internal helper: any error here flips to `IndexError::Corrupt` in the public
+/// wrapper. Using `anyhow::Error` would pull a runtime dep — instead, we use
+/// `rusqlite::Error` plus a sentinel `Corrupt` short-circuit via `?`-on-`Result`.
+fn validate_schema_inner(conn: &Connection) -> Result<(), rusqlite::Error> {
+    // Required objects (table or virtual-table).
+    let required = ["documents", "chunks", "chunks_fts", "schema_version"];
+
+    // A single sqlite_master scan: collect (name, type, sql) triples so we can
+    // additionally verify chunks_fts is FTS5 (the CREATE VIRTUAL TABLE sql
+    // contains the literal `fts5` token).
+    let mut stmt = conn.prepare(
+        "SELECT name, type, COALESCE(sql, '') FROM sqlite_master \
+         WHERE name IN ('documents','chunks','chunks_fts','schema_version')",
+    )?;
+    let mut found: std::collections::HashMap<String, (String, String)> =
+        std::collections::HashMap::new();
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (name, ty, sql) = row?;
+        found.insert(name, (ty, sql));
+    }
+    for n in required {
+        if !found.contains_key(n) {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+    }
+
+    // chunks_fts must be a virtual table backed by FTS5.
+    let (fts_type, fts_sql) = found
+        .get("chunks_fts")
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    if fts_type != "table" {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+    if !fts_sql.to_lowercase().contains("fts5") {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    // schema_version row exists and is in 1..=2 (forward-compat for iter-2).
+    let v: i64 = conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
+    if !(1..=2).contains(&v) {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
+
+    Ok(())
+}
+
+/// Insert or update a documents row; returns the row id.
+///
+/// SQL discipline: parameterized via `?1..?4`. The literal SQL is a static `&str`.
+pub fn upsert_document(
+    conn: &Connection,
+    source_path: &str,
+    mtime: i64,
+    sha256: &str,
+    ingested_at: i64,
+) -> Result<i64, rusqlite::Error> {
+    conn.execute(
+        "INSERT INTO documents(source_path, mtime, sha256, ingested_at) \
+         VALUES (?1, ?2, ?3, ?4) \
+         ON CONFLICT(source_path) DO UPDATE SET \
+           mtime = excluded.mtime, \
+           sha256 = excluded.sha256, \
+           ingested_at = excluded.ingested_at",
+        rusqlite::params![source_path, mtime, sha256, ingested_at],
+    )?;
+    let id: i64 = conn.query_row(
+        "SELECT id FROM documents WHERE source_path = ?1",
+        rusqlite::params![source_path],
+        |r| r.get(0),
+    )?;
+    Ok(id)
+}
+
+/// Replace all chunks for a document: delete prior rows then insert the new set.
+/// FTS5 triggers fire for each row, so the FTS5 index stays in sync.
+pub fn replace_chunks(
+    conn: &Connection,
+    doc_id: i64,
+    chunks: &[(usize, &str)],
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "DELETE FROM chunks WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+    )?;
+    let mut stmt = conn.prepare("INSERT INTO chunks(doc_id, ord, text) VALUES (?1, ?2, ?3)")?;
+    for (ord, text) in chunks {
+        stmt.execute(rusqlite::params![doc_id, *ord as i64, *text])?;
+    }
+    Ok(())
+}
+
+/// Look up the prior `(mtime, sha256)` for a source path, if any.
+pub fn lookup_document(
+    conn: &Connection,
+    source_path: &str,
+) -> Result<Option<(i64, String)>, rusqlite::Error> {
+    let row: Result<(i64, String), rusqlite::Error> = conn.query_row(
+        "SELECT mtime, sha256 FROM documents WHERE source_path = ?1",
+        rusqlite::params![source_path],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    );
+    match row {
+        Ok(t) => Ok(Some(t)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// List every ingested document with its chunk count, ordered by `ingested_at DESC`.
+/// Used by `list` subcommand. SQL is a static literal.
+pub fn list_documents(conn: &Connection) -> Result<Vec<DocumentSummary>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT d.source_path, \
+                COUNT(c.id) AS chunk_count, \
+                d.ingested_at \
+         FROM documents d \
+         LEFT JOIN chunks c ON c.doc_id = d.id \
+         GROUP BY d.id \
+         ORDER BY d.ingested_at DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(DocumentSummary {
+            source_path: r.get(0)?,
+            chunk_count: r.get(1)?,
+            ingested_at: r.get(2)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// Aggregate counts + schema_version + db_path for `status` subcommand.
+pub fn status_summary(
+    conn: &Connection,
+    db_path: &Path,
+) -> Result<StatusInfo, rusqlite::Error> {
+    let schema_version: i64 =
+        conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
+    let doc_count: i64 = conn.query_row("SELECT COUNT(*) FROM documents", [], |r| r.get(0))?;
+    let chunk_count: i64 = conn.query_row("SELECT COUNT(*) FROM chunks", [], |r| r.get(0))?;
+    Ok(StatusInfo {
+        schema_version,
+        doc_count,
+        chunk_count,
+        db_path: db_path.display().to_string(),
+    })
+}
+
+/// Delete a documents row by integer primary key. Cascades to `chunks` via the
+/// foreign-key constraint; FTS5 trigger fires on each chunk row removed.
+/// Returns the number of `documents` rows deleted (0 or 1).
+pub fn delete_by_id(conn: &Connection, id: i64) -> Result<u64, rusqlite::Error> {
+    let n = conn.execute(
+        "DELETE FROM documents WHERE id = ?1",
+        rusqlite::params![id],
+    )?;
+    Ok(n as u64)
+}
+
+/// Delete a documents row by exact `source_path` string. Returns rows deleted.
+///
+/// SECURITY: callers MUST canonicalize-and-prefix-check the `source_path`
+/// argument against the project root BEFORE invoking this function — see the
+/// Slice 1 cross-slice flag in `.claude/scratchpad.md`. This function does
+/// NOT perform that check itself; it is purely a parameterized DELETE.
+pub fn delete_by_source_path(
+    conn: &Connection,
+    source_path: &str,
+) -> Result<u64, rusqlite::Error> {
+    let n = conn.execute(
+        "DELETE FROM documents WHERE source_path = ?1",
+        rusqlite::params![source_path],
+    )?;
+    Ok(n as u64)
+}

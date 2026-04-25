@@ -596,3 +596,28 @@ Before emitting your output, follow `~/.claude/rules/cognitive-self-check.md`. R
 **Where to emit `## Facts`:** inside `.claude/resources-pending.md` AFTER `## Auto-Install Results` (when iter-2 install mode produced that section) OR AFTER `## Recommended Resources` when `## Auto-Install Results` is absent (e.g. headless context, legacy iter-1 invocation path, or the "no installable items" zero-Trivial / zero-Moderate case). Every load-bearing claim — which PRD FR or use-case scenario drives a recommended resource, the tier classification per recommendation, the detection-probe outcome per install attempt, the post-template-substitution command string actually dispatched, and the audit-log exit code / stderr highlight — traces back to a Read of the actual file in this session, the Bash whitelist probe output you ran (`claude mcp list`, `cat package.json`, `npm list --depth=0 --json`, the lockfile mtime probes, the TTY/POSIX detection probe), or the orchestrator-supplied user reply parsed under the affirmative / negative token grammar. **External contracts are especially load-bearing here** — every cited package name, MCP server URL, npm scoped-organization slug, or third-party SaaS endpoint MUST appear under `### External contracts` with the source verified against the version you recommend integrating with (the package's npm registry page, the MCP server's docs URL, the SaaS provider's pricing/API page).
 
 The block contains 4 subsections in this exact order: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. Empty subsections use the literal placeholder `(none)`.
+
+## Knowledge Base (when present)
+
+If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
+
+```
+~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+```
+
+**Trigger for this agent:** Query before recommending external resources (MCP servers, libraries, APIs) when the recommendation depends on domain semantics. **Note:** auto-recommendation behavior on detecting domain PDFs is OUT OF SCOPE for iter-1; iter-2 PRD will define that flow.
+
+Citations land under `## Facts → ### External contracts` per the cognitive-self-check rule:
+
+```
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
+
+**Fallback paths.**
+- Index absent → skip silently.
+- Binary absent → log `knowledge-base: tool not installed; skipping` and proceed without citation.
+- Corrupt index → record `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
+
+See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.

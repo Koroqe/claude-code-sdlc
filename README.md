@@ -126,6 +126,7 @@ MERGE READY
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
 | `/merge-ready` | All 10 quality gates |
 | `/context-refresh` | Rebuild session context from scratchpad |
+| /knowledge-ingest | Ingest a folder/file into the per-project knowledge base |
 
 ```
 > Add user authentication with Google OAuth
@@ -156,6 +157,7 @@ Claude automatically:
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
 | Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
+| Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `sdlc-knowledge` CLI; agents query before authoring; cite hits in `## Facts` |
 
 ---
 
@@ -277,6 +279,16 @@ The rule applies to **12 thinking agents** (prd-writer, ba-analyst, architect, q
 **Enforcement split:** Plan Critic mechanically enforces the rule on **file-based artifacts** (PRD sections, use-case files, QA test-case files, plan.md, resources-pending.md, roles-pending.md, release-notes files) — missing block is a MAJOR finding, vague external-contract citation is a MINOR finding. **Stdout-only agents** (architect, security-auditor, code-reviewer, verifier, refactor-cleaner) emit `## Facts` to stdout via their own prompt instructions, since Plan Critic cannot read transcript content.
 
 **Backward compatibility:** the rule applies to artifacts produced on or after the rule's merge date. Pre-existing PRD sections, use-case files, and plans authored before that date are EXEMPT — there is no retroactive backfill. See `src/rules/cognitive-self-check.md` `## Backward Compatibility` for the date-guard mechanics.
+
+---
+
+## Local knowledge base
+
+Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 12 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`; the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
+
+The CLI exposes 5 subcommands — `ingest`, `search`, `list`, `status`, `delete` — backed by BM25 ranking over an FTS5 virtual table. No vector embeddings; deterministic and lexical. Populate the base via the `/knowledge-ingest <path>` slash command (or `sdlc-knowledge ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 12 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+
+Activation is opt-in: without `index.db`, every agent prompt behaves identically to current `main`. Without the binary, install.sh degrades gracefully (cargo source-build fallback when cargo is on PATH). See `src/rules/knowledge-base.md` for the full CLI contract and citation discipline.
 
 ---
 
