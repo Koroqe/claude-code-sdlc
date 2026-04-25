@@ -5,7 +5,7 @@ set -euo pipefail
 # Claude Code SDLC Installer
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 16 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 17 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install:
@@ -46,7 +46,7 @@ print_help() {
   cat << 'HELPEOF'
 Claude Code SDLC Installer v2.1.0
 
-Turn Claude Code into a full dev team with 16 specialized AI agents.
+Turn Claude Code into a full dev team with 17 specialized AI agents.
 
 USAGE:
   bash install.sh [OPTIONS]
@@ -59,7 +59,7 @@ OPTIONS:
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
-  agents/          16 specialized agent prompts
+  agents/          17 specialized agent prompts
   commands/        5 SDLC pipeline commands
   rules/           4 process rules
 
@@ -175,11 +175,11 @@ install_user_config() {
   echo -e "${BOLD}============================================${NC}"
   echo ""
   echo -e "  ${CYAN}Turn Claude Code into a full dev team${NC}"
-  echo -e "  16 AI agents | Documentation-first | TDD"
+  echo -e "  17 AI agents | Documentation-first | TDD"
   echo ""
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
-  echo "    agents/  (16 files — specialized agent prompts)"
+  echo "    agents/  (17 files — specialized agent prompts)"
   echo "    commands/ (5 files — SDLC pipeline commands)"
   echo "    rules/   (4 files — process rules)"
   echo ""
