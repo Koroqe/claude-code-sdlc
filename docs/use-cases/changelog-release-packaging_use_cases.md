@@ -17,11 +17,11 @@ The interaction with Section 3 iteration 1 (`changelog-writer`) is also novel: `
 - The downstream project's `CHANGELOG.md` exists at the project root
 - The `[Unreleased]` heading is present at the top of the file (e.g., `## [Unreleased]`) but the body is empty -- either no category subheadings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`), OR category subheadings present but with no entries underneath any of them
 - The pre-flight `changelog-writer` sync from Section 3 FR-4.4 has run and either returned `no-op: not configured` or `no-op: already in sync` (the merge-ready output may include a non-blocking notice but proceeds to Gate 0)
-- All earlier gates (Gate 0 through Gate 9) have completed (PASS or FAIL is irrelevant -- Gate 9 runs regardless of earlier gate status per FR-7.6)
+- All earlier gates (Gate 0 through Gate 8) have completed (PASS or FAIL is irrelevant -- Gate 9 runs regardless of earlier gate status per FR-7.6)
 - The agent file `src/agents/release-engineer.md` is installed at `~/.claude/agents/release-engineer.md` (per FR-8.6 / AC-15)
 - The agent's `tools` frontmatter field is exactly `["Read", "Write", "Edit", "Glob", "Grep"]` (per FR-1.1 / AC-1) and excludes `Bash`, `WebFetch`, `WebSearch`, `NotebookEdit`
 
-**Trigger**: `/merge-ready` reaches the end of the existing gate sequence (post-Gate 9) and delegates to `release-engineer` for Gate 9 per FR-7.1
+**Trigger**: `/merge-ready` reaches the end of the existing gate sequence (post-Gate 8) and delegates to `release-engineer` for Gate 9 per FR-7.1
 
 ### Primary Flow (Happy Path)
 
