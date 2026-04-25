@@ -40,9 +40,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run actionlint
-        uses: rhysd/actionlint@v1
-        with:
-          files: .github/workflows/sdlc-core-release.yml
+        shell: bash
+        run: |
+          # rhysd/actionlint repo has no floating @v1 tag, so the
+          # rhysd/actionlint-Action reference fails Set-up-job. Use
+          # the upstream-recommended download-script invocation instead;
+          # it pulls the latest stable release of the binary and runs
+          # it against this workflow file only.
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color .github/workflows/sdlc-core-release.yml
 
   # ---------------------------------------------------------------------------
   # Job 2 — build the source tarball.
