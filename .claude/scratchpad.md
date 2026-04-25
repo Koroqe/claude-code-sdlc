@@ -40,6 +40,85 @@
 ## Architect [STRUCTURAL] decisions
 ONE [STRUCTURAL] item: explicit-path binding `Pdfium::bind_to_library(<absolute-path>)` resolved via `std::env::var("HOME") + canonicalize` → `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib|so}`. FORBIDS `bind_to_system_library` and any env-var resolver fallback. Eliminates R-1 (LD_LIBRARY_PATH/DYLD_LIBRARY_PATH hijack) at API level instead of install.sh discipline. Security test in Slice 1 sets `DYLD_LIBRARY_PATH=/tmp/empty` and confirms canonical-path library still loads.
 
+## Phase 1.5 Pre-Review Findings (all PASS)
+
+### Architect resolution of [MAJOR] action item — pdfium-render API symbols verified
+Source: live curl against `crates.io` + `github.com/ajrcarey/pdfium-render` master branch.
+Latest stable: pdfium-render **v0.9.0** released 2026-03-30. Caret pin `"0.9"` correct.
+
+**Concrete API symbols (CITED against master sources):**
+| Concern | Symbol | Source |
+|---|---|---|
+| Library binding (explicit-path) | `Pdfium::bind_to_library(impl AsRef<Path>) -> Result<Box<dyn PdfiumLibraryBindings>, PdfiumError>` | `pdfium.rs:143-156` |
+| API to FORBID | `Pdfium::bind_to_system_library()` | `pdfium.rs:101,123` |
+| Per-platform filename | `Pdfium::pdfium_platform_library_name_at_path(path) -> PathBuf` (yields `libpdfium.dylib`/`libpdfium.so`/`pdfium.dll`) | `pdfium.rs:164-175` |
+| Document open from bytes | `Pdfium::load_pdf_from_byte_slice(&self, &[u8], Option<&str>) -> Result<PdfDocument, PdfiumError>` | `pdfium.rs:210-219` |
+| Page text extraction | `doc.pages().iter()` + `page.text()?.all()` returns `String` | `examples/text_extract.rs` |
+| Library-load failure variant | `PdfiumError::LoadLibraryError(libloading::Error)` (NOT `LibraryNotFound`) | `error.rs:59` |
+
+**Critical finding on env-var hijack:** `libloading::Library::new` consults `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` ONLY for plain filenames; **absolute paths are used verbatim** by `dlopen`/`LoadLibraryExW`. Therefore `bind_to_library(<absolute-canonicalized-path>)` is safe by design. STRUCTURAL action item #1 mitigation = `std::fs::canonicalize` BEFORE `bind_to_library`.
+
+**Slice 1 code template (architect-provided):**
+```rust
+use pdfium_render::prelude::*;
+use std::path::{Path, PathBuf};
+
+fn resolve_pdfium_lib(pdfium_lib_dir: &Path) -> Result<PathBuf, IngestError> {
+    if !pdfium_lib_dir.is_absolute() {
+        return Err(IngestError::PdfDecode(pdfium_lib_dir.into(), "non-absolute pdfium library path".into()));
+    }
+    let candidate = Pdfium::pdfium_platform_library_name_at_path(pdfium_lib_dir);
+    std::fs::canonicalize(&candidate).map_err(|e| IngestError::PdfDecode(candidate, e.to_string()))
+}
+
+pub fn read(p: &Path) -> Result<String, IngestError> {
+    let bytes = std::fs::read(p).map_err(|e| IngestError::PdfDecode(p.into(), e.to_string()))?;
+    let lib_dir = resolve_pdfium_lib_dir()?;  // see HOME handling per M1 below
+    let lib_path = resolve_pdfium_lib(&lib_dir)?;
+    let bindings = Pdfium::bind_to_library(&lib_path)
+        .map_err(|e| IngestError::PdfDecode(p.into(), format!("pdfium bind_to_library: {e}")))?;
+    let pdfium = Pdfium::new(bindings);
+    let doc = pdfium.load_pdf_from_byte_slice(&bytes, None)
+        .map_err(|e| IngestError::PdfDecode(p.into(), format!("pdfium load_pdf: {e}")))?;
+    let mut out = String::new();
+    for (i, page) in doc.pages().iter().enumerate() {
+        let text = page.text().map_err(|e| IngestError::PdfDecode(p.into(), format!("page {i} text: {e}")))?.all();
+        out.push_str(&text);
+        out.push('\n');
+    }
+    check_byte_budget(p, out)
+}
+```
+Wrap the whole `read()` body in `catch_unwind(AssertUnwindSafe(...))` per existing pattern.
+
+### Security-auditor Slice 1 — 5 required remediations (HIGH x2, MEDIUM x2, LOW x1)
+1. **HIGH:** REJECT empty/missing `$HOME` explicitly (not `.unwrap_or_default()` which silently coerces to CWD-relative). Use `std::env::var("HOME").map_err(|_| IngestError::PdfDecode(p.into(), "HOME unset; cannot resolve pdfium library path".into()))?`.
+2. **HIGH:** Directory-mode safety check on `~/.claude/tools/sdlc-knowledge/pdfium/lib/` — reject if world-writable (`mode & 0o002 != 0`). Mitigates TOCTOU swap between canonicalize and dlopen.
+3. **MEDIUM:** After canonicalize, assert canonical path `starts_with` canonicalized `$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/` prefix. Defense in depth against symlink redirection at any path component above `lib/`.
+4. **MEDIUM:** Map canonicalize-failure to FR-3.5 literal `"pdfium dynamic library not found ... install via bash install.sh --yes"` not raw `io::Error`.
+5. **LOW:** TC-SEC-2.2 env-var hijack test runs via `Command::new(...).env_clear().env("DYLD_LIBRARY_PATH", "/tmp/empty-bogus").env(...)` subprocess — robust against macOS SIP env-var stripping.
+
+**Additional security tests to add in Slice 1 (`tests/pdfium_test.rs`):**
+- TC-SEC-2.3: HOME unset → IngestError, no panic, no silent CWD-fallback
+- TC-SEC-2.4: World-writable pdfium/lib dir → IngestError, refuse to load
+- TC-SEC-2.5: Symlink redirect of libpdfium.dylib → canonicalize+prefix-check rejects
+- TC-SEC-2.6: Subprocess env-var hijack on macOS SIP — child still loads from canonical path
+- TC-SEC-2.7: C++ FFI panic injection on corrupt.pdf → per-document IngestError, not segfault
+
+### Security-auditor Slice 3 — 17 MUSTs (M1-M13 user-supplied + M14-M17 added by reviewer)
+- **M1-M13** as documented in Phase 1.5 review prompt (URL hardcoded, TLS only, mktemp staging, tar safety flags, traversal pre-check + post-check, mode bits, idempotency, graceful failure, ordering, no privilege escalation, uname allowlist, sha256 deferral)
+- **M14:** `curl --proto '=https' --tlsv1.2 -fsSL` first; `wget --https-only --secure-protocol=TLSv1_2 -O "$tmp"` fallback; if both absent → log_warn + return 0
+- **M15:** Add `--max-redirs 5` and `--max-time 120` to bound redirect chains and hang exposure
+- **M16:** `umask 0022` at top of `install_pdfium_binary` for deterministic mode bits regardless of caller env
+- **M17:** Post-install integrity self-check: `[ -s "$target/lib/libpdfium.{dylib|so}" ]` MUST be true; if false → `rm -rf "$target"` and log_warn (no half-installed state)
+
+**Tar safety: two-phase verification:**
+- Pre-extract: `tar -tzf "$archive" | grep -E '^/|(^|/)\.\.(/|$)'` returns empty (no malicious entries)
+- Post-extract: `find "$staging" -path '*..*' -print -quit` returns empty
+- Plus `find "$staging" -perm /6000 -print -quit` returns empty (no setuid/setgid bits)
+
+**Hash verification deferral to iter-3 ACCEPTED** with inline `# TODO(iter-3): add pdfium-<arch>.tgz.sha256 sidecar verification` comment.
+
 ## Open Questions resolved at architect Step 3
 - OQ#1 — pdfium-render API symbols (bind_to_library vs bind_to_library_at_path): RESOLVED — architect Step 3 pre-Slice-1 review will document exact symbol names in plan.md Slice 1 spec (deferred to Slice 1 implementation kickoff).
 - OQ#2 — bblanchon/pdfium-binaries asset names: RESOLVED — Slice 3 done-condition opens actual GitHub Releases page for pinned `chromium/<version>` tag; mismatch fails Slice 3.
