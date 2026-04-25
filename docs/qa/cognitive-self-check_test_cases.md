@@ -223,7 +223,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Steps:**
   1. Run Plan Critic against `.claude/plan.md` and `docs/PRD.md` (file-based artifacts)
   2. Confirm no Plan Critic finding is raised about the architect stdout
-  3. Verify code-reviewer at /merge-ready Gate 4 SHOULD surface the gap (manual transcript inspection)
+  3. Verify code-reviewer at /merge-ready Gate 2 SHOULD surface the gap (manual transcript inspection)
 - **Expected Result:** Plan Critic raises no finding (FR-4.6 file-vs-stdout split); the gap is documented per Risk 1.
 - **Pass Criteria:** Stdout enforcement gap is observable but not mechanically caught -- consistent with the documented split.
 
@@ -884,8 +884,8 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Mapped AC:** AC-6, AC-7
 - **Type:** Integration
 - **Severity:** P0
-- **Preconditions:** `src/agents/refactor-cleaner.md` has `## Cognitive Self-Check (MANDATORY)` per FR-2.11; Gate 6 runs
-- **Inputs:** `/merge-ready` Gate 6 invocation
+- **Preconditions:** `src/agents/refactor-cleaner.md` has `## Cognitive Self-Check (MANDATORY)` per FR-2.11; ad-hoc refactor-cleaner invocation runs (refactor-cleaner has no `/merge-ready` gate — it runs post-implementation outside the gate sequence)
+- **Inputs:** Ad-hoc refactor-cleaner invocation
 - **Steps:**
   1. Capture stdout
   2. Verify `## Facts` block appears at the start of stdout, before the verdict
@@ -1080,7 +1080,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Type:** Integration
 - **Severity:** P0
 - **Preconditions:** `src/agents/code-reviewer.md` has `## Cognitive Self-Check (MANDATORY)` per FR-2.9
-- **Inputs:** Gate 4 invocation
+- **Inputs:** `/merge-ready` Gate 2 (Code Review) invocation
 - **Steps:**
   1. Capture stdout
   2. Verify `## Facts` block appears at the start of stdout, before the review prose and verdict
@@ -1139,7 +1139,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Type:** Integration
 - **Severity:** P0
 - **Preconditions:** `src/agents/security-auditor.md` has `## Cognitive Self-Check (MANDATORY)` per FR-2.8; impl uses `bcrypt` v5.1.1
-- **Inputs:** Gate 5 audit
+- **Inputs:** `/merge-ready` Gate 3 (Security Audit) invocation
 - **Steps:**
   1. Capture stdout
   2. Verify `### External contracts` cites: `\`bcrypt\` v5.1.1 -- verified via Read of \`package.json\` and \`node_modules/bcrypt/package.json\` in current session`
@@ -1153,7 +1153,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Type:** Integration
 - **Severity:** P2
 - **Preconditions:** Feature has no auth surface
-- **Inputs:** Gate 5
+- **Inputs:** `/merge-ready` Gate 3 (Security Audit)
 - **Steps:**
   1. Verify body: `(none) -- feature has no external auth or crypto surface`
 - **Expected Result:** Placeholder satisfies FR-1.3.

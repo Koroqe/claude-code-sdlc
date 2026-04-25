@@ -28,7 +28,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 | Plan Critic subagent | The subagent invoked by the orchestrator to validate `.claude/plan.md` and related file-based artifacts; runs the two new Completeness checks for `## Facts` presence and external-contract citation |
 | `/bootstrap-feature` orchestrator | Runs the documentation phase: `prd-writer` -> `ba-analyst` -> `architect` -> `resource-architect` -> `role-planner` -> `qa-planner` -> `planner` -> Plan Critic |
 | `/implement-slice` orchestrator | Runs TDD per slice: `test-writer` (exempt) -> implementation -> `build-runner` (exempt) -> `verifier` (in scope, stdout report with `## Facts`) -> commit |
-| `/merge-ready` orchestrator | Runs quality gates: `code-reviewer` (in scope, stdout), `security-auditor` (in scope, stdout), `verifier` (in scope, stdout), `refactor-cleaner` (in scope, stdout), `e2e-runner` (exempt), `doc-updater` (exempt), `changelog-writer` (exempt), `release-engineer` (in scope, file-based release notes) |
+| `/merge-ready` orchestrator | Runs quality gates 0-9 (10 gates) and Step 11. In-scope thinking agents invoked: `code-reviewer` (Gate 2, stdout), `security-auditor` (Gate 3, stdout), `verifier` (Gate 6, stdout), `release-engineer` (Gate 9, file-based release notes). Exempt executor agents invoked: `build-runner` (Gate 4), `e2e-runner` (Gate 5), `doc-updater` (Gate 7). The `changelog-writer` (exempt) runs as a pre-flight sync (NOT a gate). The `refactor-cleaner` (in scope, stdout) is NOT invoked by `/merge-ready` — it runs ad hoc / post-implementation outside the gate sequence; its `## Facts` discipline still applies whenever it is invoked. |
 
 ---
 
@@ -110,7 +110,7 @@ Every use case below is precise enough for a test to be derived without re-consu
   4. The Plan Critic does NOT mechanically catch this per FR-4.6 (stdout is out of Plan Critic scope)
   5. The omission is detectable only by:
      a. Transcript review by the developer
-     b. The `code-reviewer` agent at `/merge-ready` Gate 4 reading the artifact set; the code-reviewer's own `## Cognitive Self-Check (MANDATORY)` section per FR-2.9 may surface the gap if the reviewer notices it
+     b. The `code-reviewer` agent at `/merge-ready` Gate 2 reading the artifact set; the code-reviewer's own `## Cognitive Self-Check (MANDATORY)` section per FR-2.9 may surface the gap if the reviewer notices it
   6. Per Risk 1 in PRD Section 9.7, this enforcement gap is documented explicitly so neither the user nor a future maintainer is surprised
 
   **Mapped FR**: FR-2.5, FR-4.6
@@ -814,15 +814,15 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 ## UC-10: Refactor-Cleaner Emits `## Facts` to Stdout AND Modifies Code Based on Those Facts
 
-**Actor**: `refactor-cleaner` agent, `/merge-ready` orchestrator
+**Actor**: `refactor-cleaner` agent, ad-hoc orchestrator (refactor-cleaner is NOT a `/merge-ready` gate; it runs post-implementation as a standalone delegation outside the 10-gate sequence)
 
 **Preconditions**:
 - Common preconditions hold
-- `/merge-ready` Gate 6 (refactor-cleaner) begins
+- A refactor pass is invoked outside the `/merge-ready` gate sequence (refactor-cleaner has no gate number — Gate 6 is `verifier`)
 - The agent's prompt file `src/agents/refactor-cleaner.md` contains the `## Cognitive Self-Check (MANDATORY)` section per FR-2.11 specifying the `## Facts` block appears at the START of the stdout report, BEFORE the cleanup verdict
 - The agent has Edit/Write/Read tools to perform refactor changes
 
-**Trigger**: The orchestrator invokes refactor-cleaner at Gate 6
+**Trigger**: An orchestrator invokes refactor-cleaner ad hoc (post-implementation cleanup)
 
 ### Primary Flow (Happy Path)
 
@@ -867,7 +867,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 - **UC-10-EC1: Refactor based on an assumption that turns out wrong** -- The agent assumed no call sites depend on the old signature; typecheck reveals call sites
   1. The agent's `### Assumptions` flagged the risk
-  2. Build-runner (executor, Gate 7) runs typecheck; finds errors
+  2. Build-runner (executor, Gate 4 of `/merge-ready`) runs typecheck; finds errors
   3. The orchestrator surfaces the failure; the assumption is now disproven
   4. The agent (or developer) corrects via additional refactor or rollback
   5. Per Risk 1 (PRD §9.7), the audit trail makes the failure traceable to a specific assumption
@@ -1026,10 +1026,10 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 **Preconditions**:
 - Common preconditions hold
-- `/merge-ready` Gate 4 (code-reviewer) begins
+- `/merge-ready` Gate 2 (Code Review — code-reviewer) begins
 - The agent's prompt file `src/agents/code-reviewer.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.9 specifying `## Facts` block at START of stdout review, BEFORE the verdict
 
-**Trigger**: The orchestrator invokes code-reviewer at Gate 4
+**Trigger**: The orchestrator invokes code-reviewer at Gate 2
 
 ### Primary Flow (Happy Path)
 
@@ -1087,7 +1087,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 **Preconditions**:
 - Common preconditions hold
-- `/merge-ready` Gate 5 (security-auditor) begins
+- `/merge-ready` Gate 3 (Security Audit — security-auditor) begins
 - The agent's prompt file `src/agents/security-auditor.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.8 specifying `## Facts` block at START of stdout audit, BEFORE the verdict
 
 **Trigger**: The orchestrator invokes security-auditor
