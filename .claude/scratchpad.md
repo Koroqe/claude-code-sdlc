@@ -1,6 +1,6 @@
 ## Feature: Resource Manager-Architect — Iteration 2: Auto-Install
 ## Branch: feat/resource-architect-auto-install
-## Status: quality-gates
+## Status: complete (MERGE READY)
 
 ## Plan
 
@@ -16,14 +16,25 @@
 - [x] Slice 2: `src/agents/resource-architect.md` — Bash whitelist + detect-then-install + multi-pkg-manager tiebreaker — 7479a8a
 
 ### Wave 3 [COMPLETE]
-- [x] Slice 3: `src/agents/resource-architect.md` — Approval flow + halt semantics + output extension `## Auto-Install Results` — 33c5ac9
+- [x] Slice 3: `src/agents/resource-architect.md` — Approval flow + halt semantics + output extension — 33c5ac9
+
+### Quality Gates [COMPLETE]
+- Gate 0: PASS
+- Gate 1: PASS
+- Gate 2: PASS (2 MINOR)
+- Gate 3: PASS (2 MINOR)
+- Gate 4-5: N/A (markdown only)
+- Gate 6: PASS (2 MINOR)
+- Gate 7: FAIL → fixed (3 MAJOR + 1 MINOR addressed) — 15bf51f, ff96d30, a0e4b25
+- Gate 8: N/A
+- Gate 9: SKIPPED (SDLC core repo, no CHANGELOG.md)
 
 ## [STRUCTURAL] decisions
 
-1. Reconcile iter-1 Authority Boundary write-prohibition with iter-2 side-effect mutations (package.json/lockfiles/~/.claude/settings.json/node_modules/)
+1. Reconcile iter-1 Authority Boundary write-prohibition with iter-2 side-effect mutations
 2. Multi-pkg-mgr tiebreaker: most-recent lockfile mtime > packageManager field > pnpm > yarn > npm
-3. Whitelist character class `[a-zA-Z0-9@/._+~-]` (uppercase scoped + semver tilde/build)
-4. Forbidden-tier canonical: option (a) suggest alternative + omit when alt exists; option (b) Tier: Forbidden ONLY when no alt
+3. Whitelist character class `[a-zA-Z0-9@/._+~-]`
+4. Forbidden-tier canonical: option (a) suggest alternative + omit when alt exists; option (b) Tier: Forbidden
 5. Headless detection `process.stdin.isTTY === false` → literal "Skipped: non-interactive context — auto-install requires user approval"
 
 ## Plan Critic findings
@@ -32,15 +43,19 @@
 - 4 MINOR — documented
 
 ## Process notes
-- Sandbox blocks subagent commits; orchestrator commits with pathspec
-- Wave 1 done: 6 atomic commits
-- Wave 2 done: 1 commit (Slice 2 appended to resource-architect.md)
-- Wave 3 done: 1 commit (Slice 3 appended to resource-architect.md)
+- 8 slice commits + 3 fix commits + 2 scratchpad commits
 - 17 agents stay (no banner change in install.sh)
 
 ## Completed
-- All 8 slices committed (8 atomic commits + 1 scratchpad commit)
-- Implementation complete; ready for merge-ready
+- All 8 slices committed with pathspec
+- All 3 Gate-7 MAJOR findings fixed
+- Branch ready for merge to main
 
 ## Blockers
 (none)
+
+## Deferred MINOR (acknowledged)
+- Gate 2 MINOR-2: 16x "Slice N" implementation-history references in resource-architect.md — deferred (cosmetic, agent-runtime-irrelevant)
+- Gate 3 MINOR-2: URL `:` not in widened whitelist class — deferred (usability, iter-3 candidate)
+- Gate 6 MINOR-1: substep (e) wording polish — deferred (internally consistent)
+- Gate 7 MINOR-2: README:35 "10 gates" enumeration shows 9 (pre-existing drift, not iter-2-introduced)
