@@ -34,10 +34,26 @@
 use std::os::unix::fs::PermissionsExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use pdfium_render::prelude::*;
 
 use crate::ingest::IngestError;
+
+/// Process-wide pdfium-render binding cache.
+///
+/// PDFium has global C++ state — `Pdfium::bind_to_library` MUST be called at
+/// most once per process. A second call returns
+/// `PdfiumError::PdfiumLibraryBindingsAlreadyInitialized` and the document
+/// load that follows fails. Batch ingest of N PDFs without singleton caching
+/// would succeed on file 1 and fail on files 2..N with that error.
+///
+/// The `Mutex<Option<Pdfium>>` shape is `const`-constructible (since Rust
+/// 1.63), so this static initializes without a `lazy_static!` macro. The
+/// mutex serializes binding initialization and per-call `load_pdf` access —
+/// PDFium itself is not safe for concurrent calls, and our CLI is sequential
+/// anyway, so holding the mutex across `extract_with_pdfium` is correct.
+static PDFIUM: Mutex<Option<Pdfium>> = Mutex::new(None);
 
 /// Per-PDF byte budget for extracted text. Anything beyond this is dropped as
 /// `IngestError::PdfBudgetExceeded` to bound memory and downstream chunk count.
@@ -122,14 +138,24 @@ pub fn read(p: &Path) -> Result<String, IngestError> {
     extract_via_closure(p, extract_with_pdfium)
 }
 
-/// Hot-path extraction body. Loads pdfium dynamically, opens the document from
-/// the in-memory byte slice, iterates pages, and concatenates per-page text
-/// joined by `\n`.
+/// Hot-path extraction body. Initializes pdfium-render singleton on the first
+/// call (subsequent calls reuse the cached binding to avoid PDFium's
+/// `PdfiumLibraryBindingsAlreadyInitialized` error on batch ingest). Opens the
+/// document from the in-memory byte slice, iterates pages, and concatenates
+/// per-page text joined by `\n`.
 fn extract_with_pdfium(bytes: &[u8]) -> Result<String, String> {
-    let lib_path = resolve_pdfium_lib_path()?;
-    let bindings = Pdfium::bind_to_library(&lib_path)
-        .map_err(|e| format!("pdfium bind_to_library: {e}"))?;
-    let pdfium = Pdfium::new(bindings);
+    let mut guard = PDFIUM
+        .lock()
+        .map_err(|_| "pdfium singleton mutex poisoned".to_string())?;
+    if guard.is_none() {
+        let lib_path = resolve_pdfium_lib_path()?;
+        let bindings = Pdfium::bind_to_library(&lib_path)
+            .map_err(|e| format!("pdfium bind_to_library: {e}"))?;
+        *guard = Some(Pdfium::new(bindings));
+    }
+    let pdfium = guard
+        .as_ref()
+        .expect("pdfium singleton initialized just above");
     let doc = pdfium
         .load_pdf_from_byte_slice(bytes, None)
         .map_err(|e| format!("pdfium load_pdf: {e}"))?;
