@@ -1,7 +1,7 @@
 ---
 name: planner
 description: Plan new features, break work into slices, validate requirements before implementation
-tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
+tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch", "Bash"]
 model: opus
 ---
 

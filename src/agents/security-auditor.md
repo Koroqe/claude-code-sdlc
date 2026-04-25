@@ -1,7 +1,7 @@
 ---
 name: security-auditor
 description: Audit code for security vulnerabilities, check for leaked secrets, validate auth boundaries
-tools: ["Read", "Glob", "Grep"]
+tools: ["Read", "Glob", "Grep", "Bash"]
 model: opus
 ---
 
