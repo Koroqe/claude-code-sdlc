@@ -24,39 +24,35 @@ The command invokes the global retrieval CLI shipped under `~/.claude/tools/sdlc
 ~/.claude/tools/sdlc-knowledge/sdlc-knowledge ingest <path> --json
 ```
 
-The `--json` flag streams one JSON object per file as ingestion progresses, plus a final summary object. The command MUST stream each per-file JSON line to chat as it arrives so the user sees progress on large directories rather than waiting for the entire batch to finish.
+In iter-1 the `--json` flag emits one aggregate JSON object after the batch completes, summarising every file the recursive walk processed. The default (text) mode emits one progress line per file as ingestion completes, plus a final `summary:` line.
 
-### Per-file progress streaming
-
-Each per-file line has the shape:
+### iter-1 JSON output shape
 
 ```
-{"file": "<relative path>", "status": "ingested" | "skipped" | "failed", "chunks": <int>, "reason": "<optional string>"}
+{
+  "succeeded":       ["<path>", ...],
+  "failed":          [{"path": "<path>", "error": "<message>"}, ...],
+  "unchanged":       ["<path>", ...],
+  "succeeded_count": <int>,
+  "failed_count":    <int>,
+  "unchanged_count": <int>
+}
 ```
 
-Render each line as a single human-readable progress row. Examples:
+`unchanged` is the idempotency signal: the binary fingerprints each source by sha256 + mtime and skips re-chunking when both match. `failed` is non-fatal — the batch continues and per-file errors are surfaced in the `failed` array.
+
+### iter-1 default (text) output
+
+When the slash command runs without `--json`, the binary streams human-readable progress as each file completes plus a single final summary line. Example:
 
 ```
-[ingested] docs/regulations/gdpr-art-5.pdf — 47 chunks
-[skipped]  notes/draft.md — already up-to-date (sha256+mtime match)
-[failed]   broken/scan.pdf — pdf-extract: encrypted document
+ingested: docs/regulations/gdpr-art-5.pdf
+unchanged: notes/draft.md
+failed: broken/scan.pdf — pdf-extract: encrypted document
+summary: 12 succeeded, 3 unchanged, 1 failed
 ```
 
-`skipped` is the idempotency signal: the binary fingerprints each source by sha256 + mtime and re-ingests only when the fingerprint changes. `failed` is non-fatal — the batch continues and individual failures are reported in the final summary.
-
-### Final summary line
-
-After the per-file stream ends, the binary emits one terminal JSON object:
-
-```
-{"summary": {"sources": <int>, "chunks": <int>, "skipped": <int>, "failed": <int>, "elapsed_ms": <int>}}
-```
-
-Render it as a single human-readable line, for example:
-
-```
-Ingest complete: 12 sources, 437 chunks, 3 skipped, 1 failed in 4.2s.
-```
+iter-2 may move to a streaming line-delimited JSON shape (one object per file, plus a separate terminal `{"summary": ...}` object); the `--json` shape above is iter-1-only and the slash command consumer SHOULD treat the aggregate object as authoritative for iter-1.
 
 ## Binary-absent fallback
 
