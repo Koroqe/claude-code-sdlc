@@ -307,9 +307,9 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Inputs:** Planner inlines upstream sections into `.claude/plan.md`
 - **Steps:**
   1. Verify upstream sections (`## Recommended Resources`, `## Auto-Install Results`, `## Additional Roles`, `## Reuse Decisions`) appear inlined in `.claude/plan.md`
-  2. Verify planner's OWN `## Facts` block appears at the END of `.claude/plan.md` per FR-2.7
+  2. Verify planner's OWN `## Facts` block appears NEAR THE TOP of `.claude/plan.md` (after `## Reuse Decisions`, before `## Prerequisites verified`) per FR-2.7
   3. Confirm planner's `## Facts` covers plan-authoring decisions (not duplicated upstream-agent facts)
-- **Expected Result:** One terminal `## Facts` block at end of plan (the planner's); upstream blocks may also appear inlined.
+- **Expected Result:** One `## Facts` block near the top of the plan (the planner's, after `## Reuse Decisions` and before `## Prerequisites verified` per FR-2.7); upstream blocks may also appear inlined.
 - **Pass Criteria:** Plan structure satisfies FR-2.7 and FR-4.1.
 
 ### TC-2.4: Planner omits `## Facts` block; Plan Critic raises MAJOR
@@ -1639,13 +1639,13 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Steps:**
   1. prd-writer: section says "end of new PRD section, after Risks and Dependencies" per FR-2.3
   2. ba-analyst: "end of `docs/use-cases/<feature>_use_cases.md`" per FR-2.4
-  3. architect: "end of stdout review, after verdict" per FR-2.5
-  4. qa-planner: "end of `docs/qa/<feature>_test_cases.md`" per FR-2.6
-  5. planner: "end of `.claude/plan.md`, after `## Review Notes`" per FR-2.7
-  6. security-auditor: "end of stdout audit" per FR-2.8
-  7. code-reviewer: "end of stdout review" per FR-2.9
-  8. verifier: "end of stdout report" per FR-2.10
-  9. refactor-cleaner: "end of stdout report" per FR-2.11
+  3. architect: "START of stdout review, BEFORE verdict" per FR-2.5
+  4. qa-planner: "TOP of `docs/qa/<feature>_test_cases.md` (after title and PRD reference, before first numbered section)" per FR-2.6
+  5. planner: "NEAR THE TOP of `.claude/plan.md` (after any inlined `## Recommended Resources` / `## Auto-Install Results` / `## Additional Roles` / `## Reuse Decisions`, before `## Prerequisites verified`)" per FR-2.7
+  6. security-auditor: "START of stdout audit, BEFORE verdict" per FR-2.8
+  7. code-reviewer: "START of stdout review, BEFORE verdict" per FR-2.9
+  8. verifier: "START of stdout report, BEFORE PASS/FAIL" per FR-2.10
+  9. refactor-cleaner: "START of stdout report, BEFORE verdict" per FR-2.11
   10. resource-architect: "in `.claude/resources-pending.md` after `## Auto-Install Results` (or after `## Recommended Resources`)" per FR-2.12
   11. role-planner: "in `.claude/roles-pending.md` after `## Reuse Decisions`" per FR-2.13
   12. release-engineer: "end of release-notes file" per FR-2.14
@@ -1911,7 +1911,7 @@ Every AC-N from PRD Section 9 maps to one or more test cases.
 - **Steps:**
   1. Spawn architect with this feature's PRD (Section 9), use-cases, plan
   2. Capture stdout
-  3. Verify `## Facts` block at end after verdict
+  3. Verify `## Facts` block appears at the start of stdout, before the verdict
   4. Verify `### Verified facts` cites Section 9 line ranges
   5. Verify `### External contracts: (none)` (purely internal)
 - **Expected Result:** Architect's own self-application of the rule.

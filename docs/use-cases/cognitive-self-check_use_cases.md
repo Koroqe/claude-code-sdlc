@@ -248,7 +248,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 ### Data Requirements
 
 - **Input**: PRD section, use-case file, architect stdout (transcript), `.claude/resources-pending.md` (if present), `.claude/roles-pending.md` (if present), `docs/qa/<feature>_test_cases.md`
-- **Output**: `.claude/plan.md` with Context, Feature scope, Deliverables, inlined upstream sections, Implementation slices, Risks, Verification, Review Notes, AND `## Facts` block at end
+- **Output**: `.claude/plan.md` with Context, Feature scope, Deliverables, inlined upstream sections, `## Facts` block (near the top, after `## Reuse Decisions`, before `## Prerequisites verified` per FR-2.7), Implementation slices, Risks, Verification, Review Notes
 - **Side Effects**: One Write to `.claude/plan.md`. The Plan Critic's two new Completeness checks add bounded pattern-match time per NFR-1 (<5s)
 
 ---
@@ -1027,7 +1027,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 **Preconditions**:
 - Common preconditions hold
 - `/merge-ready` Gate 4 (code-reviewer) begins
-- The agent's prompt file `src/agents/code-reviewer.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.9 specifying `## Facts` block at END of stdout review
+- The agent's prompt file `src/agents/code-reviewer.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.9 specifying `## Facts` block at START of stdout review, BEFORE the verdict
 
 **Trigger**: The orchestrator invokes code-reviewer at Gate 4
 
@@ -1035,8 +1035,8 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 1. The reviewer runs the 4-question protocol per FR-1.2
 2. The reviewer reads the diff, the implementation files, the tests
-3. The reviewer emits its review (issues, severities, recommendations)
-4. AFTER the review, the reviewer emits `## Facts` per FR-2.9 with all four subsections
+3. The reviewer emits the `## Facts` block per FR-2.9 to stdout BEFORE the review prose, with all four subsections
+4. AFTER the `## Facts` block, the reviewer emits its review (issues, severities, recommendations) and verdict
 5. The reviewer ALSO checks the upstream artifacts' `## Facts` blocks and may surface gaps:
    - If the architect's stdout review (in transcript) lacks `## Facts`, the reviewer SHOULD note this as a meta-finding (per Risk 1 mitigation in PRD §9.7)
    - If the planner's `.claude/plan.md` had a `## Facts` block but the reviewer notices an unverified claim treated as fact, the reviewer SHOULD challenge it
@@ -1088,7 +1088,7 @@ Every use case below is precise enough for a test to be derived without re-consu
 **Preconditions**:
 - Common preconditions hold
 - `/merge-ready` Gate 5 (security-auditor) begins
-- The agent's prompt file `src/agents/security-auditor.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.8 specifying `## Facts` block at END of stdout audit
+- The agent's prompt file `src/agents/security-auditor.md` contains `## Cognitive Self-Check (MANDATORY)` per FR-2.8 specifying `## Facts` block at START of stdout audit, BEFORE the verdict
 
 **Trigger**: The orchestrator invokes security-auditor
 
@@ -1096,8 +1096,8 @@ Every use case below is precise enough for a test to be derived without re-consu
 
 1. The auditor runs the 4-question protocol per FR-1.2
 2. The auditor reads the implementation, focusing on auth, input validation, secret handling, dependency CVEs
-3. The auditor emits the audit (vulnerabilities, severities, mitigations)
-4. AFTER the audit, the auditor emits `## Facts` per FR-2.8
+3. The auditor emits the `## Facts` block per FR-2.8 to stdout BEFORE the audit prose, with all four subsections
+4. AFTER the `## Facts` block, the auditor emits the audit (vulnerabilities, severities, mitigations) and verdict
 5. If the implementation uses external auth/crypto libraries (e.g., `bcrypt`, `jsonwebtoken`, `passport`), the auditor cites the version + source under `### External contracts`:
    ```
    - `bcrypt` v5.1.1 — verified via Read of `package.json` and `node_modules/bcrypt/package.json` in current session; algorithm: bcrypt with 10 rounds (verified via Read of `src/auth/hash.ts` line 12)

@@ -2251,13 +2251,13 @@ Define how this section treats artifacts created before its merge date.
 |------|-------------|-------------|---------------------|
 | `src/agents/prd-writer.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block location at end of new PRD sections. | FR-2.1, FR-2.3 |
 | `src/agents/ba-analyst.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block location at end of `docs/use-cases/<feature>_use_cases.md`. | FR-2.1, FR-2.4 |
-| `src/agents/architect.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of stdout review (after verdict). | FR-2.1, FR-2.5 |
-| `src/agents/qa-planner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of `docs/qa/<feature>_test_cases.md`. | FR-2.1, FR-2.6 |
-| `src/agents/planner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of `.claude/plan.md` (after `## Review Notes`). | FR-2.1, FR-2.7 |
-| `src/agents/security-auditor.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of stdout audit. | FR-2.1, FR-2.8 |
-| `src/agents/code-reviewer.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of stdout review. | FR-2.1, FR-2.9 |
-| `src/agents/verifier.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of stdout report. | FR-2.1, FR-2.10 |
-| `src/agents/refactor-cleaner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of stdout report. | FR-2.1, FR-2.11 |
+| `src/agents/architect.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at START of stdout review (before verdict). | FR-2.1, FR-2.5 |
+| `src/agents/qa-planner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at TOP of `docs/qa/<feature>_test_cases.md` (after the title and PRD reference, before the first numbered section). | FR-2.1, FR-2.6 |
+| `src/agents/planner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block NEAR THE TOP of `.claude/plan.md` (after any inlined `## Recommended Resources` / `## Auto-Install Results` / `## Additional Roles` / `## Reuse Decisions`, before `## Prerequisites verified`). | FR-2.1, FR-2.7 |
+| `src/agents/security-auditor.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at START of stdout audit (before verdict). | FR-2.1, FR-2.8 |
+| `src/agents/code-reviewer.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at START of stdout review (before verdict). | FR-2.1, FR-2.9 |
+| `src/agents/verifier.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at START of stdout report (before structured PASS/FAIL output). | FR-2.1, FR-2.10 |
+| `src/agents/refactor-cleaner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at START of stdout report (before cleanup verdict). | FR-2.1, FR-2.11 |
 | `src/agents/resource-architect.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block in `.claude/resources-pending.md` after `## Auto-Install Results` (or after `## Recommended Resources` if Auto-Install is absent). | FR-2.1, FR-2.12 |
 | `src/agents/role-planner.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block in `.claude/roles-pending.md` after `## Reuse Decisions` (or after the last subsection present). | FR-2.1, FR-2.13 |
 | `src/agents/release-engineer.md` | additive | Add `## Cognitive Self-Check (MANDATORY)` section. Specify `## Facts` block at end of release-notes file. | FR-2.1, FR-2.14 |
