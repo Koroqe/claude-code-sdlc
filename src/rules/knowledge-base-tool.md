@@ -24,6 +24,7 @@ The base is the `### External contracts` evidence layer that the cognitive-self-
 
 When `<project>/.claude/knowledge/index.db` exists, every in-scope thinking agent (the 12 listed below) MUST follow this protocol on every authoring task:
 
+0. **Corpus scope relevance check (FIRST step, before any topical query).** Inspect the indexed source titles via `sdlc-knowledge list --json` and judge whether the task domain plausibly overlaps with the corpus content. See `## Corpus scope relevance protocol` below — this protocol exists to prevent the wasteful pattern of agents running 10+ multilingual queries on a corpus that simply does not cover the task's domain (e.g., a CI/CD release-engineering task against a corpus of ML/AI books) and then filling `### Open questions` with null-result noise that pretends to be corpus gaps when in reality the corpus is correctly scoped to a different domain.
 1. **At the start** of the task, run `sdlc-knowledge status --json` AND `sdlc-knowledge list --json` to know how many docs and chunks are available, AND to detect which languages appear in the corpus (see `## Multilingual corpus protocol` below). This is an explicit acknowledgement that the base exists, not an optional check.
 2. **For every domain-bearing concept** in the task, run AT LEAST ONE `sdlc-knowledge search "<terms>" --top-k 5 --json` BEFORE writing the first paragraph of output for that concept. **When the corpus contains documents in multiple languages, the agent MUST run the same conceptual query in EACH detected language** (see `## Multilingual corpus protocol`) — FTS5 lexical matching does not bridge translations, so an English-only query silently misses Russian / German / CJK / Arabic / etc. content even when it covers the same concept.
 3. **If results are returned and load-bearing**, integrate them into the output AND cite them under `## Facts → ### External contracts` using the literal citation format from `~/.claude/rules/knowledge-base.md`.
@@ -40,6 +41,74 @@ You MUST run at least one search before drafting any of the following:
 - **QA test cases** whose edge cases come from domain failure modes (regulatory thresholds, industry-specific error categories, model collapse modes, encryption-at-rest requirements).
 - **Planner slice scopes** whose done-condition depends on understanding a domain concept (e.g., "implement BM25 ranking" → search for BM25 references; "validate FHIR Observation" → search for FHIR domain).
 - **Security audit reasoning** when threat models depend on domain-specific attacker behavior (e.g., front-running in finance, model-extraction attacks in ML, SQL-injection-via-LIKE in CMS).
+
+## Corpus scope relevance protocol
+
+The corpus is curated by the user and reflects the user's chosen domain — typically a small number of related fields (e.g., ML/AI/MLOps, finance, healthcare, embedded systems). It is NOT a general-purpose reference. Tasks that fall outside the corpus's curated domain SHOULD NOT be force-fitted to it via dozens of zero-result queries.
+
+### Step 0a — Inspect titles before querying
+
+After `sdlc-knowledge list --json`, the agent inspects every `source_path` basename and forms a high-level inventory of the corpus's domain. Most book filenames carry their topic in the title — `Practical MLOps`, `Хаос_инжиниринг`, `LangChain in Action`, `Site Reliability Engineering`, etc. Read the basenames; do not skip them.
+
+### Step 0b — Read MANIFEST.md if present
+
+If `<project>/.claude/knowledge/MANIFEST.md` exists, the agent reads it BEFORE any topical query. The user may write this file to declare what the corpus IS for and what it ISN'T. Suggested format:
+
+```markdown
+# Knowledge Base Manifest
+
+## Primary domains
+- ML / AI / Generative AI
+- MLOps / model deployment / inference
+- LLM agent frameworks (LangChain, RAG)
+- Site Reliability Engineering (incl. Russian sources)
+- Chaos Engineering (incl. Russian sources)
+- System Design
+
+## Out of scope (do not query)
+- General CI/CD release engineering
+- Cloud cost optimization
+- Mobile platform development
+- Frontend / UI / UX
+```
+
+When the manifest is present and lists the task's domain under `## Out of scope`, the agent MUST skip the topical query phase entirely and log a single Open Question entry per Step 0d.
+
+When the manifest is absent, fall back to the title-inspection heuristic at Step 0a.
+
+### Step 0c — Three-way scope verdict
+
+After Step 0a + 0b, the agent renders one of three verdicts about the task–corpus overlap:
+
+- **Overlap** — the task's primary domain is well-represented in the corpus (e.g., ML inference task on an ML corpus). Proceed to the multilingual query protocol below with the FULL query budget (≥ 4 queries per concept, multilingual variants included).
+- **Partial overlap** — the task touches multiple domains, some in the corpus, some not (e.g., an LLM-platform task with both AI-agent components and CI/CD components on a corpus rich in AI but light on CI/CD). Proceed with REDUCED budget — query only the domains the corpus covers; document the unfunded sub-domains as `### Open questions` per Step 0d.
+- **No overlap** — the task's primary domain is absent from the corpus (e.g., a release-engineering task on an ML/AI corpus). SKIP the topical query phase entirely. Log a single concise Open Question entry per Step 0d. **Do NOT run scattered multilingual queries to confirm zero hits** — the corpus title list is sufficient evidence.
+
+### Step 0d — Single Open Question entry for No-overlap and Partial cases
+
+When the verdict is **No overlap**, log exactly ONE entry under `### Open questions` (NOT a query log per concept):
+
+```
+knowledge-base: corpus is <observed-primary-domain> (e.g., "ML/AI/MLOps + Russian SRE/system-design"); task is <task-primary-domain> (e.g., "CI/CD release engineering"); no overlap. Skipping topical queries — corpus enrichment with <task-domain> reference materials would help future similar tasks.
+```
+
+When the verdict is **Partial overlap**, log entries ONLY for the unfunded sub-domains:
+
+```
+knowledge-base: corpus covers <covered-sub-domains> for this task; <missing-sub-domain> not represented (suggested addition: <named reference book or paper>). The covered sub-domains were queried per the multilingual protocol; the missing sub-domain was skipped.
+```
+
+### Step 0e — Document the verdict in `## Facts → ### Verified facts`
+
+Whatever the verdict, record it in the artifact's Facts block (under `### Verified facts`) so reviewers can audit the scope-relevance reasoning:
+
+```
+Corpus scope relevance: <Overlap | Partial overlap | No overlap>; observed corpus domain: <observed>; task domain: <task>.
+```
+
+### Why this matters
+
+The corpus-scope-relevance check eliminates the common failure mode where agents run 10+ zero-hit queries on every task regardless of whether the task is even in scope, then fill `### Open questions` with bogus "consider adding domain reference for X" entries that aren't actionable because the corpus is correctly scoped to a different domain. The new flow makes scope-mismatch a single explicit decision (logged once with reasoning) instead of a noise floor that pollutes every artifact.
 
 ## Multilingual corpus protocol
 
