@@ -76,7 +76,7 @@ Delegate to `doc-updater` agent:
 
 Delegate to the `release-engineer` agent. Gate 9 packages the release in suggest-only mode — it never runs `git push`, `git tag`, `gh release create`, `npm publish`, `cargo publish`, or `pypi upload`.
 
-**Invocation order:** Gate 9 runs AFTER the pre-flight `changelog-writer` sync (which precedes Gate 0) AND AFTER all of Gate 0 through Gate 8 have completed. Gate 9 is the LAST gate in the merge-ready sequence.
+**Invocation order:** Gate 9 runs AFTER the pre-flight `changelog-writer` sync (which precedes Gate 0) AND AFTER all of Gate 0 through Gate 8 have completed. Gate 9 is the LAST gate in the merge-ready sequence; Step 11 (On-Demand Role Teardown) follows Gate 9 as a step (not a gate), see below.
 
 **7-step sequence performed by `release-engineer`:**
 
@@ -102,6 +102,57 @@ Delegate to the `release-engineer` agent. Gate 9 packages the release in suggest
 - [ ] `.github/workflows/release.yml` provisioned or detected (step 6) or SKIPPED
 - [ ] Structured 10-section summary emitted (step 7) or SKIPPED
 
+## Step 11: On-Demand Role Teardown
+
+Step 11 is a STEP, NOT a gate. It runs AFTER Gate 9 completes. The total `/merge-ready` gate count REMAINS 10 — Step 11 does NOT increment the gate tally to 11. The 10 quality gates (Gate 0 through Gate 9) are unchanged; Step 11 is a post-gate cleanup step that performs on-demand role teardown after merge.
+
+### Invocation
+
+Step 11 is invoked exactly once per `/merge-ready` cycle, after Gate 9 completes (regardless of whether Gate 9 reported PASS, FAIL, or SKIPPED — Step 11 runs unconditionally per FR-3.1). The `role-planner` AGENT is NOT invoked at Step 11 — `role-planner` is a bootstrap-only agent. The orchestrator (the `/merge-ready` command runtime) performs Step 11 inline OR delegates the per-file frontmatter mutation to a helper subagent. Both modes are acceptable. The standard `/merge-ready` runtime has Bash access required for git ancestry checks and file deletion.
+
+### Project-name and feature-slug derivation (FR-3.4, FR-3.5)
+
+Orchestrator computes `<project-name>` as `basename "$(git rev-parse --show-toplevel)"` (or the literal string `unknown-project` when not in a git repo, identical to bootstrap-time FR-1.3). Orchestrator computes `<feature-slug>` as the merged branch's name with `feat/` or `fix/` prefix stripped (identical to bootstrap-time FR-1.4). Merged-branch identification: the head of the most recently merged PR OR (when run locally without a PR) the branch the developer just merged via `git merge --no-ff <branch>`.
+
+### Refuse-from-non-feature-branch ([STRUCTURAL] decision 3)
+
+If the current branch is NOT `feat/<slug>` or `fix/<slug>` (i.e. `main`, `release/*`, detached HEAD, or any other non-feature branch) AND no merged-PR context is available, Step 11 MUST emit the literal error: `"Refusing teardown from non-feature branch '<branch>' without explicit feature-slug — pass via merged PR context or skip Step 11"` (with `<branch>` substituted with the actual branch name). All three teardown counts (N, M, K) are reported as zero. The refusal does NOT block merge-readiness — Step 11 is not a gate.
+
+### Refuse-when-not-merged (FR-4.1)
+
+Orchestrator MUST verify merge-ancestry via `git merge-base --is-ancestor <feature-branch-head> main`. If the command exits with non-zero status (branch not yet merged), emit the literal error: `"Refusing teardown: branch '<feature-slug>' is not yet merged into main"` (with `<feature-slug>` substituted). All three teardown counts (N, M, K) are reported as zero.
+
+### Per-file mutation logic (FR-3.6) + ALL-occurrence removal ([STRUCTURAL] decision 2)
+
+For every `~/.claude/agents/ondemand-*.md` whose `features:` array contains the entry `<project-name>:<feature-slug>`, the orchestrator:
+
+(a) Reads the file
+(b) Parses the YAML frontmatter
+(c) Removes EVERY matching `<project-name>:<feature-slug>` entry from the array — all-occurrence removal, NOT just first-occurrence — required for NFR-2 idempotency on duplicate-entry files
+(d) Writes the modified file atomically per FR-5.1
+
+NO partial `Edit` operations are permitted. The file body BELOW the closing `---` of the frontmatter is preserved byte-for-byte (FR-5.5).
+
+### Atomic delete-only when array empties ([STRUCTURAL] decision 4)
+
+When the in-memory mutation transitions `features:` from non-empty to empty, the orchestrator MUST `rm` the file directly. The orchestrator MUST NOT first Write the empty-array version to disk before deleting — there is no intermediate empty-array Write. Pre-existing files with `features: []` (already-empty arrays from prior partial-failure or manual editing) are NOT deletion triggers — deletion only triggers when THIS invocation's removal transitions the array from non-empty to empty. If `rm` fails (permission denied, I/O error, file vanished), the file is left in its prior state with the entry still present (because no Write was attempted) and the failure is recorded as `failed` in the audit trail. Orchestrator MUST continue scanning subsequent files after a per-file failure — one file's failure does not abort the rest of the teardown.
+
+### Defense-in-depth deletion safety (FR-4.3, FR-4.4, FR-4.5)
+
+Orchestrator MUST glob-match the literal path pattern `~/.claude/agents/ondemand-*.md` for every deletion. Resolve the file path and verify the resolved path is under `~/.claude/agents/` before deletion (defense-in-depth against symlink attacks and path-traversal). Files at `~/.claude/agents/<core-agent>.md` (lacking the `ondemand-` prefix) are NOT visible to the FR-1.1 glob and are excluded by construction. Files matching `ondemand-*.md` whose frontmatter `scope` is NOT `on-demand` (the marker-mismatch case) are SKIPPED — orchestrator emits a warning to the merge-ready output but does NOT mutate the file. The seventeen core agent slugs (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`) MUST never be teardown-deletion targets.
+
+### Legacy file handling (FR-7.4)
+
+Files lacking a `features:` field are no-ops at Step 11. Orchestrator MUST NOT delete legacy files at teardown. Orchestrator MAY emit the informational note `"Found <L> legacy on-demand role files without features: arrays — left unchanged. Future bootstrap reuse will migrate them on demand."` appended to the FR-8.2 summary line.
+
+### FR-8.2 summary line format
+
+Step 11 emits a single one-line summary appended to the `/merge-ready` output (outside the gate table): `Post-Merge: On-Demand Role Teardown — <N> roles updated, <M> deleted, <K> unchanged`. When teardown refuses to run (FR-4.1 or FR-4.2 / [STRUCTURAL] decision 3), the summary contains the verbatim refusal message with all three counts zero. When per-file failures occur, append `; <F> failed (see audit log)`. When legacy files were observed, append `; <L> legacy files left unchanged`.
+
+### Idempotency (NFR-2)
+
+Re-running Step 11 after teardown is safe. Already-removed entries are not found (the K count increments instead of N). Already-deleted files are absent from the FR-1.1 glob. Repeated invocation produces IDENTICAL state on disk after the first invocation.
+
 ## Output Format
 
 ```
@@ -122,6 +173,8 @@ Delegate to the `release-engineer` agent. Gate 9 packages the release in suggest
 
 **Overall: MERGE READY / NOT MERGE READY**
 ```
+
+Step 11 (On-Demand Role Teardown) appends a separate one-line summary outside the gate table with the format: `Post-Merge: On-Demand Role Teardown — <N> roles updated, <M> deleted, <K> unchanged`. Step 11 is a STEP, not a gate — it does not contribute to the 10-gate tally and does not block MERGE READY.
 
 SKIPPED = Gate 9 reports SKIPPED when the project's CHANGELOG.md [Unreleased] section is empty across all six Keep a Changelog categories per FR-7.2.
 
