@@ -44,63 +44,39 @@ You MUST run at least one search before drafting any of the following:
 
 ## Corpus scope relevance protocol
 
-The corpus is curated by the user and reflects the user's chosen domain — typically a small number of related fields (e.g., ML/AI/MLOps, finance, healthcare, embedded systems). It is NOT a general-purpose reference. Tasks that fall outside the corpus's curated domain SHOULD NOT be force-fitted to it via dozens of zero-result queries.
+The corpus is curated by the user and reflects the user's chosen domain. It is not a general-purpose reference. Tasks that fall outside the corpus's curated domain MUST NOT be force-fitted to it via many zero-result queries — that pattern fills `### Open questions` with noise that pretends to be corpus gaps when in reality the corpus is correctly scoped to a different domain.
 
-### Step 0a — Inspect titles before querying
+### Step 0a — Inspect indexed titles before querying
 
-After `sdlc-knowledge list --json`, the agent inspects every `source_path` basename and forms a high-level inventory of the corpus's domain. Most book filenames carry their topic in the title — `Practical MLOps`, `Хаос_инжиниринг`, `LangChain in Action`, `Site Reliability Engineering`, etc. Read the basenames; do not skip them.
+After `sdlc-knowledge list --json`, the agent reads every `source_path` basename returned. Filenames carry topic information; the agent uses them to form its own picture of what the corpus contains. The agent decides — no list of expected topics is hardcoded into this rule.
 
-### Step 0b — Read MANIFEST.md if present
+### Step 0b — Three-way scope verdict
 
-If `<project>/.claude/knowledge/MANIFEST.md` exists, the agent reads it BEFORE any topical query. The user may write this file to declare what the corpus IS for and what it ISN'T. Suggested format:
+The agent renders one of three verdicts about whether the task's primary domain is represented in the indexed titles:
 
-```markdown
-# Knowledge Base Manifest
+- **Overlap** — the task domain is well-represented in the corpus. Proceed to the multilingual query protocol below with the full query budget.
+- **Partial overlap** — the task touches multiple sub-domains; some are represented, some are not. Proceed with reduced budget — query only the sub-domains the corpus covers; log the unfunded sub-domains per Step 0c.
+- **No overlap** — the task domain is absent from the corpus. SKIP the topical query phase entirely. Log a single Open Question entry per Step 0c. Do NOT run scattered queries to "confirm" zero hits — the title list is sufficient evidence.
 
-## Primary domains
-- ML / AI / Generative AI
-- MLOps / model deployment / inference
-- LLM agent frameworks (LangChain, RAG)
-- Site Reliability Engineering (incl. Russian sources)
-- Chaos Engineering (incl. Russian sources)
-- System Design
+### Step 0c — Single Open Question entry for No-overlap and Partial cases
 
-## Out of scope (do not query)
-- General CI/CD release engineering
-- Cloud cost optimization
-- Mobile platform development
-- Frontend / UI / UX
-```
-
-When the manifest is present and lists the task's domain under `## Out of scope`, the agent MUST skip the topical query phase entirely and log a single Open Question entry per Step 0d.
-
-When the manifest is absent, fall back to the title-inspection heuristic at Step 0a.
-
-### Step 0c — Three-way scope verdict
-
-After Step 0a + 0b, the agent renders one of three verdicts about the task–corpus overlap:
-
-- **Overlap** — the task's primary domain is well-represented in the corpus (e.g., ML inference task on an ML corpus). Proceed to the multilingual query protocol below with the FULL query budget (≥ 4 queries per concept, multilingual variants included).
-- **Partial overlap** — the task touches multiple domains, some in the corpus, some not (e.g., an LLM-platform task with both AI-agent components and CI/CD components on a corpus rich in AI but light on CI/CD). Proceed with REDUCED budget — query only the domains the corpus covers; document the unfunded sub-domains as `### Open questions` per Step 0d.
-- **No overlap** — the task's primary domain is absent from the corpus (e.g., a release-engineering task on an ML/AI corpus). SKIP the topical query phase entirely. Log a single concise Open Question entry per Step 0d. **Do NOT run scattered multilingual queries to confirm zero hits** — the corpus title list is sufficient evidence.
-
-### Step 0d — Single Open Question entry for No-overlap and Partial cases
-
-When the verdict is **No overlap**, log exactly ONE entry under `### Open questions` (NOT a query log per concept):
+When the verdict is **No overlap**, log exactly one entry under `### Open questions` (not a query log per concept):
 
 ```
-knowledge-base: corpus is <observed-primary-domain> (e.g., "ML/AI/MLOps + Russian SRE/system-design"); task is <task-primary-domain> (e.g., "CI/CD release engineering"); no overlap. Skipping topical queries — corpus enrichment with <task-domain> reference materials would help future similar tasks.
+knowledge-base: corpus is <observed-domain>; task is <task-domain>; no overlap. Skipping topical queries — corpus enrichment with <task-domain> reference materials would help future similar tasks.
 ```
 
-When the verdict is **Partial overlap**, log entries ONLY for the unfunded sub-domains:
+When the verdict is **Partial overlap**, log entries only for the unfunded sub-domains:
 
 ```
-knowledge-base: corpus covers <covered-sub-domains> for this task; <missing-sub-domain> not represented (suggested addition: <named reference book or paper>). The covered sub-domains were queried per the multilingual protocol; the missing sub-domain was skipped.
+knowledge-base: corpus covers <covered-sub-domains>; <missing-sub-domain> not represented. The covered sub-domains were queried per the multilingual protocol; the missing sub-domain was skipped.
 ```
 
-### Step 0e — Document the verdict in `## Facts → ### Verified facts`
+The placeholders are written by the agent based on what it observed in `list --json` and the task at hand. This rule does not enumerate which domains the corpus contains — that is the user's curation choice and may change between projects and over time.
 
-Whatever the verdict, record it in the artifact's Facts block (under `### Verified facts`) so reviewers can audit the scope-relevance reasoning:
+### Step 0d — Document the verdict in `## Facts → ### Verified facts`
+
+Whatever the verdict, the agent records it in the artifact's Facts block so reviewers can audit the scope-relevance reasoning:
 
 ```
 Corpus scope relevance: <Overlap | Partial overlap | No overlap>; observed corpus domain: <observed>; task domain: <task>.
@@ -108,52 +84,32 @@ Corpus scope relevance: <Overlap | Partial overlap | No overlap>; observed corpu
 
 ### Why this matters
 
-The corpus-scope-relevance check eliminates the common failure mode where agents run 10+ zero-hit queries on every task regardless of whether the task is even in scope, then fill `### Open questions` with bogus "consider adding domain reference for X" entries that aren't actionable because the corpus is correctly scoped to a different domain. The new flow makes scope-mismatch a single explicit decision (logged once with reasoning) instead of a noise floor that pollutes every artifact.
+The corpus-scope-relevance check prevents the failure mode where agents run many zero-hit queries on every task regardless of whether the task is in scope. Scope-mismatch becomes a single explicit decision (logged once with reasoning) instead of a noise floor in every artifact.
 
 ## Multilingual corpus protocol
 
 The corpus may contain documents in multiple languages — English, Russian, German, Spanish, Chinese, Japanese, Arabic, etc. The user curates the corpus and is free to add any translations or original-language sources they want agents to draw on. **All those languages are first-class** — there is no "primary" language, and agents MUST NOT default to English-only retrieval.
 
-The retrieval engine (SQLite FTS5 with the `unicode61` tokenizer) matches **lexical tokens**. It does not bridge translations. An English query for `service level objective` does not match a Russian chunk containing `соглашение об уровне обслуживания` even though both describe the same concept; same for German `Service-Level-Ziel`, Japanese `サービスレベル目標`, etc. Agents that query in only one language silently miss every other language's content — a regression that defeats the purpose of curating multilingual sources.
+The retrieval engine (SQLite FTS5 with the `unicode61` tokenizer) matches **lexical tokens**. It does not bridge translations. A query in one language does not match a chunk in another language even when both describe the same concept — the tokens differ at the character level. Agents that query in only one language silently miss every other language's content, defeating the purpose of curating multilingual sources.
 
 ### Step 1 — Detect languages at task start
 
-After running `sdlc-knowledge status --json`, run `sdlc-knowledge list --json` and inspect the `source_path` basenames AND a small text sample from each language candidate. The fast heuristics are:
+After running `sdlc-knowledge status --json`, the agent runs `sdlc-knowledge list --json` and inspects the `source_path` basenames AND a small text sample from each language candidate. Detection cues the agent applies:
 
-- **Cyrillic in basenames** (`Бейер`, `Хаос`, `Скотт`, etc.) ⇒ Russian present.
-- **CJK ideographs in basenames** ⇒ Chinese / Japanese / Korean present.
-- **Latin-only basenames** ⇒ likely English / German / Spanish / French / etc. — disambiguate via a quick search probe.
+- Cyrillic characters in basenames or chunk text ⇒ Russian present.
+- CJK ideographs ⇒ Chinese / Japanese / Korean present.
+- Latin script with non-English diacritics (umlauts, tildes, cedillas, etc.) ⇒ disambiguate via probe.
+- Latin-only without diacritics ⇒ likely English; confirm via probe.
 
-Confirm presence by running a short common-word probe per language candidate:
+Confirm presence by running a short common-word probe per language candidate. Use a one-token query in the language's most common stop word; non-empty result confirms presence. The choice of stop word is the agent's responsibility — pick a token that is both very common in the target language and unlikely to be a false-positive in any other language present.
 
-- English: `sdlc-knowledge search "the" --top-k 1 --json` — non-empty result confirms English content.
-- Russian: `sdlc-knowledge search "не" --top-k 1 --json` — non-empty confirms Russian.
-- German: `sdlc-knowledge search "der" --top-k 1 --json`.
-- Spanish: `sdlc-knowledge search "el" --top-k 1 --json`.
-- French: `sdlc-knowledge search "le" --top-k 1 --json`.
-- Japanese: `sdlc-knowledge search "の" --top-k 1 --json`.
-- (Add probes for any other language the basenames suggest.)
-
-Record the detected language set in your `## Facts → ### Verified facts` block at the start of the artifact, e.g., `Detected corpus languages: en, ru` — so reviewers can audit the multilingual coverage of every domain-bearing claim.
+Record the detected language set in your `## Facts → ### Verified facts` block at the start of the artifact (e.g., `Detected corpus languages: en, ru`) so reviewers can audit the multilingual coverage of every domain-bearing claim.
 
 ### Step 2 — Multilingual querying for every domain-bearing concept
 
-For every domain-bearing concept the agent investigates, generate one query PER detected language. Translate technical terms using domain-standard equivalents — DO NOT word-for-word transliterate.
+For every domain-bearing concept the agent investigates, the agent generates one query per detected language. Technical terms are translated using domain-standard equivalents — not word-for-word transliterations. The translation is the agent's responsibility; this rule does not enumerate concept-translation pairs.
 
-Examples (English → Russian; expand for additional languages as needed):
-
-| Concept | English query | Russian query |
-|---|---|---|
-| service level objective | `service level objective` | `соглашение об уровне обслуживания` (or `SLO целевой уровень сервиса`) |
-| circuit breaker | `circuit breaker retry` | `защитный выключатель повтор запроса` (or `прерыватель цепи fallback`) |
-| canary deployment | `canary deployment rollback` | `канареечное развёртывание откат` |
-| chaos engineering | `chaos engineering failure injection` | `хаос инжиниринг внедрение отказов` |
-| RAG retrieval | `retrieval augmented generation` | `извлечение с дополнением генерации` |
-| LLM observability | `LLM observability hallucination` | `наблюдаемость LLM галлюцинации` |
-| event sourcing | `event sourcing audit trail` | `событийное хранение журнал аудита` |
-| postmortem | `postmortem incident report` | `постмортем инцидент отчёт` (also try `разбор инцидента`) |
-
-Run the queries for each language. **Aggregate the hits** — a chunk surfaced by either query is a load-bearing hit. Cite them with their original-language query string verbatim per the citation format.
+Run the queries for each language. Aggregate the hits — a chunk surfaced by any of the language variants is a load-bearing hit. Cite each with its original-language query string verbatim per the citation format.
 
 ### Step 3 — Translation discipline
 
