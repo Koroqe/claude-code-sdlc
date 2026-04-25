@@ -24,10 +24,10 @@ The base is the `### External contracts` evidence layer that the cognitive-self-
 
 When `<project>/.claude/knowledge/index.db` exists, every in-scope thinking agent (the 12 listed below) MUST follow this protocol on every authoring task:
 
-1. **At the start** of the task, run `sdlc-knowledge status --json` to know how many docs and chunks are available. This is an explicit acknowledgement that the base exists, not an optional check.
-2. **For every domain-bearing concept** in the task, run AT LEAST ONE `sdlc-knowledge search "<terms>" --top-k 5 --json` BEFORE writing the first paragraph of output for that concept.
+1. **At the start** of the task, run `sdlc-knowledge status --json` AND `sdlc-knowledge list --json` to know how many docs and chunks are available, AND to detect which languages appear in the corpus (see `## Multilingual corpus protocol` below). This is an explicit acknowledgement that the base exists, not an optional check.
+2. **For every domain-bearing concept** in the task, run AT LEAST ONE `sdlc-knowledge search "<terms>" --top-k 5 --json` BEFORE writing the first paragraph of output for that concept. **When the corpus contains documents in multiple languages, the agent MUST run the same conceptual query in EACH detected language** (see `## Multilingual corpus protocol`) — FTS5 lexical matching does not bridge translations, so an English-only query silently misses Russian / German / CJK / Arabic / etc. content even when it covers the same concept.
 3. **If results are returned and load-bearing**, integrate them into the output AND cite them under `## Facts → ### External contracts` using the literal citation format from `~/.claude/rules/knowledge-base.md`.
-4. **If a search returns zero results** for a concept that should plausibly be in the base, document the negative search under `### Open questions` (e.g., `knowledge-base: searched "<query>" → 0 hits; consider adding domain reference for <topic>`). Do NOT silently skip — surfacing gaps is how the user knows what to add to the corpus.
+4. **If a search returns zero results** for a concept that should plausibly be in the base, document the negative search under `### Open questions` (e.g., `knowledge-base: searched "<query>" → 0 hits; consider adding domain reference for <topic>`). Do NOT silently skip — surfacing gaps is how the user knows what to add to the corpus. **Before logging a zero-result, the agent MUST have tried the same concept in every detected language** — a query that returns 0 in English but ≥1 in Russian is NOT a corpus gap, it is a translation gap in the agent's query phrasing.
 5. **NEVER fabricate citations.** Only cite hits that `sdlc-knowledge search` actually returned in this session. The cognitive-self-check rule treats fabricated citations as the load-bearing failure mode it was designed to prevent.
 
 ## Concrete triggers — when you MUST query
@@ -40,6 +40,69 @@ You MUST run at least one search before drafting any of the following:
 - **QA test cases** whose edge cases come from domain failure modes (regulatory thresholds, industry-specific error categories, model collapse modes, encryption-at-rest requirements).
 - **Planner slice scopes** whose done-condition depends on understanding a domain concept (e.g., "implement BM25 ranking" → search for BM25 references; "validate FHIR Observation" → search for FHIR domain).
 - **Security audit reasoning** when threat models depend on domain-specific attacker behavior (e.g., front-running in finance, model-extraction attacks in ML, SQL-injection-via-LIKE in CMS).
+
+## Multilingual corpus protocol
+
+The corpus may contain documents in multiple languages — English, Russian, German, Spanish, Chinese, Japanese, Arabic, etc. The user curates the corpus and is free to add any translations or original-language sources they want agents to draw on. **All those languages are first-class** — there is no "primary" language, and agents MUST NOT default to English-only retrieval.
+
+The retrieval engine (SQLite FTS5 with the `unicode61` tokenizer) matches **lexical tokens**. It does not bridge translations. An English query for `service level objective` does not match a Russian chunk containing `соглашение об уровне обслуживания` even though both describe the same concept; same for German `Service-Level-Ziel`, Japanese `サービスレベル目標`, etc. Agents that query in only one language silently miss every other language's content — a regression that defeats the purpose of curating multilingual sources.
+
+### Step 1 — Detect languages at task start
+
+After running `sdlc-knowledge status --json`, run `sdlc-knowledge list --json` and inspect the `source_path` basenames AND a small text sample from each language candidate. The fast heuristics are:
+
+- **Cyrillic in basenames** (`Бейер`, `Хаос`, `Скотт`, etc.) ⇒ Russian present.
+- **CJK ideographs in basenames** ⇒ Chinese / Japanese / Korean present.
+- **Latin-only basenames** ⇒ likely English / German / Spanish / French / etc. — disambiguate via a quick search probe.
+
+Confirm presence by running a short common-word probe per language candidate:
+
+- English: `sdlc-knowledge search "the" --top-k 1 --json` — non-empty result confirms English content.
+- Russian: `sdlc-knowledge search "не" --top-k 1 --json` — non-empty confirms Russian.
+- German: `sdlc-knowledge search "der" --top-k 1 --json`.
+- Spanish: `sdlc-knowledge search "el" --top-k 1 --json`.
+- French: `sdlc-knowledge search "le" --top-k 1 --json`.
+- Japanese: `sdlc-knowledge search "の" --top-k 1 --json`.
+- (Add probes for any other language the basenames suggest.)
+
+Record the detected language set in your `## Facts → ### Verified facts` block at the start of the artifact, e.g., `Detected corpus languages: en, ru` — so reviewers can audit the multilingual coverage of every domain-bearing claim.
+
+### Step 2 — Multilingual querying for every domain-bearing concept
+
+For every domain-bearing concept the agent investigates, generate one query PER detected language. Translate technical terms using domain-standard equivalents — DO NOT word-for-word transliterate.
+
+Examples (English → Russian; expand for additional languages as needed):
+
+| Concept | English query | Russian query |
+|---|---|---|
+| service level objective | `service level objective` | `соглашение об уровне обслуживания` (or `SLO целевой уровень сервиса`) |
+| circuit breaker | `circuit breaker retry` | `защитный выключатель повтор запроса` (or `прерыватель цепи fallback`) |
+| canary deployment | `canary deployment rollback` | `канареечное развёртывание откат` |
+| chaos engineering | `chaos engineering failure injection` | `хаос инжиниринг внедрение отказов` |
+| RAG retrieval | `retrieval augmented generation` | `извлечение с дополнением генерации` |
+| LLM observability | `LLM observability hallucination` | `наблюдаемость LLM галлюцинации` |
+| event sourcing | `event sourcing audit trail` | `событийное хранение журнал аудита` |
+| postmortem | `postmortem incident report` | `постмортем инцидент отчёт` (also try `разбор инцидента`) |
+
+Run the queries for each language. **Aggregate the hits** — a chunk surfaced by either query is a load-bearing hit. Cite them with their original-language query string verbatim per the citation format.
+
+### Step 3 — Translation discipline
+
+When the agent translates an English term to Russian / German / etc., the translation goes IN THE QUERY STRING and IN THE CITATION's `query` field. The agent does NOT translate the cited chunk text or the snippet — quotations from the corpus stay in their original language.
+
+### Step 4 — Negative-result accounting
+
+Only log a `### Open questions` zero-result entry if **all language queries** for the concept came back empty. Format the entry as:
+
+```
+knowledge-base: searched "<en-query>" / "<ru-query>" / "<de-query>" → 0 hits in any language; consider adding domain reference for <topic>
+```
+
+This preserves the architect's review signal — when a multilingual gap shows up, it is a real gap (not just a query-phrasing issue).
+
+### Step 5 — Cross-language citation breadth
+
+When citing across languages, prefer balanced citation — if the concept is covered in BOTH English and Russian sources, cite at least one per language so downstream agents see the cross-language coverage. The cognitive-load constraint still applies — only cite chunks that load-bear on the decision.
 
 ## When you MAY skip
 
