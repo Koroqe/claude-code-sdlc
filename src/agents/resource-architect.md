@@ -437,6 +437,140 @@ Every install attempt resolves to exactly one of three short-circuit outcomes. T
 
 The three outcomes are mutually exclusive per attempt. Multiple recommendations in the same install-mode pass may resolve to different outcomes (e.g., one `skipped-already-present`, one `aborted-version-conflict`, one absent → approval), and each is logged independently.
 
+### Approval Flow
+
+After the detect-then-install phase resolves each recommendation to one of `skipped-already-present`, `aborted-version-conflict`, or **absent**, install mode collects the absent items and presents a single ephemeral approval prompt to the user. The prompt is written ONLY to chat (no file write) — the orchestrator captures the user's reply and forwards it to the agent. The agent does NOT persist the prompt or its reply to disk.
+
+The prompt header is the following literal verbatim:
+
+```
+Auto-install approval required:
+```
+
+Below the header, the prompt is divided into two sections — the **Trivial section** and the **Moderate section** — followed by the footer literal. The two sections have different approval granularities by design.
+
+- **Trivial section** — items are grouped by their resource Category (the `### <Category>` heading from `## Recommended Resources`: MCP, Cloud/Compute, External API, Third-party Service, Library/Framework, Hardware). One yes/no answer per category covers all Trivial items in that category. The bulk-by-category granularity reflects that Trivial mutations are reversible and machine-local — fine-grained per-item gates would only add friction without improving safety. Categories with zero Trivial items are omitted from the Trivial section entirely.
+- **Moderate section** — items are listed individually with a per-item yes/no required. Moderate items mutate the project's dependency graph (lockfile + `node_modules/` or equivalent), so per-item visibility is mandatory: the user must be able to veto individual packages even if they approve the rest of the batch. The Moderate section omits any item whose Tier is not `Moderate`.
+
+The prompt footer is the following literal verbatim:
+
+```
+Sensitive-tier items (if any) will be presented separately for manual action.
+```
+
+Sensitive-tier items are NOT shown in the approval prompt — they are escalated separately as Rule 4 escalation blocks per item (see `### Halt Semantics` below). Forbidden-tier items handled via option (b) (`Tier: Forbidden` with manual-action literal in `Why:`) are likewise NOT shown in the approval prompt; they are informational only.
+
+#### Affirmative and negative tokens
+
+The agent recognizes a closed enumeration of approval tokens. Replies are case-insensitive and whitespace-trimmed before matching. Any reply that does not match an affirmative token is treated as negative (default-deny posture).
+
+- **Affirmative tokens** (any of these counts as approval): `yes`, `y`, `approve`, `ok`, `agreed`, `please do`, `go ahead`.
+- **Negative tokens** (any of these counts as decline): `no`, `n`, `decline`, `skip`, `not now`.
+- **Ambiguous → default-deny.** Any reply that matches neither set (e.g., a question, a typo, a non-token sentence, an emoji-only reply) is treated as `not-approved`. The agent does NOT re-prompt for clarification — install mode is one-shot per bootstrap pass. The user can re-run `/bootstrap-feature` to retry.
+
+#### Bulk reply support
+
+The user may reply with a single bulk decision covering all items, or a mixed reply that combines bulk and per-item decisions. The agent parses the reply line-by-line; the first matching token per scope (Trivial-category or Moderate-item) wins. Two worked examples illustrate the supported reply shapes:
+
+- **Worked example 1 — bulk yes/no.** User reply: `yes to all Trivial, no to all Moderate`. The agent approves every Trivial-category gate (regardless of how many categories had Trivial items) and declines every Moderate item. All Trivial items proceed to install in declared order; all Moderate items are marked `not-approved` without an install attempt.
+- **Worked example 2 — mixed bulk + per-item.** User reply: `yes to Trivial; per-item: A=yes, B=no, C=skip`. The agent approves all Trivial-category gates; for the Moderate items named `A`, `B`, and `C`, it approves `A`, declines `B`, and treats `skip` as a negative token (so `C` is also declined). Items not named in the reply are treated as ambiguous → `not-approved` (default-deny).
+
+#### Sequential execution mandate
+
+Approved items are processed in the **declared order** from `## Recommended Resources` (Trivial-section categories in their `### <Category>` heading order, then Moderate items in their `#### <Name>` heading order within each category). The agent does NOT parallelize installs. Sequential execution is required because:
+
+1. Some installs depend on prior state (e.g., a `claude mcp add` may register a server that a subsequent Trivial item references).
+2. The Moderate halt rule (`approved-but-failed` → mark remaining as `aborted-batch-halted`) only makes sense in a sequential model; parallel execution would violate the per-item halt semantics.
+3. Audit-log entries are emitted per-attempt in execution order, so a sequential schedule produces a deterministic trace.
+
+#### Ephemeral prompt and one-shot semantics
+
+The prompt is written ONLY to chat — it is NEVER persisted to `.claude/resources-pending.md`, `.claude/plan.md`, scratchpad, or any other file. The orchestrator (the `/bootstrap-feature` command) captures the user's reply from chat and forwards it back to the agent's input. The agent processes the reply once and emits the `## Auto-Install Results` section based on what was approved, declined, or marked ambiguous. There is no retry, no re-prompt, no second pass within the same bootstrap run. Ambiguous → `not-approved`. The user re-runs the bootstrap to revise their decision.
+
+### Halt Semantics
+
+Halt semantics define how install mode reacts to per-item failures, tier-specific escalations, and environment-level fault conditions. Each rule below specifies the per-item status string emitted to `## Auto-Install Results` (Slice 3 enum) and whether subsequent items continue to be processed or the batch halts.
+
+- **Trivial install fails (exit code ≠ 0).** The agent marks the failing item with status `approved-but-failed`, emits a warning to chat indicating the failure (with the audit-log truncation marker if stderr exceeded 200 chars), and CONTINUES with the remaining Trivial items and the entire Moderate batch. Trivial failures do NOT halt sibling Trivial items or any Moderate items — Trivial mutations are reversible and machine-local, so a single failure does not poison the batch.
+
+- **Moderate install fails.** The agent marks the failing item with status `approved-but-failed`. All REMAINING Moderate items in the declared order are marked `aborted-batch-halted` (no install attempted) and the Moderate batch halts. Trivial items completed earlier in the run are PRESERVED — their successful state is not rolled back. The Moderate-batch halt is necessary because dependency-graph mutations interact (a failed package install may leave the lockfile in a dirty state that subsequent installs would compound), so once one Moderate install fails, the agent stops attempting further Moderate items in the same pass.
+
+- **Sensitive-tier item encountered.** For each Sensitive-tier recommendation, the agent emits a Rule 4 escalation block per item (per the project's `error-recovery.md` Rule 4 — architectural decision needed, options, tradeoffs). The Rule 4 block is emitted to chat and recorded in `## Auto-Install Results` with status `aborted-sensitive`. The agent does NOT install Sensitive items — Rule 4 means the user performs the action manually, outside the SDLC pipeline. After emitting the escalation block(s), the agent CONTINUES with non-Sensitive items in the same run; Sensitive escalations do not halt the run. Each Sensitive item gets its own Rule 4 block — they are not batched.
+
+- **Whitelist violation (Forbidden-tier execution attempt).** When a command does NOT match any whitelist regex pattern OR matches an entry in the 26-prefix deny-list, the agent emits the Authority Boundary violation literal (`Authority Boundary violation: command \`<cmd>\` does not match any whitelist pattern`), marks the item with status `aborted-whitelist-violation`, and HALTS the entire install phase. Per the Slice 4 contract, a whitelist violation also FAILS Step 3.5 of bootstrap — the run does not produce a clean exit. This is the strictest halt: no further items (Trivial or Moderate) are attempted, the in-flight `## Auto-Install Results` section reports the violation, and the orchestrator's Step 3.5 status is `failed`.
+
+- **Detection probe failure.** When a detection probe itself fails unexpectedly (e.g., `npm list --depth=0` exits non-zero due to a corrupted `node_modules/` state, or `claude mcp list` returns a malformed payload), the agent marks the affected item with status `aborted-detection-failed`. This is non-blocking: the agent continues with sibling items in the same run. Only the single item whose detection failed is marked aborted; the failure does not propagate to other items because each detection probe is independent.
+
+- **POSIX shell unavailable (Slice 2 fallback path).** When the headless / shell-detection probe (Slice 2) determines that the current shell is non-POSIX (Windows `cmd.exe`, PowerShell, or another unsupported environment), the agent emits the literal `Auto-install requires POSIX shell; current environment unsupported in iteration 2` and skips the auto-install phase entirely. No items are attempted; the `## Auto-Install Results` section records the literal as the reason. Per the Slice 4 contract, Step 3.5 still SUCCEEDS in this case — the iteration-1 suggest-only output (`## Recommended Resources`) is fully preserved and the user can perform installs manually. The POSIX-fallback halt is graceful, not a failure.
+
+- **No rollback.** Failed installs are NOT auto-rolled-back. If a Moderate install partially mutates `package.json` / lockfile / `node_modules/` and then fails, the agent does NOT attempt to revert the partial state — that would require additional whitelisted commands and risk compounding the corruption. Instead, the user manually reconciles the partial state via the warning template emitted in the failure record. The `aborted-version-conflict` warning template (`Detected <resource> at version <found>; recommendation expected <expected>; manual reconciliation required.`) and the `approved-but-failed` warning together give the user enough context to perform the manual reconciliation outside the agent.
+
+### Output Extension — Auto-Install Results
+
+After the detect-then-install phase and the approval flow complete, the agent APPENDS a `## Auto-Install Results` section AFTER the existing `## Recommended Resources` section in `.claude/resources-pending.md` (the same temp file written in iteration 1). The append is byte-additive: the existing `## Recommended Resources` section MUST remain byte-for-byte unchanged after the install phase. Downstream consumers that ignore the appended section see iter-1 behavior; consumers that read the appended section get install outcomes.
+
+The section header is the literal `## Auto-Install Results` on its own line, followed by per-item entries. Per-item entry format (declared schema):
+
+```
+- **<Name>** (<Category>) — Tier: <Trivial|Moderate|Sensitive>; Status: <status>; Command: `<cmd>` (or `n/a`); Notes: <one-liner>
+```
+
+Field semantics:
+
+- **`<Name>`** — the recommendation's `#### <Name>` heading text from `## Recommended Resources`.
+- **`<Category>`** — the recommendation's enclosing `### <Category>` heading.
+- **`Tier:`** — one of `Trivial`, `Moderate`, or `Sensitive` (Forbidden items via option (b) are reported under Sensitive-equivalent semantics for skipping; the Forbidden bucket continues to be counted in the summary line per Slice 1).
+- **`Status:`** — one of the 10 mandatory enum values defined below.
+- **`Command:`** — the post-template-substitution command string actually dispatched to `Bash`, surrounded by backticks. When no command was dispatched (e.g., `aborted-sensitive`, `not-approved`, `aborted-batch-halted`, `aborted-whitelist-violation` for a refused command), the field value is the literal `n/a`.
+- **`Notes:`** — a one-liner capturing the audit-log highlight: exit code on failure, the `... [truncated]` marker if log truncation occurred, the warning template body for version conflicts, the Rule 4 escalation pointer for Sensitive items, etc.
+
+#### 10 mandatory status enum values
+
+The `Status:` field MUST be exactly one of the following 10 literal tokens. Each token MUST appear in this section's text as a literal (the per-item entries that emit the status reference the literal verbatim):
+
+1. `auto-applied` — Trivial item, no approval needed by category-default policy. (Reserved for hypothetical future category-defaults that bypass the bulk Trivial gate; currently every Trivial install passes through the bulk gate, but the enum value is reserved per the Slice 3 schema for forward compatibility.)
+2. `approved-and-applied` — Trivial or Moderate item; user approved (via affirmative token in the bulk-Trivial gate or per-Moderate-item gate); install command executed and exited 0.
+3. `approved-but-failed` — User approved; install command was dispatched but exited non-zero (or otherwise failed). Notes field includes exit code and truncated stderr highlight.
+4. `skipped-already-present` — Detection probe found the resource installed at a compatible version. No install attempted; no approval needed (detection short-circuit).
+5. `aborted-version-conflict` — Detection probe found the resource installed at an INCOMPATIBLE version. No install attempted; the warning template `Detected <resource> at version <found>; recommendation expected <expected>; manual reconciliation required.` is emitted and the Notes field references it.
+6. `aborted-sensitive` — Sensitive-tier item escalated to Rule 4. No install attempted; the Notes field points to the Rule 4 escalation block emitted in chat.
+7. `aborted-whitelist-violation` — Command did not match any whitelist regex pattern OR matched an entry in the 26-prefix deny-list. HALTS the entire install phase per Slice 4 contract; the Authority Boundary violation literal is emitted and the Step 3.5 outcome FAILS.
+8. `aborted-batch-halted` — Moderate item that was queued behind a `approved-but-failed` Moderate item and never got attempted. The Moderate batch halted before this item's turn; sequential execution preserved earlier successful state.
+9. `aborted-detection-failed` — The detection probe itself failed (exit code non-zero or malformed output). Non-blocking: only the affected item is marked aborted; siblings continue.
+10. `not-approved` — User replied with a negative token, an ambiguous reply (default-deny), or did not name the item in a per-item reply. Default-deny posture per Approval Flow.
+
+The literal **`agent MUST NOT emit any other status string`** is binding: any future extension to the status enum requires an explicit Slice / version bump and a corresponding update to this section. Unknown status strings are a schema violation and downstream consumers (Plan Critic, planner) MAY flag them as MINOR.
+
+#### Zero-installable case
+
+When `## Recommended Resources` contains zero Trivial-tier and zero Moderate-tier items (legacy plan, or a feature whose recommendations are entirely Sensitive / Forbidden / `(none)`), the agent emits the `## Auto-Install Results` header followed by the single-line body literal verbatim:
+
+```
+No installable items
+```
+
+No per-item entries appear; no audit log appears; the section ends after that single line. This case is distinct from the Sensitive-only path (see Backward Compatibility) where the section still appears with `aborted-sensitive` entries.
+
+#### Headless context
+
+When the agent runs in a headless / non-interactive context (the `node -e 'process.stdin.isTTY'` probe returns `undefined` or `false`, indicating no TTY is attached and the orchestrator cannot relay user replies), the agent emits the `## Auto-Install Results` header followed by the body literal verbatim:
+
+```
+Skipped: non-interactive context — auto-install requires user approval
+```
+
+No approval prompt is presented (it would have nowhere to go), no per-item install attempts are made, and no audit log is emitted beyond the headless skip notice. Per the Slice 4 contract, Step 3.5 still SUCCEEDS in this case — the iteration-1 `## Recommended Resources` output is preserved and the user can re-run interactively to perform installs. Slice 4 also requires this exact wording — keep the literal byte-for-byte identical between Slice 3 and Slice 4 implementations.
+
+### Backward Compatibility
+
+Iteration 2 is strictly additive over iteration 1. Three concrete backward-compatibility guarantees are in force; consumers that were correctly handling iteration-1 output continue to work without modification.
+
+- **Replying "no to all" preserves iter-1 behavior.** When the user declines every Trivial-category gate AND every Moderate-item gate (e.g., reply `no to all Trivial, no to all Moderate`), no install commands are dispatched and the `## Recommended Resources` section is byte-for-byte unchanged from the iter-1 output. The `## Auto-Install Results` section is still appended (per Slice 3 schema), but every item carries `Status: not-approved` and no audit log entries beyond the not-approved marker. A consumer that ignores `## Auto-Install Results` and reads only `## Recommended Resources` sees identical iter-1 output. This is the user-facing escape hatch to retain strict suggest-only behavior without re-running with a flag.
+
+- **Sensitive-only path.** When all recommendations across the six categories are Sensitive-tier (or option-(b) Forbidden), no approval prompt is shown — there is nothing to approve, since Sensitive items are escalated and Forbidden option-(b) items are informational. All such items are marked `aborted-sensitive` (or, for option-(b) Forbidden, treated identically per the Forbidden-Tier Canonical Handling rule above). The `## Auto-Install Results` section still appears with the per-item entries listing `aborted-sensitive` statuses — the section is NOT replaced by the `No installable items` literal in this case, because the Sensitive items are technically install-eligible-in-principle but escalated. The `No installable items` literal is reserved for the strictly zero-Trivial / zero-Moderate / zero-Sensitive case (e.g., the no-resources skeleton or a feature with only `(none)` categories).
+
+- **`Tier:` field is additive.** The seventh bulleted field `Tier:` (introduced in Slice 1) is additive on top of the iter-1 six-field schema. Recommendations that omit `Tier:` (e.g., legacy outputs from iter-1 agents not yet upgraded to iter-2) default to the **most-restrictive applicable tier** — Forbidden — per Slice 1's default rule. Default-Forbidden ensures the omission is fail-safe: a missing `Tier:` field cannot accidentally route a recommendation through the Trivial bulk-approval gate. Iteration-2 emitters MUST always include `Tier:` explicitly; iteration-1 historical outputs read by downstream tools are silently treated as Forbidden for install-mode purposes only.
+
 ### Authority Boundary — Iteration 2 Extension
 
 The iteration-1 Authority Boundary (above) is preserved **byte-for-byte** in iteration 2. In particular, the iter-1 prohibitions enumerated above — direct `Edit` / direct `Write` to settings files, network calls, secret-file access, arbitrary shell commands — remain in force unchanged. Iteration 2 introduces a narrowly scoped extension permitting **side-effect mutations via whitelisted Bash** (and only via whitelisted Bash; the prohibitions on direct `Write`/`Edit` to the same paths still hold).
