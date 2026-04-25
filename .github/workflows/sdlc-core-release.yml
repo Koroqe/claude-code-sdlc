@@ -1,0 +1,184 @@
+name: sdlc-core release
+
+# SDLC core repo release pipeline — produces a source tarball and cuts a
+# GitHub Release for the meta-SDLC pipeline itself.
+#
+# Disjoint trigger from the sibling `sdlc-knowledge-release.yml`:
+#   - this workflow:                 bare `v<MAJOR>.<MINOR>.<PATCH>` tags
+#   - sdlc-knowledge-release.yml:    `sdlc-knowledge-v*` tags
+# The 3-level glob `v*.*.*` avoids accidentally matching `v` alone or `vfoo`.
+#
+# Triggered by:
+#   - pushing a tag matching `v*.*.*` (cuts a GitHub Release)
+#   - manual `workflow_dispatch` (build verification only — no release)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch: {}
+
+# Default least-privilege; the `release` job re-declares write access for itself.
+permissions:
+  contents: read
+
+concurrency:
+  group: sdlc-core-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — actionlint self-check.
+  # Gates the pipeline: if the workflow file itself is malformed, do not waste
+  # downstream runners.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1
+        with:
+          files: .github/workflows/sdlc-core-release.yml
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — build the source tarball.
+  # Single ubuntu-latest runner — no cross-platform matrix is needed because
+  # the SDLC repo ships shell scripts, markdown, and YAML; there is nothing
+  # to compile.
+  #
+  # Security pre-review M5a (CRITICAL): the source tarball is produced via
+  # `git archive`, which honors `.gitattributes` `export-ignore` directives.
+  # The repo-root `.gitattributes` (committed at 7e4789c) lists `.claude/`,
+  # `docs/qa/`, `docs/use-cases/`, and `books/` as `export-ignore`, so those
+  # directories are excluded from the tarball without an explicit pre-archive
+  # assertion. The "Verify source tarball excludes internal artifacts" step
+  # below provides defense-in-depth.
+  # ---------------------------------------------------------------------------
+  source:
+    name: source tarball
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history ensures the tag commit is reachable for `git archive`.
+          fetch-depth: 0
+
+      # -----------------------------------------------------------------------
+      # Security pre-review M5c (HIGH) + A1 (HIGH): assign `github.ref_name`
+      # to an env var first, then reference via POSIX shell expansion. This
+      # prevents shell injection from the tag name and isolates the v-prefix
+      # stripping into a single audited shell-parameter expansion.
+      # -----------------------------------------------------------------------
+      - name: Strip v prefix from tag
+        id: ver
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create source tarball
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git archive \
+            --format=tar.gz \
+            --prefix="claude-code-sdlc-${VERSION}/" \
+            -o "claude-code-sdlc-${VERSION}-source.tar.gz" \
+            HEAD
+
+      # -----------------------------------------------------------------------
+      # Defense-in-depth check (M5a): even though `.gitattributes` drives the
+      # exclusions, a regression in `.gitattributes` would silently leak
+      # internal artifacts. Fail the job if any excluded directory appears.
+      # The `|| true` is INSIDE the if-test so grep's "no match → exit 1"
+      # does not abort the script under `set -e`; the explicit `if` block is
+      # the actual fail path.
+      # -----------------------------------------------------------------------
+      - name: Verify source tarball excludes internal artifacts
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          MATCHES=$(tar -tzf "claude-code-sdlc-${VERSION}-source.tar.gz" \
+            | grep -E '^claude-code-sdlc-[^/]+/(\.claude|docs/qa|docs/use-cases|books)/' \
+            || true)
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: source tarball contains excluded internal artifacts:" >&2
+            echo "$MATCHES" >&2
+            exit 1
+          fi
+          echo "OK: source tarball excludes .claude/, docs/qa/, docs/use-cases/, books/"
+
+      - name: Upload source tarball artifact
+        uses: actions/upload-artifact@v4
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        with:
+          name: claude-code-sdlc-source
+          path: claude-code-sdlc-${{ steps.ver.outputs.version }}-source.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — cut GitHub Release with the source tarball + CHANGELOG body.
+  # Runs only when the workflow was triggered by a bare `v*.*.*` tag
+  # (workflow_dispatch runs are build-verification-only — no release).
+  #
+  # The `if:` predicate guards against `workflow_dispatch` runs. Disjointness
+  # from `sdlc-knowledge-v*` tags is enforced by the workflow-level trigger
+  # filter (`tags: ['v*.*.*']`), not by this `if`.
+  #
+  # Release notes path: `.claude/release-notes-${VERSION}.md` is produced by
+  # the release-engineer at `/merge-ready` Gate 9 (FR-7 / Slice 5). Since
+  # `.claude/` is `export-ignore` in the source tarball, the file is NOT in
+  # the artifact — but it IS in the checked-out tree at the tag commit.
+  # ---------------------------------------------------------------------------
+  release:
+    name: release
+    needs: [lint, source]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (for release notes file)
+        uses: actions/checkout@v4
+
+      - name: Strip v prefix from tag
+        id: ver
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download source tarball artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-code-sdlc-source
+          path: dist
+
+      - name: List downloaded artifacts
+        run: ls -laR dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        with:
+          # tag_name / name are evaluated by GHA's expression engine (not a
+          # shell), so direct `${{ github.ref_name }}` interpolation is safe
+          # from shell injection (M5c does not apply here).
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body_path: .claude/release-notes-${{ env.VERSION }}.md
+          files: |
+            dist/claude-code-sdlc-${{ env.VERSION }}-source.tar.gz
+          fail_on_unmatched_files: true
