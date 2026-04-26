@@ -20,7 +20,7 @@ set -euo pipefail
 # ============================================================================
 
 VERSION="3.0.0"
-KNOWLEDGE_VERSION="0.1.0"
+KNOWLEDGE_VERSION="0.2.0"
 KNOWLEDGE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
 REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
