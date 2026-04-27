@@ -534,7 +534,7 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+claudeknows search "<query>" --top-k 5 --json
 ```
 
 **Trigger for this agent:** Query before authoring release notes when domain context affects user-visible changes. **Gate 9 release-packaging logic is not affected by knowledge-base activation per FR-12.4 (local-knowledge-base iter-1).** The orthogonal §7 executing-mode dispatch added by the auto-release feature is governed by its own activation sentinel and is independent of knowledge-base activation.

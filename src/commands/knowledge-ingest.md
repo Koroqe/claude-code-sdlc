@@ -18,10 +18,15 @@ Usage: /knowledge-ingest <path>   # file or directory inside the current project
 
 ## Action
 
-The command invokes the global retrieval CLI shipped under `~/.claude/tools/sdlc-knowledge/`:
+The command invokes the global retrieval CLI. After `bash install.sh --yes`
+registers the global alias, the canonical short form is `claudeknows`
+(symlink in the first writable PATH directory among `/usr/local/bin`,
+`/opt/homebrew/bin`, `~/.local/bin`). The absolute path
+`~/.claude/tools/sdlc-knowledge/sdlc-knowledge` remains the backward-compat
+fallback when the alias was not registered.
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge ingest <path> --json
+claudeknows ingest <path> --json
 ```
 
 In iter-1 the `--json` flag emits one aggregate JSON object after the batch completes, summarising every file the recursive walk processed. The default (text) mode emits one progress line per file as ingestion completes, plus a final `summary:` line.
@@ -56,10 +61,15 @@ iter-2 may move to a streaming line-delimited JSON shape (one object per file, p
 
 ## Binary-absent fallback
 
-If the file at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` does not exist or is not executable, do NOT attempt to invoke it. Emit the following user-facing message and exit without error (per FR-6.3):
+If neither `claudeknows` (alias) nor `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`
+(absolute path) is invokable — detection: `command -v claudeknows` empty AND
+the absolute path not executable — do NOT attempt to invoke. Emit the
+following user-facing message and exit without error (per FR-6.3):
 
 ```
-sdlc-knowledge binary not found at ~/.claude/tools/sdlc-knowledge/sdlc-knowledge.
+sdlc-knowledge binary not found.
+  alias 'claudeknows' on PATH:                        absent
+  absolute path ~/.claude/tools/sdlc-knowledge/...:    absent
 
 The local knowledge base is opt-in and the retrieval tool has not been installed yet.
 To install it, re-run the SDLC installer from the cloned repo:
@@ -68,17 +78,23 @@ To install it, re-run the SDLC installer from the cloned repo:
 
 The installer will fetch the prebuilt binary for your platform from GitHub Releases,
 or fall back to a cargo source-build if cargo is on PATH and no release matches your
-platform yet. After installation, retry: /knowledge-ingest <path>
+platform yet. install.sh also registers the `claudeknows` alias automatically.
+After installation, retry: /knowledge-ingest <path>
 ```
+
+When the alias is absent but the absolute path IS executable (older install
+before the `register_claudeknows_alias` step landed), silently fall back to
+the absolute path — no warning, no degradation. Re-running `bash install.sh
+--yes` registers the alias.
 
 The literal phrase `bash install.sh --yes` MUST appear verbatim in the message so the user can copy it directly. Exit code is 0 — a missing binary is a degraded-but-valid state, not an error.
 
 ## Behavior contract summary
 
-- The command is a thin wrapper around `sdlc-knowledge ingest <path> --json`. No business logic lives in the slash command itself.
-- All ingestion state (sources, chunks, FTS5 index) is per-project under `<project>/.claude/knowledge/`. The CLI binary is global at `~/.claude/tools/sdlc-knowledge/`.
+- The command is a thin wrapper around `claudeknows ingest <path> --json`. No business logic lives in the slash command itself.
+- All ingestion state (sources, chunks, FTS5 index) is per-project under `<project>/.claude/knowledge/`. The CLI binary is global at `~/.claude/tools/sdlc-knowledge/` (also invokable as `claudeknows` via the install.sh-registered PATH symlink).
 - Ingestion is idempotent: re-running with the same `<path>` re-checks fingerprints and only re-chunks changed files.
-- Ingestion is additive: it never deletes existing sources. Use `sdlc-knowledge delete <id>` from the shell to remove a source.
+- Ingestion is additive: it never deletes existing sources. Use `claudeknows delete <id>` from the shell to remove a source.
 - The command exits non-zero ONLY when the binary itself returns non-zero (e.g., path-canonicalization rejection, corrupt-index unrecoverable, FTS5 schema mismatch). Per-file `failed` rows do NOT cause non-zero exit.
 
 ## Reference

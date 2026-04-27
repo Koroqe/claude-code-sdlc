@@ -22,14 +22,22 @@ for citation discipline.
 
 ## CLI invocation contract
 
-The `sdlc-knowledge` binary lives at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`
-and exposes exactly five subcommands. Invoke them verbatim:
+The `sdlc-knowledge` binary lives at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`.
+After `bash install.sh --yes` registers the global alias, it is also invokable
+as `claudeknows` from any directory on PATH (the alias is a symlink in
+`/usr/local/bin`, `/opt/homebrew/bin`, or `~/.local/bin` — whichever was the
+first writable PATH directory at install time). **Agents SHOULD use the short
+alias `claudeknows`** in citations and command examples; the absolute path
+remains valid as a backward-compat fallback for environments where the alias
+was not registered.
 
-- `sdlc-knowledge ingest <path> [--project-root <dir>] [--json]`
-- `sdlc-knowledge search <query> [--top-k 5] [--project-root <dir>] [--json]`
-- `sdlc-knowledge list [--project-root <dir>] [--json]`
-- `sdlc-knowledge status [--project-root <dir>] [--json]`
-- `sdlc-knowledge delete <source-id> [--project-root <dir>] [--json]`
+Five subcommands — invoke verbatim:
+
+- `claudeknows ingest <path> [--project-root <dir>] [--json]`
+- `claudeknows search <query> [--top-k 5] [--project-root <dir>] [--json]`
+- `claudeknows list [--project-root <dir>] [--json]`
+- `claudeknows status [--project-root <dir>] [--json]`
+- `claudeknows delete <source-id> [--project-root <dir>] [--json]`
 
 The `--project-root <dir>` flag pins the index location to a specific project;
 omitted, the binary resolves the project root relative to the current working
@@ -41,7 +49,7 @@ Typical agent query (the literal invocation referenced from per-agent
 `## Knowledge Base (when present)` activation blocks):
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+claudeknows search "<query>" --top-k 5 --json
 ```
 
 ## Citation format
@@ -87,10 +95,18 @@ this file extends with the `knowledge-base:` source prefix).
 
 Three failure modes are pre-classified so agents handle them deterministically:
 
-- **Binary absent** — `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is not
-  installed. Agent logs the literal line `knowledge-base: tool not installed; skipping`
+- **Binary absent** — neither `claudeknows` (alias) nor
+  `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (absolute path) is on PATH.
+  Detection: `command -v claudeknows` returns empty AND `[ -x ~/.claude/tools/sdlc-knowledge/sdlc-knowledge ]`
+  is false. Agent logs the literal line `knowledge-base: tool not installed; skipping`
   to stderr and proceeds without citation. Not a hard error; downstream gates
   do not flag it.
+- **Alias absent but binary present** (older install before the
+  `register_claudeknows_alias` step landed) — `command -v claudeknows`
+  returns empty but `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` IS
+  executable. Agent silently falls back to the absolute path; no log line.
+  This is a backward-compat path; re-running `bash install.sh --yes`
+  registers the alias.
 - **Index absent** — the binary is installed but `<project>/.claude/knowledge/index.db`
   does not exist. Silent no-op (no log line) per the activation-sentinel rule
   above. The project simply has not opted in.
@@ -156,7 +172,7 @@ install.sh --yes` and the ingest continues with the remaining sources —
 markdown and plain-text ingest are unaffected.
 
 **Encrypted / password-protected PDFs** — pdfium returns a clear error during
-open; `sdlc-knowledge ingest` surfaces the error and skips the document.
+open; `claudeknows ingest` surfaces the error and skips the document.
 
 ## Facts
 

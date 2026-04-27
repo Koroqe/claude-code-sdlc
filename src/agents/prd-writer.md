@@ -71,7 +71,7 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring domain-bearing content, query the per-project knowledge base via:
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+claudeknows search "<query>" --top-k 5 --json
 ```
 
 **Trigger for this agent:** Query before authoring Functional Requirements that touch domain semantics (regulatory rules, financial flows, industry-specific workflows).

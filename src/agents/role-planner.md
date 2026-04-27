@@ -484,7 +484,7 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+claudeknows search "<query>" --top-k 5 --json
 ```
 
 **Trigger for this agent:** Query before recommending on-demand roles when domain context could justify a specialized role (e.g., compliance-officer, mobile-dev) cited in the knowledge base.

@@ -602,7 +602,7 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
 
 ```
-~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json
+claudeknows search "<query>" --top-k 5 --json
 ```
 
 **Trigger for this agent:** Query before recommending external resources (MCP servers, libraries, APIs) when the recommendation depends on domain semantics. **Note:** auto-recommendation behavior on detecting domain PDFs is OUT OF SCOPE for iter-1; iter-2 PRD will define that flow.
