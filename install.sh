@@ -70,6 +70,12 @@ WHAT GETS INSTALLED (~/.claude/):
   agents/          17 specialized agent prompts
   commands/        5 SDLC pipeline commands
   rules/           4 process rules
+  tools/sdlc-knowledge/sdlc-knowledge   Knowledge-base CLI binary
+
+GLOBAL ALIAS (auto-installed if a writable PATH dir exists):
+  claudeknows      Short-name symlink to sdlc-knowledge — invokes the tool
+                   without the absolute path. Probed in order:
+                   /usr/local/bin → /opt/homebrew/bin → ~/.local/bin
 
 WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
@@ -457,6 +463,86 @@ install_knowledge_binary() {
   mv "$tmp" "$target_bin"
   chmod +x "$target_bin"
   log_ok "tools/sdlc-knowledge/sdlc-knowledge ($platform)"
+}
+
+# ============================================================================
+# Register `claudeknows` global alias — symlink the installed binary into a
+# writable PATH directory so the tool can be invoked by short name without
+# the absolute `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` path.
+#
+# Probe order (first writable, on-PATH directory wins):
+#   1. /usr/local/bin       — classic Unix system bin (Intel macOS, many Linuxes)
+#   2. /opt/homebrew/bin    — Apple Silicon Homebrew default
+#   3. ~/.local/bin         — XDG user-bin (created if absent)
+#
+# Idempotent — if the symlink already points at the right target, nothing
+# changes. If a stale file exists at the alias path, it is replaced (symlink
+# only; never overwrite a regular file).
+# ============================================================================
+register_claudeknows_alias() {
+  # Re-derive the binary path (matches install_knowledge_binary's exe_ext logic).
+  local exe_ext=""
+  case "$(uname -ms)" in
+    MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
+  esac
+  local target_bin="$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge${exe_ext}"
+
+  if [ ! -x "$target_bin" ]; then
+    log_warn "claudeknows alias: target binary not found at $target_bin; skipping"
+    return 0
+  fi
+
+  # Find the first writable directory on PATH.
+  local link_dir=""
+  for dir in "/usr/local/bin" "/opt/homebrew/bin" "$HOME/.local/bin"; do
+    if [ -d "$dir" ] && [ -w "$dir" ]; then
+      link_dir="$dir"
+      break
+    fi
+  done
+  # If nothing writable was found, try to create ~/.local/bin (XDG default).
+  if [ -z "$link_dir" ]; then
+    if mkdir -p "$HOME/.local/bin" 2>/dev/null && [ -w "$HOME/.local/bin" ]; then
+      link_dir="$HOME/.local/bin"
+    fi
+  fi
+
+  if [ -z "$link_dir" ]; then
+    log_warn "claudeknows alias: no writable PATH directory found"
+    log_warn "  manual setup: ln -sf $target_bin /usr/local/bin/claudeknows"
+    return 0
+  fi
+
+  local link_path="$link_dir/claudeknows"
+
+  # Refuse to overwrite a regular file (could be a user-installed tool with
+  # the same name). Replace existing symlinks freely.
+  if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+    log_warn "claudeknows alias: $link_path exists as a regular file; refusing to overwrite"
+    log_warn "  remove or rename it, then re-run install.sh"
+    return 0
+  fi
+
+  # Idempotency: if the symlink already points where we want, nothing to do.
+  if [ -L "$link_path" ] && [ "$(readlink "$link_path")" = "$target_bin" ]; then
+    log_ok "claudeknows alias already in place ($link_path)"
+    return 0
+  fi
+
+  rm -f "$link_path"
+  ln -s "$target_bin" "$link_path"
+  log_ok "claudeknows alias: $link_path -> $target_bin"
+
+  # Warn if the chosen directory is not currently on PATH (rare — we picked
+  # from a writable list, but ~/.local/bin can be off-PATH on bare macOS).
+  case ":$PATH:" in
+    *":$link_dir:"*) ;;
+    *)
+      log_warn "  NOTE: $link_dir is not on PATH for the current shell"
+      log_warn "  add to your shell rc (~/.zshrc, ~/.bashrc, etc.):"
+      log_warn "    export PATH=\"$link_dir:\$PATH\""
+      ;;
+  esac
 }
 
 # ============================================================================
@@ -930,6 +1016,7 @@ fi
 
 install_user_config
 install_knowledge_binary
+register_claudeknows_alias
 register_bash_allowlist
 register_release_bash_allowlist
 install_pdfium_binary
@@ -961,6 +1048,12 @@ echo "    /bootstrap-feature  Documentation phases only"
 echo "    /implement-slice    Implement next TDD slice"
 echo "    /merge-ready        Run all quality gates"
 echo "    /context-refresh    Rebuild session context"
+echo "    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base"
+echo ""
+echo "  Knowledge base CLI (also invokable as 'claudeknows' if alias was registered):"
+echo "    claudeknows ingest <path>           Ingest PDF/MD/TXT into <cwd>/.claude/knowledge/"
+echo "    claudeknows search '<query>' --json BM25-ranked search over the index"
+echo "    claudeknows list  | status | delete Inspect / manage indexed sources"
 echo ""
 
 if [ "$INIT_PROJECT" = false ]; then
