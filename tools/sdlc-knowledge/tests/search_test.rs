@@ -65,7 +65,7 @@ fn search_returns_positive_descending_scores() {
         &[(0, 0), (0, 2), (3, 1)],
     );
 
-    let hits = search::search(&conn, "widgetron", 3).expect("search ok");
+    let hits = search::search(&conn, "widgetron", 3, 0).expect("search ok");
     assert_eq!(hits.len(), 3, "expected 3 hits, got {}", hits.len());
 
     for h in &hits {
@@ -88,7 +88,7 @@ fn search_returns_positive_descending_scores() {
 #[test]
 fn search_empty_result_returns_empty_vec_no_error() {
     let (_tmp, conn) = seed_db(5, 3, "widgetron", &[(0, 0)]);
-    let hits = search::search(&conn, "thiswordnevereverappears", 5).expect("search ok");
+    let hits = search::search(&conn, "thiswordnevereverappears", 5, 0).expect("search ok");
     assert!(hits.is_empty(), "expected empty, got {} hits", hits.len());
 }
 
@@ -96,7 +96,7 @@ fn search_empty_result_returns_empty_vec_no_error() {
 fn search_fts5_syntax_error_returns_fts_syntax_variant() {
     let (_tmp, conn) = seed_db(5, 3, "widgetron", &[(0, 0)]);
     // "AND OR" without quoting is invalid FTS5 syntax.
-    let err = search::search(&conn, "AND OR", 5).expect_err("must be syntax error");
+    let err = search::search(&conn, "AND OR", 5, 0).expect_err("must be syntax error");
     match err {
         SearchError::FtsSyntax(_) => {}
         other => panic!("expected FtsSyntax, got: {other:?}"),
@@ -115,7 +115,7 @@ fn search_top_k_clamped_to_one_hundred() {
     let (_tmp, conn) = seed_db(30, 5, "ubiquitous", &unique);
 
     // Request 1000; FR-3.2 clamps to ≤ 100.
-    let hits = search::search(&conn, "ubiquitous", 1000).expect("search ok");
+    let hits = search::search(&conn, "ubiquitous", 1000, 0).expect("search ok");
     assert!(
         hits.len() <= 100,
         "top_k must be clamped to ≤ 100 per FR-3.2; got {}",
@@ -126,7 +126,7 @@ fn search_top_k_clamped_to_one_hundred() {
 #[test]
 fn search_includes_snippet_field() {
     let (_tmp, conn) = seed_db(5, 3, "widgetron", &[(0, 0), (1, 1)]);
-    let hits = search::search(&conn, "widgetron", 5).expect("search ok");
+    let hits = search::search(&conn, "widgetron", 5, 0).expect("search ok");
     assert!(!hits.is_empty(), "expected at least one hit");
     for h in &hits {
         assert!(!h.source.is_empty(), "source path should not be empty");
@@ -135,5 +135,56 @@ fn search_includes_snippet_field() {
         // Snippet may legitimately be empty for very short text after FTS5
         // truncates, but for our seed it must contain SOMETHING.
         assert!(!h.snippet.is_empty(), "snippet should not be empty");
+        // Default (radius=0) MUST omit the context field.
+        assert!(h.context.is_none(), "context must be None when radius=0");
     }
+}
+
+#[test]
+fn search_context_zero_keeps_context_none() {
+    let (_tmp, conn) = seed_db(2, 5, "widgetron", &[(0, 2)]);
+    let hits = search::search(&conn, "widgetron", 5, 0).expect("search ok");
+    for h in &hits {
+        assert!(h.context.is_none(), "context must be None when radius=0");
+    }
+}
+
+#[test]
+fn search_context_one_returns_three_chunks_concatenated() {
+    // doc 0 has 5 chunks (ord 0..=4). Place `widgetron` in chunk ord=2 (middle).
+    // With radius=1 we expect context = chunks ord=[1,2,3] joined by '\n'.
+    let (_tmp, conn) = seed_db(1, 5, "widgetron", &[(0, 2)]);
+    let hits = search::search(&conn, "widgetron", 5, 1).expect("search ok");
+    assert_eq!(hits.len(), 1, "exactly one hit expected");
+    let h = &hits[0];
+    let ctx = h.context.as_ref().expect("context must be populated when radius>0");
+    // Context lines should reference word1, word2, word3 (one per chunk).
+    assert!(ctx.contains("word1"), "context must include preceding chunk text: {ctx}");
+    assert!(ctx.contains("word2"), "context must include matching chunk text: {ctx}");
+    assert!(ctx.contains("word3"), "context must include following chunk text: {ctx}");
+    // Two newlines split 3 chunks.
+    assert_eq!(ctx.matches('\n').count(), 2, "expected 2 newline separators (3 chunks): {ctx}");
+}
+
+#[test]
+fn search_context_at_document_start_truncates() {
+    // Hit at ord=0 — there is NO chunk at ord=-1, so radius=2 should return
+    // only chunks 0,1,2 (3 chunks, not 5).
+    let (_tmp, conn) = seed_db(1, 5, "widgetron", &[(0, 0)]);
+    let hits = search::search(&conn, "widgetron", 5, 2).expect("search ok");
+    assert_eq!(hits.len(), 1);
+    let ctx = hits[0].context.as_ref().expect("context must be present");
+    assert_eq!(ctx.matches('\n').count(), 2, "boundary-truncated context: {ctx}");
+}
+
+#[test]
+fn search_context_radius_is_clamped_to_max() {
+    // Pass an absurdly large radius — the clamp to MAX_CONTEXT_RADIUS (=10)
+    // means the BETWEEN range stays bounded; for a 5-chunk doc, we get the
+    // whole document (5 chunks → 4 newlines), not a panic or runaway query.
+    let (_tmp, conn) = seed_db(1, 5, "widgetron", &[(0, 2)]);
+    let hits = search::search(&conn, "widgetron", 5, 10_000).expect("search ok");
+    assert_eq!(hits.len(), 1);
+    let ctx = hits[0].context.as_ref().expect("context must be present");
+    assert_eq!(ctx.matches('\n').count(), 4, "5-chunk doc → 4 separators: {ctx}");
 }

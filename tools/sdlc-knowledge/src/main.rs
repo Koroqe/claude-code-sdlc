@@ -159,7 +159,8 @@ fn run_search(root: &std::path::Path, args: &cli::SearchArgs) -> std::process::E
     };
 
     let top_k = args.top_k as u32;
-    let hits = match search::search(&conn, &args.query, top_k) {
+    let context_radius = args.context as u32;
+    let hits = match search::search(&conn, &args.query, top_k, context_radius) {
         Ok(h) => h,
         Err(search::SearchError::FtsSyntax(msg)) => {
             eprintln!("error: invalid search query: {msg}");

@@ -81,6 +81,15 @@ pub struct SearchArgs {
     pub query: String,
     #[arg(long, default_value_t = 5)]
     pub top_k: usize,
+    /// Expand each hit with ±N neighbor chunks from the same document so the
+    /// agent gets paragraph-level context around the BM25 match. Default 0
+    /// (backward-compat — no expansion). Capped at 10. With N=1 each hit
+    /// returns ~1500 chars of context (3 chunks × ~500 chars); N=2 ≈ 2500
+    /// chars; N=3 ≈ 3500 chars. The matching chunk's `chunk_id` and `score`
+    /// remain unchanged — context is additive in the new `context` JSON
+    /// field, omitted when N=0.
+    #[arg(long, default_value_t = 0)]
+    pub context: usize,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
     #[arg(long)]

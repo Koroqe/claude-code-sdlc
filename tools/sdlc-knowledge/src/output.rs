@@ -44,6 +44,7 @@ pub fn render_search_human(hits: &[SearchHit]) -> String {
     for (i, h) in hits.iter().enumerate() {
         // Format: 1. score=0.42 [ord 3] /abs/path/source.md
         //          <snippet>
+        //          [+context if present, indented under "context:" label]
         s.push_str(&format!(
             "{}. score={:.4} [ord {}] {}\n   {}\n",
             i + 1,
@@ -52,6 +53,12 @@ pub fn render_search_human(hits: &[SearchHit]) -> String {
             h.source,
             h.snippet
         ));
+        if let Some(ctx) = &h.context {
+            s.push_str("   context:\n");
+            for line in ctx.lines() {
+                s.push_str(&format!("     {line}\n"));
+            }
+        }
     }
     s
 }
@@ -128,11 +135,29 @@ mod tests {
             ord: 0,
             score: 1.5,
             snippet: "the cat".to_string(),
+            context: None,
         };
         let s = render_search_json(&[hit]);
         for f in ["source", "chunk_id", "ord", "score", "snippet"] {
             assert!(s.contains(f), "missing field {f} in {s}");
         }
+        // context: None must be omitted via skip_serializing_if (default-shape contract)
+        assert!(!s.contains("context"), "context should be absent when None: {s}");
+    }
+
+    #[test]
+    fn search_json_includes_context_when_present() {
+        let hit = SearchHit {
+            source: "/p/x.md".to_string(),
+            chunk_id: 7,
+            ord: 0,
+            score: 1.5,
+            snippet: "the cat".to_string(),
+            context: Some("para1\npara2\npara3".to_string()),
+        };
+        let s = render_search_json(&[hit]);
+        assert!(s.contains("\"context\""), "context field must appear: {s}");
+        assert!(s.contains("para1"), "context value must be serialized: {s}");
     }
 
     #[test]
