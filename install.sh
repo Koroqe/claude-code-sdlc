@@ -92,9 +92,11 @@ AFTER INSTALL:
 
 COMMANDS AVAILABLE:
   /develop-feature    Full autonomous pipeline
-  /bootstrap-feature  Documentation phases only
+  /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
   /implement-slice    Implement next TDD slice
-  /merge-ready        Run all quality gates
+  /merge-ready        Run all 9 quality gates (does NOT cut a release)
+  /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
+  /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
   /context-refresh    Rebuild session context
 HELPEOF
 }
@@ -1044,11 +1046,12 @@ echo "    7. Run quality gates before merge"
 echo ""
 echo "  Commands:"
 echo "    /develop-feature    Full autonomous pipeline"
-echo "    /bootstrap-feature  Documentation phases only"
+echo "    /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)"
 echo "    /implement-slice    Implement next TDD slice"
-echo "    /merge-ready        Run all quality gates"
-echo "    /context-refresh    Rebuild session context"
+echo "    /merge-ready        Run all 9 quality gates (does NOT cut a release)"
+echo "    /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow"
 echo "    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base"
+echo "    /context-refresh    Rebuild session context"
 echo ""
 echo "  Knowledge base CLI (also invokable as 'claudeknows' if alias was registered):"
 echo "    claudeknows ingest <path>           Ingest PDF/MD/TXT into <cwd>/.claude/knowledge/"
