@@ -2,7 +2,7 @@
 name: prd-writer
 description: Document feature requirements in docs/PRD.md before implementation begins. Every new feature MUST have a PRD section.
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
-model: opus
+model: sonnet
 ---
 
 # PRD Writer

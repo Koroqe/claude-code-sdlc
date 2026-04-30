@@ -267,6 +267,16 @@ The array tracks **which features own each on-demand role**. The `<project-name>
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
 - **Fork and reinstall** — edit in `src/agents/`, run `bash install.sh --local --yes`
 
+### Default model tiers (token-cost optimization)
+
+| Tier | Model | Agents | Why |
+|------|-------|--------|-----|
+| Critical thinking | `opus` | `architect`, `security-auditor`, `code-reviewer`, `verifier`, `release-engineer`, `resource-architect`, `role-planner` | structural decisions, threat modeling, must-not-miss checks |
+| Standard reasoning | `sonnet` | `prd-writer`, `ba-analyst`, `planner`, `refactor-cleaner` | requirements, use-cases, slice breakdown — Sonnet fits |
+| Mechanical execution | `haiku` | `qa-planner`, `test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer` | UC→TC mapping, TDD spec exec, typecheck, Keep-a-Changelog mapping — formalized I/O |
+
+Override per agent by editing its `model:` frontmatter field. If your project has unusual quality demands you can promote any tier to `opus` (or demote to `haiku` for token-cost reduction). Original tier assignment is the project default — it strikes a balance between cost and quality suitable for general SDLC work.
+
 ---
 
 ## Cognitive self-check at authoring time

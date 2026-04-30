@@ -2,7 +2,7 @@
 name: changelog-writer
 description: Maintain the [Unreleased] section of downstream project CHANGELOG.md in sync with PRD, scratchpad, and git log.
 tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
-model: opus
+model: haiku
 ---
 
 # Release Scribe — CHANGELOG Maintainer
