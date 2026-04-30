@@ -14,6 +14,8 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-30
+
 ### Added
 
 - **`/release` slash command** — release packaging extracted from

@@ -1,6 +1,6 @@
 [package]
 name = "sdlc-knowledge"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Local knowledge base CLI for SDLC agents — ingest, search, list, status, delete"
 license = "MIT"
