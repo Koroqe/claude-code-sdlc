@@ -13,7 +13,7 @@ This workflow mirrors a professional software development team:
 | Product Manager | `prd-writer` | Feature requirements in `docs/PRD.md` |
 | Business Analyst | `ba-analyst` | Use cases in `docs/use-cases/<feature>_use_cases.md` |
 | Software Architect | `architect` | Architecture review, technical design validation |
-| Resource Manager-Architect | `resource-architect` | Recommend external resources at bootstrap time and auto-install Trivial/Moderate items after user approval (MCP, dev dependencies); Sensitive items escalate to user. |
+| Resource Manager-Architect | `resource-architect` | Recommend external resources at bootstrap Step 3.5 (CONDITIONAL — keyword auto-detect or `--with-resources` flag) and auto-install Trivial/Moderate items after user approval; Sensitive items escalate. |
 | Role Planner | `role-planner` | Recommend project-specific specialized roles at bootstrap Step 3.75 with cross-feature reuse; participate in post-merge teardown of unused on-demand roles. |
 | QA Lead | `qa-planner` | Test cases in `docs/qa/<feature>_test_cases.md` |
 | Tech Lead | `planner` | Implementation plan (5-9 slices) |
@@ -26,7 +26,7 @@ This workflow mirrors a professional software development team:
 | Tech Writer | `doc-updater` | Documentation accuracy |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
 | Release Scribe | `changelog-writer` | Maintain the `[Unreleased]` section of downstream project `CHANGELOG.md` in sync with PRD, scratchpad, and git log |
-| Release Engineer | `release-engineer` | Package releases at /merge-ready Gate 9 — version bump, CHANGELOG date stamp, release-notes file, GitHub Actions release workflow provisioning |
+| Release Engineer | `release-engineer` | Package releases on user-invoked `/release` (NOT in /merge-ready) — version bump, CHANGELOG date stamp, release-notes file, GitHub Actions release workflow provisioning |
 
 ### What Every Plan MUST Include
 
@@ -71,9 +71,11 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 
 ### Pipeline Commands
 - `/develop-feature` — Full autonomous pipeline (steps 1-3 above)
-- `/bootstrap-feature` — Documentation phases only (step 1)
+- `/bootstrap-feature [--with-resources] <description>` — Documentation phases only (step 1). `--with-resources` forces Step 3.5 resource-architect dispatch (otherwise auto-detected via PRD/use-cases keywords).
 - `/implement-slice` — Single TDD slice (step 2, one iteration)
-- `/merge-ready` — Quality gates (step 3)
+- `/merge-ready` — 9 quality gates (step 3) — does NOT cut a release
+- `/release` — User-invoked release packaging (semver bump + CHANGELOG date stamp + release-notes file + GHA release workflow). Use after `/merge-ready` reports MERGE READY when ready to publish.
+- `/knowledge-ingest <path>` — Ingest folder/file into per-project knowledge base
 - `/context-refresh` — Rebuild session context from scratchpad
 
 ### What Plan Mode Plans MUST Contain
@@ -162,7 +164,7 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - The same file appearing across different waves is valid (sequential execution between waves)
 > - Single-slice waves are valid — not every slice can parallelize
 > - Note case-sensitivity: on case-insensitive filesystems, `src/Auth.ts` and `src/auth.ts` are the same file
-> - For merge-ready-touching plans: verify any reference to "Gate 9" matches the gate count "10" — flag mismatch as MAJOR.
+> - For merge-ready-touching plans: verify gate count is "9" (Gate 0 through Gate 8) — release packaging is no longer a gate; it lives in the standalone `/release` command. Flag any plan that references "Gate 9" or claims "10 quality gates" as MAJOR.
 >
 > Return ONLY this structure:
 >
