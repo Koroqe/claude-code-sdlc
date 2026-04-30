@@ -4,11 +4,14 @@ This document describes how to cut a release of the `sdlc-knowledge` CLI binary.
 It is owned by the maintainers of `claude-code-sdlc` and is **independent** of
 the SDLC repo's own release process.
 
-> **Important — Gate 9 invariance:** the SDLC repo's `release-engineer` Gate 9
-> (in `/merge-ready`) is **UNCHANGED** by this pipeline. **Gate 9 is UNCHANGED**
-> in iter-1 per FR-12.4 and PRD §11.7 item 5. The `sdlc-knowledge` binary
-> follows its own tag scheme, its own GitHub Actions workflow, and its own
-> versioning cadence. Do not couple them.
+> **Important — release-engineer invariance:** the SDLC repo's
+> `release-engineer` (now invoked via the user-driven `/release` slash command,
+> not as a `/merge-ready` gate) is **UNCHANGED** by this pipeline. The
+> `sdlc-knowledge` binary follows its own tag scheme, its own GitHub Actions
+> workflow, and its own versioning cadence. Do not couple them. (Historical
+> note: in iter-1/iter-2 release-engineer ran as Gate 9 of `/merge-ready`;
+> the iter-3.x extraction to `/release` made it user-invoked but did not
+> change its packaging logic.)
 
 ---
 
@@ -109,14 +112,14 @@ Concretely, when releasing:
 
 **Iter-3 alternative — automated via `release-engineer` §7 executing mode:**
 when this repo's `.claude/rules/auto-release.md` sentinel is present (it is,
-as of iter-3 where the SDLC core opted in), `/merge-ready` Gate 9 runs the
-tag-creation and push steps itself per the §7 4-tier authority dispatch. The
-maintainer's responsibility shrinks to: ensure `[Unreleased]` in
-`CHANGELOG.md` is populated and run `/merge-ready` on a clean main checkout.
-Gate 9 disambiguates the tag scheme based on whether
-`tools/sdlc-knowledge/` was changed (sdlc-knowledge-v* scheme) or not
-(bare v* scheme); if both, the agent prompts for explicit user choice. The
-Sensitive-tier `git push origin <tag>` step still prompts default-deny
+as of iter-3 where the SDLC core opted in), `/release` runs the tag-creation
+and push steps itself per the §7 4-tier authority dispatch. The maintainer's
+responsibility shrinks to: ensure `[Unreleased]` in `CHANGELOG.md` is
+populated and run `/release` on a clean main checkout. `/release`
+disambiguates the tag scheme based on whether `tools/sdlc-knowledge/` was
+changed (sdlc-knowledge-v* scheme) or not (bare v* scheme); if both, the
+agent prompts for explicit user choice. The Sensitive-tier
+`git push origin <tag>` step still prompts default-deny
 `[y/N]` unless `AUTO_RELEASE=1` is set in the environment.
 
 ---
@@ -185,10 +188,12 @@ the next iteration:
 ## 7. Relationship to the SDLC release pipeline
 
 To restate plainly: this workflow has **nothing to do with** the SDLC repo's
-own `release-engineer` agent or its `/merge-ready` Gate 9. **Gate 9 is
-UNCHANGED** by the introduction of the local-knowledge-base feature.
+own `release-engineer` agent or its `/release` slash command. The
+release-engineer is **UNCHANGED** by the introduction of the
+local-knowledge-base feature.
 
-- The SDLC repo's `release-engineer` runs at Gate 9 of `/merge-ready` and is
+- The SDLC repo's `release-engineer` runs on user-invoked `/release` (NOT in
+  `/merge-ready` — extracted to its own command in iter-3.x) and is
   responsible for the SDLC's own release cadence (CHANGELOG, install.sh
   versioning, agent-set tag).
 - The `sdlc-knowledge` binary has its own lifecycle, its own tag scheme, its
@@ -240,7 +245,7 @@ To upgrade pdfium binary alone (without changing the Rust bindings):
 - Crate package name is `sdlc-knowledge`, version `0.1.0`, manifest at `tools/sdlc-knowledge/Cargo.toml` — source: `tools/sdlc-knowledge/Cargo.toml:1-6` Read this session.
 - NFR-1.1 size budget is 10 MB (10485760 bytes) — source: `.claude/plan.md` line 244 (Slice 4 Changes) and line 258 (Done-when condition).
 - Slices 1, 2, 3 are complete with the Rust crate fully functional (ingest, search, list, status, delete) — source: Slice 4 implementation prompt context paragraph.
-- Gate 9 invariance is mandated by FR-12.4 / PRD §11.7 item 5 — source: `.claude/plan.md` line 245 (Slice 4 Changes, RELEASING.md item (e)).
+- release-engineer invariance is mandated by FR-12.4 / PRD §11.7 item 5 — source: `.claude/plan.md` line 245 (Slice 4 Changes, RELEASING.md item (e)). (Iter-1/2 framed this as "Gate 9 invariance"; iter-3.x extraction to /release preserves the same invariance under a different invocation surface.)
 - Maintainer one-time bootstrap of `sdlc-knowledge-v0.1.0` is required by FR-11.3 / AC-13 — source: `.claude/plan.md` line 245 (Slice 4 Changes, RELEASING.md item (b)).
 
 ### External contracts

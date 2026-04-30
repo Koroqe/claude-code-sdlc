@@ -107,7 +107,7 @@ Cognitive self-check enforcement covers file-based artifacts only. Stdout artifa
 - `.claude/plan.md` — the current cycle's executable plan
 - `.claude/resources-pending.md` — when present (resource-architect handoff)
 - `.claude/roles-pending.md` — when present (role-planner handoff)
-- The current release-notes file — when present (release-engineer output at /merge-ready Gate 9)
+- The current release-notes file — when present (release-engineer output on user-invoked /release)
 
 **Severities:**
 
@@ -122,7 +122,7 @@ Pre-existing file-based artifacts (created before `MERGE_DATE`, or files not bei
 
 `MERGE_DATE: <YYYY-MM-DD — filled in at merge by release-engineer>`
 
-The release-engineer at `/merge-ready` Gate 9 substitutes the actual merge date for the cognitive-self-check feature into the placeholder above. Until that substitution happens, treat `MERGE_DATE` as the calendar day this rule lands on `main`.
+The release-engineer on user-invoked `/release` substitutes the actual merge date for the cognitive-self-check feature into the placeholder above. Until that substitution happens, treat `MERGE_DATE` as the calendar day this rule lands on `main`.
 
 This rule applies to artifacts produced **on or after** `MERGE_DATE`. Pre-existing PRD sections, use-case files, QA test-case files, and plans authored before `MERGE_DATE` are exempt — the Plan Critic does NOT retroactively flag them for missing `## Facts` blocks.
 

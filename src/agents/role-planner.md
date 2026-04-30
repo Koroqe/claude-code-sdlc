@@ -102,7 +102,7 @@ The 17 core agents are fixed and MUST NOT be proposed, edited, or shadowed by an
 - `changelog-writer` — Release Scribe; maintains the `[Unreleased]` section of downstream `CHANGELOG.md`.
 - `resource-architect` — Resource Manager-Architect; recommends external resources at bootstrap Step 3.5.
 - `role-planner` — Role Planner (this agent); recommends project-specific specialized roles at bootstrap Step 3.75.
-- `release-engineer` — Release Engineer; packages releases at /merge-ready Gate 9 — version bump, CHANGELOG date stamp, release-notes file, GitHub Actions release workflow provisioning.
+- `release-engineer` — Release Engineer; packages releases on user-invoked `/release` — version bump, CHANGELOG date stamp, release-notes file, GitHub Actions release workflow provisioning. Not part of /merge-ready.
 <!-- CORE-AGENT-ENUMERATION-END -->
 
 ## Frontmatter-extraction algorithm
@@ -377,8 +377,9 @@ Where `N` is the total number of `#### <Role Title>` blocks (zero or more), and 
 - `Step 5: planner` — for roles that contribute to the implementation plan
 - `Step 6: implementation` — for roles invoked during slice implementation (the most common case)
 - `Step 7: merge-ready` — for roles invoked during the merge-ready quality gate
+- `Step 8: release` — for roles invoked during user-invoked /release packaging (rare; release-engineer + auxiliary release roles)
 
-Any other label is invalid. If you cannot place a role into one of the 5 buckets, drop the role and document the gap as a boundary notice on the summary line.
+Any other label is invalid. If you cannot place a role into one of these buckets, drop the role and document the gap as a boundary notice on the summary line.
 
 (e) After the per-role blocks, emit the `## Role invocation plan` subsection. This is a per-role call plan that the `bootstrap-feature` command and the `general-purpose` subagent runtime use to invoke each role at the right step. The format is one bullet per role:
 

@@ -2,15 +2,16 @@
 
 The presence of this file at `<project>/.claude/rules/auto-release.md` is the
 sole signal the `release-engineer` agent uses to decide whether to activate
-its **§7 Executing Mode** at `/merge-ready` Gate 9. Absence equals opt-out
-(suggest-only; the agent emits the structured 10-section summary and the
-developer runs the `Commands to run` block themselves — byte-identical to
-current main behavior).
+its **§7 Executing Mode** when invoked via the user-driven `/release` slash
+command. Absence equals opt-out (suggest-only; the agent emits the structured
+10-section summary and the developer runs the `Commands to run` block
+themselves — byte-identical to current main behavior). `release-engineer` is
+NOT part of `/merge-ready`; it is invoked exclusively via `/release`.
 
-When this file exists, `release-engineer` Gate 9 transitions from
-suggest-only to executing mode AFTER Steps 0–6 produce the structured
-summary. The agent then runs whitelisted git commands itself per the
-4-tier authority dispatch:
+When this file exists, `release-engineer` (on `/release` invocation)
+transitions from suggest-only to executing mode AFTER Steps 0–6 produce
+the structured summary. The agent then runs whitelisted git commands
+itself per the 4-tier authority dispatch:
 
 - **Trivial** (auto-execute, audit log) — `git add`, `git commit -m`,
   `git merge-base HEAD origin/main`, `git diff --name-only`,
@@ -58,7 +59,7 @@ without user interaction.
 - `~/.claude/agents/release-engineer.md` §7 — the authoritative
   executing-mode specification, tier table, whitelist regexes, tag-scheme
   disambiguation, audit trail, rollback, idempotency.
-- `~/.claude/commands/merge-ready.md` Gate 9 — the invocation context.
+- `~/.claude/commands/release.md` — the `/release` slash command spec; the invocation context for `release-engineer`.
 - `<project>/CHANGELOG.md` — the [Unreleased] section release-engineer
   reads to compute the bump and date-stamp.
 - `<project>/.git/hooks/pre-push` — optional advisory hook (template at

@@ -34,9 +34,44 @@ Delegate to `architect` agent:
 4. Retry up to 2 times
 5. If still rejected: document the architectural concern in scratchpad as a blocker and ask the user
 
-### Step 3.5: Resource Manager-Architect recommendation
+### Step 3.5: Resource Manager-Architect recommendation (CONDITIONAL — auto-detection)
 
-Delegate to `resource-architect` agent. This step is **MANDATORY and non-skippable** — it runs on every feature regardless of whether external resources are needed. A feature that requires no external resources produces an explicit `No external resources required` body with all six category headings each showing `(none)`; it MUST NOT be skipped.
+Delegate to `resource-architect` agent **only when** one of the following conditions holds:
+
+**(A) Keyword auto-detection** (default path, no flag required). Scan the
+PRD section authored at Step 1 AND the use-cases file authored at Step 2
+for any of the case-insensitive trigger keywords below. If at least one
+match is found, proceed with the agent dispatch below. If zero matches,
+SKIP Step 3.5 silently and emit a single one-line note to the bootstrap
+output: `Step 3.5 skipped — no external-resource keywords detected in
+PRD/use-cases. Use /bootstrap-feature --with-resources to force-run.`
+
+Trigger keywords (any one match → run): `third-party`, `third party`,
+`external API`, `external SDK`, `external service`, `MCP`, `MCP server`,
+`OAuth`, `auth provider`, `compliance`, `regulated`, `regulatory`,
+`vendor`, `subscription`, `billing`, `cloud storage`, `S3`, `Stripe`,
+`Twilio`, `SendGrid`, `Auth0`, `OpenAI`, `Anthropic`, `webhook`,
+`integration`.
+
+**(B) Explicit override flag** — when the user invokes the command as
+`/bootstrap-feature --with-resources <feature-description>`, force-run
+Step 3.5 regardless of keyword scan outcome. The flag is parsed from the
+command argument string by the orchestrator before any agent dispatch.
+
+When neither (A) nor (B) applies, Step 3.5 is SKIPPED — the
+`.claude/resources-pending.md` temp file is NOT created, and the
+downstream `planner` agent at Step 5 handles the absence per its
+existing graceful-skip contract (Process step 4a — "If the temp file
+itself does not exist, skip silently — no error, no warning, and do
+not add a `## Recommended Resources` section").
+
+This conditional pattern replaces the iter-1 MANDATORY contract for
+Step 3.5 — it cuts ~1 agent call per bootstrap on the common case
+(features with no external dependencies). Step 3.75 (`role-planner`)
+remains MANDATORY and non-skippable. A feature that DOES match a
+trigger keyword (or uses `--with-resources`) and yet requires no
+external resources still produces an explicit `No external resources
+required` body with all six category headings each showing `(none)`.
 
 The agent reads the following four inputs (in this fixed order):
 1. The PRD section just written at Step 2 in `docs/PRD.md`
@@ -210,13 +245,14 @@ The four steps above are byte-pinned per architecture review `[STRUCTURAL]` deci
 
 #### Closed-vocabulary step labels
 
-The `Pipeline step` field of every per-role block in `.claude/roles-pending.md` MUST use exactly one of the 5 closed-vocabulary labels enumerated VERBATIM below. These are the only valid values; any other label is invalid and the role MUST be dropped or relabeled by the `role-planner` before emission:
+The `Pipeline step` field of every per-role block in `.claude/roles-pending.md` MUST use exactly one of the 6 closed-vocabulary labels enumerated VERBATIM below. These are the only valid values; any other label is invalid and the role MUST be dropped or relabeled by the `role-planner` before emission:
 
 - `Step 3.75: role-planner` — for roles invoked at the role-planner step itself (rare; mostly for meta-roles)
 - `Step 4: qa-planner` — for roles that augment the QA Lead's test-case authorship
 - `Step 5: planner` — for roles that contribute to the implementation plan
 - `Step 6: implementation` — for roles invoked during slice implementation (the most common case)
 - `Step 7: merge-ready` — for roles invoked during the merge-ready quality gate
+- `Step 8: release` — for roles invoked during user-invoked /release packaging (rare; release-engineer + auxiliary release roles)
 
 #### Failure-mode matrix
 

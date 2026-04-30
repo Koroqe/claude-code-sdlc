@@ -32,8 +32,8 @@ Claude Code out of the box:
 - **Rename safety** — 7-step protocol covering barrel files, dynamic imports, re-exports, typecheck verification
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
 - **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
-- **10 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
-- **Release packaging** — Gate 9 of `/merge-ready` computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. **Two modes:** suggest-only by default (emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them) — and an opt-in **executing mode** that activates when `<project>/.claude/rules/auto-release.md` is present. In executing mode Gate 9 runs whitelisted git commands itself with 4-tier authority (Trivial/Moderate auto-execute, Sensitive `git push origin <tag>` prompts default-deny `[y/N]` or auto-confirms with `AUTO_RELEASE=1`, Forbidden `npm publish` / `cargo publish` / `gh release create` / `--force` always refused). Anchored-regex bash whitelist with metacharacter pre-rejection. Sentinel-absent behavior is byte-identical to suggest-only.
+- **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- **Release packaging** — extracted to the standalone `/release` slash command (NOT a quality gate). User invokes `/release` after `/merge-ready` reports MERGE READY when ready to publish. The `release-engineer` agent computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. **Two modes:** suggest-only by default (emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them) — and an opt-in **executing mode** that activates when `<project>/.claude/rules/auto-release.md` is present. In executing mode `/release` runs whitelisted git commands itself with 4-tier authority (Trivial/Moderate auto-execute, Sensitive `git push origin <tag>` prompts default-deny `[y/N]` or auto-confirms with `AUTO_RELEASE=1`, Forbidden `npm publish` / `cargo publish` / `gh release create` / `--force` always refused). Anchored-regex bash whitelist with metacharacter pre-rejection. Sentinel-absent behavior is byte-identical to suggest-only.
 
 ---
 
@@ -113,7 +113,7 @@ MERGE READY
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
 | `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
-| `release-engineer` | Packages releases at `/merge-ready` Gate 9 — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only by default; opt-in executing mode (`.claude/rules/auto-release.md`) runs whitelisted git commands itself per the §7 4-tier authority dispatch — `npm publish` / `cargo publish` / `gh release create` / `--force` always refused. |
+| `release-engineer` | Packages releases on user-invoked `/release` (NOT in /merge-ready) — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only by default; opt-in executing mode (`.claude/rules/auto-release.md`) runs whitelisted git commands itself per the §7 4-tier authority dispatch — `npm publish` / `cargo publish` / `gh release create` / `--force` always refused. |
 
 ---
 
@@ -122,11 +122,12 @@ MERGE READY
 | Command | What It Does |
 |---------|-------------|
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
-| `/bootstrap-feature` | Documentation phases only — PRD, use cases, architecture, QA, plan |
+| `/bootstrap-feature [--with-resources]` | Documentation phases only — PRD, use cases, architecture, QA, plan. Pass `--with-resources` to force-run resource-architect (otherwise auto-detected from PRD/use-cases keywords). |
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
-| `/merge-ready` | All 10 quality gates |
+| `/merge-ready` | All 9 quality gates (release packaging is NOT a gate — see `/release`) |
+| `/release` | User-invoked release packaging — semver bump, CHANGELOG date stamp, release-notes file, GHA release workflow. Run after `/merge-ready` when ready to publish. |
+| `/knowledge-ingest` | Ingest a folder/file into the per-project knowledge base |
 | `/context-refresh` | Rebuild session context from scratchpad |
-| /knowledge-ingest | Ingest a folder/file into the per-project knowledge base |
 
 ```
 > Add user authentication with Google OAuth
@@ -135,7 +136,8 @@ Claude automatically:
 1. Plans -> explores codebase -> critic review
 2. Bootstraps -> PRD, use cases, architecture, QA, executable plan
 3. Implements -> TDD slices in parallel waves (independent slices run simultaneously)
-4. Verifies -> 10 quality gates including release packaging
+4. Verifies -> 9 quality gates
+5. (User-invoked) Run /release to cut a versioned release from CHANGELOG [Unreleased]
 ```
 
 ---
@@ -223,7 +225,7 @@ When `role-planner` determines no additional roles are needed, it explicitly emi
 
 ### Iteration 2: cross-feature reuse and automatic teardown
 
-Iteration 2 extends the on-demand layer with **cross-feature reuse** and **post-merge teardown** — without changing the suggest-only contract, the core team count, or the gate count. **No new agents** are introduced (the count stays at 17) and **no new gates** are added (the count stays at 10). Teardown runs as **Step 11** of `/merge-ready`, which is a STEP — not a gate.
+Iteration 2 extends the on-demand layer with **cross-feature reuse** and **post-merge teardown** — without changing the suggest-only contract or the core team count. **No new agents** are introduced (the count stays at 17). Teardown runs as **Step 11** of `/merge-ready` after Gate 8, which is a STEP — not a gate.
 
 **3-stage matching at bootstrap.** When `role-planner` recommends an on-demand role, the bootstrap pipeline performs a **three-stage** match against existing files in `~/.claude/agents/ondemand-*.md` before deciding what to do:
 
@@ -247,7 +249,7 @@ features: ["<project-name>:<feature-slug>", ...]
 
 The array tracks **which features own each on-demand role**. The `<project-name>` prefix disambiguates entries across multiple projects that share the user's global `~/.claude/agents/` directory — the same feature slug can appear in two projects without collision because the project-name prefix scopes the ownership claim. Stage-1 reuse and Stage-2 confirmed reuse both **append** the current feature's `<project-name>:<feature-slug>` entry to the `features:` array, so the orchestrator can later answer "which features still need this role?" deterministically.
 
-**Post-merge teardown at /merge-ready Step 11.** After Gate 9 of `/merge-ready` completes (regardless of PASS/FAIL/SKIPPED), the orchestrator runs **Step 11 — on-demand teardown**:
+**Post-merge teardown at /merge-ready Step 11.** After Gate 8 of `/merge-ready` completes (regardless of PASS/FAIL/WARN), the orchestrator runs **Step 11 — on-demand teardown**:
 
 - For every file in `~/.claude/agents/ondemand-*.md`, remove the merged feature's `<project-name>:<feature-slug>` entry from the `features:` array.
 - If the array empties as a result, **delete the file**. If the array still contains entries from other features, **leave the file in place** — another feature still owns it.

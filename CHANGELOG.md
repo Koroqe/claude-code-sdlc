@@ -14,6 +14,41 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Added
+
+- **`/release` slash command** — release packaging extracted from
+  `/merge-ready` Gate 9 to a standalone user-invoked command. Run
+  `/release` when ready to cut a versioned release; `/merge-ready`
+  is now strictly about quality gates.
+- **`/bootstrap-feature --with-resources` flag** — force-runs the
+  resource-architect step regardless of keyword auto-detection
+  outcome.
+- **Tier-based agent models** for token-cost optimization. Default
+  matrix: opus (architect, security-auditor, code-reviewer, verifier,
+  release-engineer, resource-architect, role-planner) / sonnet
+  (prd-writer, ba-analyst, planner, refactor-cleaner) / haiku
+  (qa-planner, test-writer, build-runner, e2e-runner, doc-updater,
+  changelog-writer). README §Customization documents the rationale
+  and per-agent override.
+
+### Changed
+
+- **`/merge-ready` is now 9 quality gates** (was 10). Release
+  packaging extracted to the standalone `/release` command. Gate
+  numbering 0 through 8 unchanged; Step 11 (post-merge on-demand
+  role teardown) now runs after Gate 8 instead of after Gate 9.
+- **Step 3.5 of `/bootstrap-feature` is now CONDITIONAL.** The
+  resource-architect agent runs only when the PRD/use-cases body
+  contains external-resource trigger keywords (third-party,
+  external API, MCP, OAuth, vendor, compliance, S3, Stripe, etc.)
+  OR the user explicitly passes `--with-resources`. When neither
+  triggers, Step 3.5 is silently skipped, saving one agent call
+  per bootstrap on the common case. Step 3.75 (role-planner)
+  remains MANDATORY.
+- **`claudeknows search --context <N>`** flag added in iter-3.x —
+  expands each hit with ±N neighbor chunks for paragraph-level
+  context. Default N=0 (backward-compat — no expansion).
+
 ## [0.2.0] - 2026-04-26
 
 ### Added

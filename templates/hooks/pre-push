@@ -3,8 +3,8 @@
 #
 # Active when <project>/.claude/rules/auto-release.md sentinel exists.
 # Warns to stderr when CHANGELOG.md [Unreleased] is non-empty at push
-# time, suggesting that /merge-ready Gate 9 should run first to package
-# the release. Never blocks the push — advisory only.
+# time, suggesting that /release should run first to package the release.
+# Never blocks the push — advisory only.
 #
 # To uninstall: remove this file from .git/hooks/pre-push.
 # To skip the check temporarily: rename the file or run
@@ -32,7 +32,7 @@ unreleased_body=$(awk '
 
 if [ -n "$unreleased_body" ]; then
   echo "[auto-release] WARNING: CHANGELOG.md [Unreleased] is non-empty." >&2
-  echo "[auto-release] /merge-ready Gate 9 should run before push to package the release." >&2
+  echo "[auto-release] /release should run before push to package the release." >&2
   echo "[auto-release] To bypass this check once: GIT_HOOKS_BYPASS=1 git push" >&2
   echo "[auto-release] To opt out permanently: remove .claude/rules/auto-release.md or this hook." >&2
   echo "[auto-release] Push is allowed; this is advisory only." >&2
