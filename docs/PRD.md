@@ -72,7 +72,7 @@ Add a new check to the Plan Critic that detects hedging language indicating the 
 1. **NFR-1:** All changes are markdown prompt files only. There is no runtime code in this project -- no JavaScript, TypeScript, Python, or shell scripts are modified (except `install.sh` if the new agent file needs to be included in the install manifest).
 2. **NFR-2:** All changes MUST be backward compatible with the existing pipeline. Projects already using Claude Code SDLC v2.1.0 MUST continue to function after upgrading. No existing agent, command, or rule behavior is removed -- only augmented.
 3. **NFR-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). No migration steps required beyond re-running the installer.
-4. **NFR-4:** The `verifier` agent MUST use the `opus` model (consistent with all existing agents including `build-runner`). Architecture review overrode the original `sonnet` proposal — all 13 agents use the same model tier for consistency.
+4. **NFR-4:** Agent model tiers are right-sized by task complexity. Agents whose output cascades through the pipeline and cannot be caught by deterministic verification (`architect`, `planner`, `security-auditor`) use `model: opus`. All other agents use `model: sonnet`. See Section 3 for full rationale and per-agent assignments. (Supersedes the original uniform-opus policy from Section 1 v1.)
 5. **NFR-5:** The total agent count increases from 12 to 13. All references to "12 agents" in `README.md` and `src/claude.md` MUST be updated to 13.
 
 ### 1.5 Acceptance Criteria

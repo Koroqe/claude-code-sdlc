@@ -42,6 +42,8 @@ Description of what this agent does.
 - What the agent must/must not do
 ```
 
+**Choosing the model tier:** Default to `sonnet` for new agents. Use `opus` only if the agent's output cascades through multiple downstream agents AND a wrong decision cannot be caught by automated verification (typecheck, test, build). See `docs/PRD.md` Section 3 for the full rationale.
+
 ### Improve Commands
 Pipeline commands live in `src/commands/`. These define the workflow steps like `/bootstrap-feature` and `/implement-slice`.
 

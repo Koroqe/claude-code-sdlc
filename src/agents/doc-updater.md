@@ -2,7 +2,7 @@
 name: doc-updater
 description: Update project documentation after code changes, keep docs accurate and current
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
-model: haiku
+model: sonnet
 ---
 
 # Documentation Updater

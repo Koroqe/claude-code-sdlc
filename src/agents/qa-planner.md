@@ -1,8 +1,8 @@
 ---
 name: qa-planner
 description: Document test cases in docs/qa/ before tests are written. Every feature MUST have documented test cases before implementation.
-tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
-model: haiku
+tools: ["Read", "Glob", "Grep", "Edit", "Write"]
+model: sonnet
 ---
 
 # QA Lead

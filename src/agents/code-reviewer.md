@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Review code changes for quality, security, architecture compliance, and test coverage
 tools: ["Read", "Glob", "Grep", "Bash"]
-model: opus
+model: sonnet
 ---
 
 # Code Reviewer

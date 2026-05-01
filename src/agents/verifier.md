@@ -1,8 +1,8 @@
 ---
 name: verifier
 description: Goal-backward integration verification — checks that features are wired together, not just that code compiles
-tools: ["Read", "Glob", "Grep", "Bash"]
-model: opus
+tools: ["Read", "Glob", "Grep"]
+model: sonnet
 ---
 
 # Verifier — Goal-Backward Integration Check
