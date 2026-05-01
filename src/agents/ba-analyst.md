@@ -2,7 +2,7 @@
 name: ba-analyst
 description: Analyze features and document use cases with all scenarios for development and E2E testing
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
-model: opus
+model: sonnet
 ---
 
 # Business Analyst

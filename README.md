@@ -177,6 +177,17 @@ Creates:
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
 - **Fork and reinstall** — edit in `src/agents/`, run `bash install.sh --local --yes`
 
+### Model Tiers
+
+Agents are tiered by task complexity to reduce cost:
+
+| Tier | Agents | Rationale |
+|------|--------|-----------|
+| `opus` | `architect`, `planner`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
+| `sonnet` | all other 10 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
+
+To change a tier: edit the `model:` field in the agent's frontmatter and re-run `bash install.sh --local --yes`.
+
 ---
 
 ## Contributing

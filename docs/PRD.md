@@ -72,7 +72,7 @@ Add a new check to the Plan Critic that detects hedging language indicating the 
 1. **NFR-1:** All changes are markdown prompt files only. There is no runtime code in this project -- no JavaScript, TypeScript, Python, or shell scripts are modified (except `install.sh` if the new agent file needs to be included in the install manifest).
 2. **NFR-2:** All changes MUST be backward compatible with the existing pipeline. Projects already using Claude Code SDLC v2.1.0 MUST continue to function after upgrading. No existing agent, command, or rule behavior is removed -- only augmented.
 3. **NFR-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). No migration steps required beyond re-running the installer.
-4. **NFR-4:** The `verifier` agent MUST use the `opus` model (consistent with all existing agents including `build-runner`). Architecture review overrode the original `sonnet` proposal — all 13 agents use the same model tier for consistency.
+4. **NFR-4:** Agent model tiers are right-sized by task complexity. Agents whose output cascades through the pipeline and cannot be caught by deterministic verification (`architect`, `planner`, `security-auditor`) use `model: opus`. All other agents use `model: sonnet`. See Section 3 for full rationale and per-agent assignments. (Supersedes the original uniform-opus policy from Section 1 v1.)
 5. **NFR-5:** The total agent count increases from 12 to 13. All references to "12 agents" in `README.md` and `src/claude.md` MUST be updated to 13.
 
 ### 1.5 Acceptance Criteria
@@ -339,3 +339,169 @@ Not applicable. This project has no API.
 6. **Risk: Commit ordering ambiguity.** Parallel commits within a wave have no guaranteed ordering in git history. Mitigation: This is acceptable because wave-sibling slices are independent by design. The wave number and sibling info in commit messages (FR-3.2) provide traceability.
 7. **Dependency: Section 1 FR-3 (Executable Plan Format).** Wave assignment depends on each slice having a `Files:` field to compute file overlap. If Section 1 FR-3 is not implemented, wave assignment cannot work. Section 1 is marked [SHIPPED], so this dependency is satisfied.
 8. **Dependency: Claude Code Agent tool.** Parallel subagent spawning relies on Claude Code's built-in `Agent` tool for parallel execution. No external tooling is required.
+
+---
+
+## 3. Agent Model Tier Optimization
+
+**Status:** [DRAFT]
+**Date:** 2026-05-01
+**Priority:** Medium
+**Related:** Section 1 (NFR-4: uniform-opus-tier policy — superseded by this section)
+
+### 3.1 Description
+
+Right-size the model tier of each of the 13 SDLC pipeline agents to the cheapest model that delivers reliable output for its specific task. Currently, every agent declares `model: opus` in its YAML frontmatter, which means Opus (resolving to Opus 4.7) is invoked for every agent call — including purely mechanical tasks where Opus-level reasoning adds no value but incurs full Opus cost.
+
+Under this feature, 10 agents that perform structured/mechanical work move to `model: sonnet`. The 3 agents that make complex decisions cascading through the pipeline (architect, planner, security-auditor) remain on `model: opus`. The uniform-model-tier policy documented in Section 1.4 NFR-4 is replaced with the new tiered policy.
+
+**Why:** Opus and Sonnet are priced very differently. Running every agent on Opus is wasteful for mechanical tasks like running a build command, summarising a diff, generating a structured test plan from existing use cases, or applying a documented edit pattern. Sonnet is sufficient for these tasks. Opus-level reasoning is justified only where a single agent's output cascades through subsequent slices — architecture decisions, slice plans, and security findings.
+
+**Why these three stay on opus:**
+1. **architect** — architectural verdicts shape the entire implementation plan. A wrong call here is multiplied across every slice.
+2. **planner** — the implementation plan is the contract every other agent reads. Errors in slicing, file paths, or wave assignment propagate to every downstream agent.
+3. **security-auditor** — security findings gate merge. Missed vulnerabilities have outsized cost; reasoning depth matters.
+
+**Why the other ten can move to sonnet:**
+- They consume an explicit, structured input (a PRD, a plan, a use case file, a code diff) and produce an explicit, structured output (test cases, code changes, a review report, an updated doc). The reasoning is bounded and the output format is constrained.
+- Their work is verified by a downstream agent or a deterministic check (typecheck, test run, build). Errors are caught before merge.
+- The cost-per-call multiplied by call frequency (every slice for test-writer, code-reviewer, build-runner; every feature for prd-writer, ba-analyst, qa-planner, doc-updater, e2e-runner, verifier, refactor-cleaner) makes them the highest-leverage targets for downgrade.
+
+### 3.2 User Story
+
+As a developer using the Claude Code SDLC pipeline, I want agents that perform structured/mechanical tasks to use Sonnet instead of Opus, so that pipeline cost is significantly reduced without degrading output quality for the tasks where it matters.
+
+### 3.3 Functional Requirements
+
+#### FR-1: Sonnet-Tier Agent Conversion
+
+Convert the 10 agents whose tasks are bounded, structured, and downstream-verified to `model: sonnet`.
+
+1. **FR-1.1:** `src/agents/ba-analyst.md` MUST have `model: sonnet` in its YAML frontmatter.
+2. **FR-1.2:** `src/agents/build-runner.md` MUST have `model: sonnet` in its YAML frontmatter.
+3. **FR-1.3:** `src/agents/code-reviewer.md` MUST have `model: sonnet` in its YAML frontmatter.
+4. **FR-1.4:** `src/agents/doc-updater.md` MUST have `model: sonnet` in its YAML frontmatter.
+5. **FR-1.5:** `src/agents/e2e-runner.md` MUST have `model: sonnet` in its YAML frontmatter.
+6. **FR-1.6:** `src/agents/prd-writer.md` MUST have `model: sonnet` in its YAML frontmatter.
+7. **FR-1.7:** `src/agents/qa-planner.md` MUST have `model: sonnet` in its YAML frontmatter.
+8. **FR-1.8:** `src/agents/refactor-cleaner.md` MUST have `model: sonnet` in its YAML frontmatter.
+9. **FR-1.9:** `src/agents/test-writer.md` MUST have `model: sonnet` in its YAML frontmatter.
+10. **FR-1.10:** `src/agents/verifier.md` MUST have `model: sonnet` in its YAML frontmatter.
+11. **FR-1.11:** No other field in the frontmatter (`name`, `description`, `tools`) and no body content of the affected agent files MUST be modified by this feature.
+
+#### FR-2: Opus-Tier Agent Preservation
+
+Preserve `model: opus` for the 3 agents whose output cascades through the pipeline.
+
+1. **FR-2.1:** `src/agents/architect.md` MUST retain `model: opus` in its YAML frontmatter.
+2. **FR-2.2:** `src/agents/planner.md` MUST retain `model: opus` in its YAML frontmatter.
+3. **FR-2.3:** `src/agents/security-auditor.md` MUST retain `model: opus` in its YAML frontmatter.
+
+#### FR-3: PRD Policy Update (Section 1.4 NFR-4 supersession)
+
+Replace the uniform-model-tier policy in Section 1.4 NFR-4 with the new tiered policy.
+
+1. **FR-3.1:** Section 1.4 NFR-4 of `docs/PRD.md` MUST be rewritten to describe the tiered model policy: 3 agents on opus, 10 agents on sonnet, with the rationale (cost optimization, right-sizing).
+2. **FR-3.2:** The rewritten NFR-4 MUST explicitly note that the original Section 1 NFR-4 (uniform opus tier "for consistency") was an architectural decision intentionally revised by this Section 3.
+3. **FR-3.3:** The rewritten NFR-4 MUST list the 3 agents on opus by name, and reference Section 3 for the full tier list.
+
+#### FR-4: README Documentation
+
+Document the tiered model policy in the README's Customization section so end users understand which model tier each agent category uses and why.
+
+1. **FR-4.1:** `README.md` MUST contain a subsection (in or under Customization) that lists each of the 13 agents with its model tier (opus or sonnet) and the rationale for the tier choice.
+2. **FR-4.2:** The README MUST explain the general principle: opus for cascading-decision agents, sonnet for structured/mechanical agents.
+3. **FR-4.3:** The README MUST tell readers how to override the tier for a specific agent (edit the `model:` field in the agent's frontmatter and re-run `bash install.sh`).
+
+#### FR-5: CONTRIBUTING Template Update
+
+Update the contributor-facing agent template so the default for new agents is `model: sonnet`, with guidance on when to choose opus instead.
+
+1. **FR-5.1:** `CONTRIBUTING.md` MUST contain an agent template (or example frontmatter block) showing `model: sonnet` as the default.
+2. **FR-5.2:** The template MUST be accompanied by guidance: choose opus only when the agent's output cascades through multiple downstream agents AND a wrong decision cannot be caught by deterministic verification (typecheck, test, build).
+3. **FR-5.3:** The guidance MUST reference Section 3 of the PRD for the full rationale.
+
+#### FR-6: QA Test Case Update
+
+Update the existing pipeline-hardening QA test case that asserts uniform opus tier.
+
+1. **FR-6.1:** Test case 1.1.3 in `docs/qa/pipeline-hardening_test_cases.md` MUST be updated to reflect the tiered policy. The expected outcome MUST assert: exactly 3 agents have `model: opus` (architect, planner, security-auditor) and exactly 10 agents have `model: sonnet`.
+2. **FR-6.2:** The updated test case MUST list the specific 10 agent filenames expected to have `model: sonnet`, so any future drift (an agent silently downgraded or upgraded without PRD update) is caught.
+
+### 3.4 Non-Functional Requirements
+
+1. **NFR-1:** All changes are markdown prompt and documentation files only. No runtime code is touched.
+2. **NFR-2:** The change is backward compatible at the prompt level. No agent's name, description, tools, or behavior contract is modified — only the model tier. Calling code (commands, other agents that delegate via the `Task` tool) does not need to change.
+3. **NFR-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`).
+4. **NFR-4:** Output quality regression risk is mitigated by the existing pipeline verification gates: code review, security audit, build, E2E, and verifier all run after agent output and would catch a Sonnet-produced regression on a slice. Any agent that produces unacceptable quality on Sonnet can be reverted to opus by editing one line in its frontmatter (see FR-4.3).
+5. **NFR-5:** The total agent count remains at 13. No agents are added or removed. Counts referenced in `README.md` and `src/claude.md` (and per Section 1 NFR-5) remain valid.
+6. **NFR-6:** This feature supersedes the consistency rationale of Section 1 NFR-4. Future agents added to the pipeline MUST be tiered per the policy in this section, not per the old uniform policy.
+
+### 3.5 Acceptance Criteria
+
+1. **AC-1:** `grep -l "model: opus" src/agents/*.md` returns exactly 3 files: `src/agents/architect.md`, `src/agents/planner.md`, `src/agents/security-auditor.md`. No more, no fewer.
+2. **AC-2:** `grep -l "model: sonnet" src/agents/*.md` returns exactly 10 files: `src/agents/ba-analyst.md`, `src/agents/build-runner.md`, `src/agents/code-reviewer.md`, `src/agents/doc-updater.md`, `src/agents/e2e-runner.md`, `src/agents/prd-writer.md`, `src/agents/qa-planner.md`, `src/agents/refactor-cleaner.md`, `src/agents/test-writer.md`, `src/agents/verifier.md`. No more, no fewer.
+3. **AC-3:** Section 1.4 NFR-4 in `docs/PRD.md` describes the tiered model policy (3 opus + 10 sonnet) and references Section 3 for the rationale. The text "all 13 agents use the same model tier for consistency" is no longer present in NFR-4.
+4. **AC-4:** `README.md` Customization section documents which model tier each of the 13 agents uses and the override procedure (edit frontmatter, re-run installer).
+5. **AC-5:** `CONTRIBUTING.md` agent template shows `model: sonnet` as the default with a comment or accompanying note explaining when opus is appropriate instead.
+6. **AC-6:** Test case 1.1.3 in `docs/qa/pipeline-hardening_test_cases.md` asserts the tiered policy (3 opus + 10 sonnet by exact filename) and not the old uniform-opus assertion.
+7. **AC-7:** No agent file's `name`, `description`, `tools`, or body content is modified by this feature. The diff for each affected agent file is exactly one line: the `model:` value.
+8. **AC-8:** A re-install of the project (`bash install.sh`) followed by a fresh Claude Code session uses the new tiers — verifiable by inspecting the installed copies of the agent files in the user's `.claude/agents/` directory and confirming they match the source `model:` values.
+
+### 3.6 Affected Components
+
+#### New Files
+
+None. This feature modifies existing files only.
+
+#### Modified Files
+
+| File | Change | Related Requirements |
+|------|--------|---------------------|
+| `src/agents/ba-analyst.md` | `model: opus` -> `model: sonnet` | FR-1.1 |
+| `src/agents/build-runner.md` | `model: opus` -> `model: sonnet` | FR-1.2 |
+| `src/agents/code-reviewer.md` | `model: opus` -> `model: sonnet` | FR-1.3 |
+| `src/agents/doc-updater.md` | `model: opus` -> `model: sonnet` | FR-1.4 |
+| `src/agents/e2e-runner.md` | `model: opus` -> `model: sonnet` | FR-1.5 |
+| `src/agents/prd-writer.md` | `model: opus` -> `model: sonnet` | FR-1.6 |
+| `src/agents/qa-planner.md` | `model: opus` -> `model: sonnet` | FR-1.7 |
+| `src/agents/refactor-cleaner.md` | `model: opus` -> `model: sonnet` | FR-1.8 |
+| `src/agents/test-writer.md` | `model: opus` -> `model: sonnet` | FR-1.9 |
+| `src/agents/verifier.md` | `model: opus` -> `model: sonnet` | FR-1.10 |
+| `docs/PRD.md` | Rewrite Section 1.4 NFR-4 to describe tiered policy; reference Section 3 | FR-3.1, FR-3.2, FR-3.3 |
+| `docs/qa/pipeline-hardening_test_cases.md` | Update test case 1.1.3 to assert the tiered policy with explicit filename lists | FR-6.1, FR-6.2 |
+| `README.md` | Add per-agent tier list and override instructions in Customization section | FR-4.1, FR-4.2, FR-4.3 |
+| `CONTRIBUTING.md` | Update agent template to default to `model: sonnet`; add guidance on when to choose opus | FR-5.1, FR-5.2, FR-5.3 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/architect.md` | Stays on opus (FR-2.1). Not modified by this feature. |
+| `src/agents/planner.md` | Stays on opus (FR-2.2). Not modified by this feature. |
+| `src/agents/security-auditor.md` | Stays on opus (FR-2.3). Not modified by this feature. |
+| `src/claude.md` | Agent count and Plan Critic logic unchanged. Tier policy is documented in PRD/README, not in claude.md. |
+| `src/commands/*.md` | Commands invoke agents by name; the model tier is resolved from each agent's frontmatter. No command needs to change. |
+| `src/rules/*.md` | Rules are agent-agnostic. No change. |
+| `install.sh` | File copy logic uses globbing for `src/agents/*.md`. No new files added; no manifest change required. |
+
+### 3.7 UI Changes
+
+Not applicable. This project is a collection of markdown prompt files with no user interface.
+
+### 3.8 Schema Changes
+
+Not applicable. This project has no database.
+
+### 3.9 Affected Endpoints
+
+Not applicable. This project has no API.
+
+### 3.10 Risks and Dependencies
+
+1. **Risk: Sonnet output quality regression.** A specific agent may produce lower-quality output on Sonnet than on Opus, degrading the pipeline. Mitigation: every Sonnet-tier agent's output is verified downstream — code-reviewer/security-auditor/build-runner/verifier/e2e-runner all run after slice implementation; ba-analyst/prd-writer/qa-planner output is reviewed by architect (still on opus) before planner consumes it. Reverting any individual agent to opus is a one-line change (FR-4.3).
+2. **Risk: Silent drift over time.** Future contributors may add a new agent on opus or change an existing agent's tier without updating the PRD. Mitigation: FR-6.1 hardens test case 1.1.3 with explicit filename lists, so any drift triggers a test failure during the pipeline-hardening QA pass.
+3. **Risk: Section 1 NFR-4 contradiction.** The original Section 1 NFR-4 explicitly chose uniform opus "for consistency". Leaving it unchanged would create an internal contradiction in the PRD. Mitigation: FR-3.1 rewrites Section 1.4 NFR-4 as part of this feature's implementation; AC-3 verifies the old text is gone.
+4. **Risk: Re-install required.** Users on existing installations will not see the tier change until they re-run `bash install.sh`. Mitigation: NFR-3 documents this; the README override section (FR-4.3) reinforces the install requirement.
+5. **Dependency: Claude Code resolves `model: sonnet`.** This feature assumes the Claude Code runtime accepts `sonnet` as a valid value for the agent frontmatter `model:` field and resolves it to a current Sonnet model. This is a property of the Claude Code installation, not of this repository.
+6. **Dependency: Section 1 NFR-4 (verifier model tier).** Section 1 NFR-4 specifically requires the verifier on opus "for consistency". Section 3 supersedes that — the verifier moves to sonnet (FR-1.10). The supersession is explicit in FR-3.1 and FR-3.2.
