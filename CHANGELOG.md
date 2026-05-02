@@ -14,6 +14,14 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Added
+
+- Plan-mode plans are now automatically saved to `<project>/.claude/plan.md` so they are available to the pipeline without any manual copy-paste step. `/bootstrap-feature` Step 0 verifies the file exists and is non-empty before invoking any agent.
+
+### Fixed
+
+- `claudeknows ingest` on Windows no longer fails with "HOME env var unset" when ingesting PDFs — the binary now falls back to `USERPROFILE` for home-directory resolution on Windows.
+
 ## [0.3.0] - 2026-04-30
 
 ### Added

@@ -3457,3 +3457,161 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 - **Open Question #5 — Auto-publish to npm/cargo/PyPI.** RESOLVED — OUT OF SCOPE per 13.7 item 1 (Forbidden tier in iter-3).
 - **Open Question #6 — Whether to backfill historical CHANGELOG sections for Features 1-12.** RESOLVED per R-4 — start clean from `[3.0.0]`; backfill is deferred to iter-4 if requested.
 
+---
+
+## 14. Auto-Persist Plan-Mode Plans to Project
+
+**Status:** [IN DEVELOPMENT]
+**Date:** 2026-05-02
+**Priority:** High
+**Related:** Section 1 (FR-3: Executable Plan Format — the `Files:`, `Changes:`, `Verify:`, `Done when:` slice fields that the planner writes into `<project>/.claude/plan.md`). Section 2 (FR-1: Planner Wave Assignment — the `Wave: N` field appended to `<project>/.claude/plan.md` by the same planner step). Section 3 (FR-2: `changelog-writer` — invoked as step 5 of `/bootstrap-feature` which now has a Step 0 precondition check on `<project>/.claude/plan.md`).
+
+Changelog: Plan-mode plans are now automatically saved to your project so they are available to the pipeline without any manual copy-paste step.
+
+### 14.1 Description
+
+When Claude finishes a plan-mode session (Claude Code's built-in read-only planning mode), the plan body is written to a file at `~/.claude/plans/<plan-slug>.md` (e.g., `/Users/aleksandra/.claude/plans/fuzzy-juggling-ocean.md`) but is **never** copied into the user's project. The plan-mode artifact lives in a global cache directory that is hard to find, easy to overwrite by subsequent plan-mode sessions, and tied to a Claude-generated random slug rather than the feature name.
+
+As a result, the downstream `/bootstrap-feature` pipeline (prd-writer → ba-analyst → architect → qa-planner → planner) runs without access to the user's high-level plan as project-local context. The user has been forced to manually ask Claude to save the plan into `<project>/.claude/plan.md` after every plan-mode session — a recurring ritual that has no automation.
+
+**Goal.** Make plan-mode plan persistence to `<project>/.claude/plan.md` a mandatory behavior of Claude Code when `ExitPlanMode` is invoked. The persistence must happen **before** the plan-mode session terminates — the `Write` tool call comes before the `ExitPlanMode` tool call — so the plan is captured even if the conversation ends or context is compacted immediately after exit.
+
+**Solution shape (decided by user, not for redesign).**
+Three targeted changes to existing markdown source files, plus a README documentation update:
+
+1. `src/claude.md` receives a new mandatory rule: before calling `ExitPlanMode`, Claude MUST call the `Write` tool to persist the full plan body to `<project>/.claude/plan.md`. The two operations are permanently linked — `ExitPlanMode` MUST NOT be called unless the `Write` has already completed successfully.
+2. `src/commands/bootstrap-feature.md` gains a new **Step 0** precondition check: verify that `<project>/.claude/plan.md` exists. If absent, abort immediately with a clear error message pointing the user to enter plan mode first.
+3. `src/agents/planner.md` gains an updated **Step 5** instruction: read the existing `<project>/.claude/plan.md` (the plan-mode artifact persisted by rule 1) as authoritative input, then refine it in-place by replacing or extending sections with the planner's implementation slices — not overwriting from scratch.
+4. `README.md` documents the new automatic-persistence behavior in the existing Pipeline section or Hardening table.
+
+### 14.2 User Story
+
+As a developer using the Claude Code SDLC pipeline, I want plan-mode plans to be automatically saved to `<project>/.claude/plan.md` when I exit plan mode, so that I never have to manually ask Claude to copy the plan and the `/bootstrap-feature` pipeline always has my high-level plan available as context — eliminating the recurring ritual that prompted the user complaint: "я уже устал каждый раз мануально это просить" ("I'm already tired of asking for this manually every time").
+
+### 14.3 Functional Requirements
+
+#### FR-AP-1: Mandatory Write Before ExitPlanMode (src/claude.md rule)
+
+1. **FR-AP-1.1:** `src/claude.md` MUST contain a new rule, placed in a clearly named subsection (e.g., `### Plan-Mode Persistence (MANDATORY)`), that states: immediately before calling `ExitPlanMode`, Claude MUST call the `Write` tool and write the complete plan body to the path `<project>/.claude/plan.md`, where `<project>` is the current git repository root.
+2. **FR-AP-1.2:** The rule MUST state that the `Write` call and the `ExitPlanMode` call are permanently linked: `ExitPlanMode` MUST NOT be called unless the `Write` has already completed successfully in the same response.
+3. **FR-AP-1.3:** The rule MUST specify the overwrite policy: if `<project>/.claude/plan.md` already exists (e.g., from a prior feature cycle), it MUST be overwritten with the current plan. Appending is not permitted; only the active plan body is stored at that path.
+4. **FR-AP-1.4:** The rule MUST specify the fallback for the no-git-root case: if Claude is not operating inside a git repository (no git root detectable), it MUST write `<project>/.claude/plan.md` relative to the current working directory (i.e., `.claude/plan.md` in the CWD). The Write MUST still occur; plan-mode persistence is not skipped simply because no git root is present.
+5. **FR-AP-1.5:** The rule MUST be marked **MANDATORY** with the same prominence as other mandatory rules in `src/claude.md` (e.g., "MANDATORY", "MUST", consistent capitalization and emphasis with the existing Plan Critic Pass rule at line ~153 of `src/claude.md`).
+
+#### FR-AP-2: Bootstrap-Feature Step 0 Precondition (src/commands/bootstrap-feature.md)
+
+1. **FR-AP-2.1:** `src/commands/bootstrap-feature.md` MUST add a new **Step 0: Verify plan exists** as the first step, before the existing Step 1 (prd-writer).
+2. **FR-AP-2.2:** Step 0 MUST check whether `<project>/.claude/plan.md` exists (using Glob or Read).
+3. **FR-AP-2.3:** If `<project>/.claude/plan.md` does not exist, Step 0 MUST abort the `/bootstrap-feature` run with an error message that: (a) states the file is missing, (b) directs the user to enter plan mode first, (c) exits before invoking any downstream agents (prd-writer, ba-analyst, architect, qa-planner, planner).
+4. **FR-AP-2.4:** The error message MUST include the exact path checked and the recommended next action. Suggested wording: `error: .claude/plan.md not found. Enter plan mode first (/plan), complete the plan, and exit plan mode — Claude will automatically save the plan to .claude/plan.md before exiting.`
+5. **FR-AP-2.5:** If `<project>/.claude/plan.md` exists, Step 0 MUST proceed silently to Step 1 with no output. The precondition check is invisible to the user when satisfied.
+6. **FR-AP-2.6:** Step 0 MUST NOT read or validate the content of `<project>/.claude/plan.md` — presence check only. Structural validation of the plan content is the planner agent's responsibility at Step 5.
+
+#### FR-AP-3: Planner Uses plan.md as Authoritative Input (src/agents/planner.md)
+
+1. **FR-AP-3.1:** `src/agents/planner.md` Step 5 (the planner's own execution step inside `/bootstrap-feature`) MUST be updated to begin by reading `<project>/.claude/plan.md` as the **authoritative high-level plan input**.
+2. **FR-AP-3.2:** The planner MUST treat `<project>/.claude/plan.md` as the source of the user's intent, feature scope, acceptance criteria, and preliminary slice breakdown — it is the plan-mode output that the user approved before entering bootstrap.
+3. **FR-AP-3.3:** The planner MUST **refine** `<project>/.claude/plan.md` in-place: it replaces or extends the preliminary slice descriptions in the existing file with the executable slice format required by Section 1 FR-3 (`Files:`, `Changes:`, `Verify:`, `Done when:`) and Section 2 FR-1 (`Wave: N`). The planner MUST NOT overwrite the user's feature scope, acceptance criteria, or rationale sections — only the implementation-slice section is replaced/extended.
+4. **FR-AP-3.4:** If `<project>/.claude/plan.md` is present but does not contain a recognizable implementation-slice section, the planner MUST append the executable slices as a new `## Implementation Plan` section at the end of the file, preserving all existing content above it unchanged.
+5. **FR-AP-3.5:** The planner MUST NOT create a new `<project>/.claude/plan.md` from scratch if the file already exists. The existing file is always the starting point; the planner augments it, never replaces it wholesale.
+
+#### FR-AP-4: README Documentation Update
+
+1. **FR-AP-4.1:** `README.md` MUST document the new automatic plan persistence behavior. The documentation MUST explain: (a) plan-mode plans are auto-saved to `<project>/.claude/plan.md` on exit, (b) `/bootstrap-feature` requires this file to exist and will abort with a clear error if it is missing, (c) the planner refines the plan in-place at Step 5.
+2. **FR-AP-4.2:** The documentation MUST be placed in the existing Pipeline section or Hardening table in `README.md`, consistent with how other pipeline behaviors are documented (cross-reference the location of existing pipeline documentation).
+
+### 14.4 Non-Functional Requirements
+
+1. **NFR-AP-1:** All changes are markdown prompt files only. No JavaScript, TypeScript, Python, shell scripts, or Rust code is modified. `install.sh` is not modified by this feature (all affected files are already included in its glob patterns for `src/` and `src/agents/`).
+2. **NFR-AP-2:** All changes MUST be backward compatible with the existing pipeline. The only behavioral break is the new precondition in `/bootstrap-feature` Step 0. Any team that has been manually maintaining `<project>/.claude/plan.md` is unaffected. Teams that have NOT been using plan mode will see the new abort-with-error behavior — this is intentional and desirable.
+3. **NFR-AP-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). No migration steps required beyond re-running the installer.
+4. **NFR-AP-4:** The plan persistence rule in `src/claude.md` is instructional, not enforced by the Claude Code tool runtime. `ExitPlanMode` and `Write` are independent tool calls; there is no API-level guarantee that the `Write` precedes `ExitPlanMode`. The rule relies on Claude following the instruction faithfully. This is the same trust model used for all other mandatory SDLC rules (e.g., the Plan Critic Pass rule, the `## Facts` block rule).
+4. **NFR-AP-5:** The total agent count remains at 17. No new agents are introduced by this feature.
+
+### 14.5 Acceptance Criteria
+
+Each criterion is a verifiable check that a test runner (or human reviewer) can execute:
+
+1. **AC-AP-1:** `grep -n "ExitPlanMode" src/claude.md` returns at least one line whose surrounding context (± 5 lines) contains the word "Write" and "plan.md" — confirming the persistence rule is co-located with the `ExitPlanMode` instruction.
+2. **AC-AP-2:** `grep -n "MANDATORY\|MUST" src/claude.md | grep -i "plan.md\|ExitPlanMode"` returns at least one match with "MUST" in uppercase — confirming the rule is expressed as a mandatory obligation, not a suggestion.
+3. **AC-AP-3:** `grep -n "Step 0\|plan.md" src/commands/bootstrap-feature.md` returns at least two matches — confirming both Step 0's label and the `plan.md` path check are present.
+4. **AC-AP-4:** `grep -n "error.*plan.md\|plan.md.*not found\|abort\|Enter plan mode" src/commands/bootstrap-feature.md` returns at least one match — confirming the abort error message is present.
+5. **AC-AP-5:** The Step 0 block in `src/commands/bootstrap-feature.md` appears BEFORE Step 1 (prd-writer invocation). Verified by: `grep -n "Step 0\|Step 1\|prd-writer" src/commands/bootstrap-feature.md` showing Step 0's line number is less than Step 1's line number.
+6. **AC-AP-6:** `grep -n "plan.md\|authoritative\|refine\|in-place" src/agents/planner.md` returns at least two matches — confirming the planner reads the existing file and refines rather than replaces.
+7. **AC-AP-7:** `grep -n "auto.*save\|plan.md\|plan mode" README.md` (case-insensitive) returns at least one match — confirming the README documents the new behavior.
+8. **AC-AP-8:** Running `/bootstrap-feature` in a project directory where `<project>/.claude/plan.md` does NOT exist produces the exact error substring `error: .claude/plan.md not found` in the agent's output before any prd-writer, ba-analyst, architect, qa-planner, or planner agent is invoked. Verified by inspecting the transcript of a bootstrap run on a clean project.
+9. **AC-AP-9:** Running `/bootstrap-feature` in a project directory where `<project>/.claude/plan.md` DOES exist proceeds past Step 0 without any error message about the missing plan — the Step 0 output is absent (silent success). Verified by transcript inspection.
+10. **AC-AP-10:** After a plan-mode session exits via `ExitPlanMode`, the file `<project>/.claude/plan.md` exists in the project root and contains the full plan body (non-empty, containing at least the feature name and scope sections that were present in the plan-mode output). Verified by checking file existence and non-zero byte count immediately after `ExitPlanMode` returns.
+
+### 14.6 Affected Files
+
+- `src/claude.md` **[MODIFIED]** — new mandatory `### Plan-Mode Persistence` rule in the Plan Critic / ExitPlanMode section.
+- `src/commands/bootstrap-feature.md` **[MODIFIED]** — new Step 0 precondition check; existing steps renumbered or left with Step 0 as a prefix.
+- `src/agents/planner.md` **[MODIFIED]** — Step 5 reads `<project>/.claude/plan.md` as authoritative input and refines it in-place.
+- `README.md` **[MODIFIED]** — documents auto-persist behavior in Pipeline section or Hardening table.
+
+No `templates/` counterparts exist for `src/claude.md`, `src/commands/bootstrap-feature.md`, or `src/agents/planner.md` — verified by directory listing (`templates/` contains only `CLAUDE.md`, `scratchpad.md`, `settings.json`, `hooks/`, `knowledge/`, `rules/`). No template changes are required.
+
+### 14.7 Out of Scope
+
+The following items are explicitly excluded from this feature and MUST NOT be implemented:
+
+1. **Reordering the bootstrap pipeline.** The pipeline order (PRD → use cases → architect → QA → planner) is NOT changing. This feature only adds plan persistence and a precondition; the pipeline sequence is unchanged.
+2. **Auto-detecting plan-mode entry.** The user-side ergonomics of entering plan mode are unchanged. Only the exit path gains a mandatory `Write` call.
+3. **Plan-mode hooks or runtime plan-mode interception.** These are not user-controllable Claude Code primitives in iter-1 of this feature.
+4. **Persisting the plan under any path other than `<project>/.claude/plan.md`.** No alternate paths, version suffixes, or timestamped variants.
+5. **Versioning or snapshotting the plan.** One canonical plan file per feature, overwritten by the planner agent at Step 5. No snapshot history or rollback mechanism.
+6. **Structural validation of plan content in Step 0.** The precondition check is presence-only. Content validation is the planner's responsibility.
+
+### 14.8 Risks
+
+1. **Risk: Claude forgets to Write before ExitPlanMode (rule is instructional, not enforced).** Because `Write` and `ExitPlanMode` are independent tool calls, Claude could — due to context pressure, a malformed prompt, or a future model change — call `ExitPlanMode` first. The plan would then be lost in the global cache. **Mitigation:** the rule in `src/claude.md` is marked MANDATORY and uses "MUST" language consistent with the highest-obligation tier in this codebase. The `/bootstrap-feature` Step 0 abort serves as a downstream catch: if the plan was not persisted, the user learns immediately on the next pipeline step. The two-layer approach (persist-on-exit + precondition-on-bootstrap) means the user is never silently left without context.
+
+2. **Risk: `<project>/.claude/plan.md` already exists from a prior feature cycle (overwrite vs. append decision).** FR-AP-1.3 mandates overwrite. This is correct for the single-active-feature assumption of the pipeline (one branch, one feature, one plan at a time). However, if the user is multi-tasking across features on separate branches but sharing the same `.claude/` directory, the overwrite would silently discard the previous feature's plan. **Mitigation:** the overwrite policy is explicitly documented in FR-AP-1.3 so users operating multiple concurrent features are aware. Versioned or per-feature plan storage is explicitly deferred (§14.7 item 5). Users with concurrent feature branches should use separate working trees.
+
+3. **Risk: No git root present when ExitPlanMode fires (e.g., user runs plan mode on a non-git directory).** FR-AP-1.4 specifies fallback to CWD (`.claude/plan.md` in the current working directory). However, the `.claude/` directory itself may not exist in a non-git non-project directory, and Claude does NOT create directories with the `Write` tool — `Write` creates files but the parent directory must exist. **Mitigation:** FR-AP-1.4 MUST be refined during implementation: the plan-mode rule MUST instruct Claude to attempt directory creation if `.claude/` does not exist, OR to write to a fallback path (`./plan.md` in the CWD as a last resort). This is an implementation decision that the planner agent resolves in Slice 1.
+
+### 14.9 Schema Changes
+
+Not applicable. This project has no database.
+
+### 14.10 Affected Endpoints
+
+Not applicable. This project has no HTTP API.
+
+### 14.11 UI Changes
+
+Not applicable. This project is a collection of markdown prompt files with no graphical user interface.
+
+## Facts
+
+### Verified facts
+
+- `docs/PRD.md` contains 13 existing top-level numbered sections (§1 through §13, with §10 absent — gap confirmed by `grep -n "^## [0-9]"` output in this session). Section §14 is the next available number. Verified: yes (grep output read in this session).
+- `src/claude.md`, `src/commands/bootstrap-feature.md`, `src/agents/planner.md`, and `README.md` all exist in the working tree — verified by `ls src/commands/` and `ls src/agents/` output in this session.
+- The `templates/` directory contains `CLAUDE.md`, `scratchpad.md`, `settings.json`, `hooks/`, `knowledge/`, `rules/` only — no `commands/` or `agents/` subdirectories. Therefore no template counterparts exist for any of the four affected files. Verified: yes (directory listing in this session).
+- `src/agents/planner.md` is listed in `ls src/agents/` output — verified by directory listing in this session.
+- `src/commands/bootstrap-feature.md` is listed in `ls src/commands/` output — verified by directory listing in this session.
+- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `claudeknows status --json` in this session.
+- Knowledge-base language detection: English (probes in §13 Facts confirmed `the` hits English titles) and Russian (`не` hits Russian titles). Corpus contains ML/AI, data engineering, SRE/chaos engineering, and software engineering books — no meta-SDLC pipeline, plan-mode, or Claude Code agent orchestration content. Verified: yes (list output and prior §13 language probes in this session).
+- Corpus scope relevance: **No overlap**. Observed corpus domain: ML/AI, data engineering, SRE, software engineering (generic). Task domain: meta-SDLC agent orchestration, Claude Code plan-mode persistence, markdown prompt engineering. No topical queries were run; the title list is sufficient evidence per the corpus-scope-relevance protocol.
+
+### External contracts
+
+- **Claude Code `ExitPlanMode` tool call** — symbol: `ExitPlanMode` (no parameters per Claude Code plan-mode docs) — source: Claude Code built-in tool behavior, not an external API with a versioned spec accessible in this session — verified: **no — assumption**. The behavior (plan-mode ends when `ExitPlanMode` is called) is the documented intent; the exact tool-call shape is assumed from consistent usage across existing `src/claude.md` content. Risk: if a future Claude Code version adds parameters to `ExitPlanMode` or renames the tool, FR-AP-1 rules referencing the name would need updating. Verification path: architect Step 3 checks the Claude Code tool manifest or CLAUDE.md built-in tool docs.
+- **Claude Code `Write` tool call** — symbol: `Write` with `file_path` and `content` parameters — source: `~/.claude/rules/tool-limitations.md` references the `Write` tool by name; the SDLC CLAUDE.md system prompt references `Write` throughout — verified: yes (referenced in global CLAUDE.md and `~/.claude/rules/` rule files, which were read in this session via the system-reminder context).
+
+### Assumptions
+
+- **`src/claude.md` has an existing section on Plan Critic Pass and ExitPlanMode** where the new persistence rule will be placed — risk: if `src/claude.md` does not contain ExitPlanMode guidance, the new rule's placement section does not exist and must be created as a new section. How to verify: Slice 1 reads `src/claude.md` before editing and identifies the correct placement; if no ExitPlanMode section exists, creates one. No blocker — the rule can be appended as a new subsection.
+- **`/bootstrap-feature` has a recognizable step-numbered structure** (Step 1, Step 2, etc.) that allows prepending a "Step 0" without structural conflict — risk: if the bootstrap command uses a different organizational scheme, the step number may not fit. How to verify: Slice 2 reads `src/commands/bootstrap-feature.md` before editing.
+- **`src/agents/planner.md` uses "Step 5" as the label for the planner's execution step inside `/bootstrap-feature`** — risk: the actual step number may differ. The feature context describes it as "Step 5" but this has not been verified against the current file. How to verify: Slice 3 reads `src/agents/planner.md` before editing and identifies the correct step label.
+- **Claude Code does not auto-create parent directories when `Write` is called with a path whose parent does not exist** — risk: if `.claude/` does not exist in the CWD when the plan-mode persistence `Write` fires, the write fails silently or with an error, and the plan is lost. How to verify: Risk 3 (§14.8) flags this explicitly; the implementation plan (Slice 1) must include a directory-creation fallback instruction in the rule text.
+- **The overwrite policy (FR-AP-1.3) is the correct semantic for single-active-feature workflows** — risk: users with concurrent feature branches on the same working tree will have their prior plan overwritten silently. This is explicitly accepted in §14.8 Risk 2.
+
+### Open questions
+
+- knowledge-base: corpus is ML/AI + data engineering + SRE + generic software engineering; task is meta-SDLC agent orchestration and Claude Code plan-mode persistence; no overlap. Skipping topical queries — corpus enrichment with Claude Code / agent-orchestration / LLM-pipeline reference materials would help future similar tasks.
+- **Exact placement within `src/claude.md`** for the new Plan-Mode Persistence rule: should it be adjacent to the existing Plan Critic Pass rule (which also governs ExitPlanMode behavior) or in a separate `## Plan Mode` section? Decision deferred to Slice 1 implementation after reading the current `src/claude.md` structure. Needs: architect call at Step 3.
+- **Directory-creation fallback for the no-`.claude/`-directory case** (see Risk 3, §14.8): should the rule instruct Claude to use `Bash` to create the directory, or instruct Claude to fall back to writing `./plan.md` in the CWD? The `Bash` approach is cleaner but requires the `Bash` tool to be available in plan-mode context (unverified). Needs: architect call at Step 3.
+

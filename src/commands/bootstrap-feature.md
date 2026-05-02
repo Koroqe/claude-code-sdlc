@@ -4,6 +4,21 @@
 
 Every feature follows this pipeline before any code is written. Each step is performed by a specialized agent role.
 
+### Step 0: Verify plan exists
+
+Before invoking ANY agent, the orchestrator MUST verify that `<project>/.claude/plan.md` exists and is non-empty. The check is the literal Bash test:
+
+```
+[ -s .claude/plan.md ] || {
+  echo "error: .claude/plan.md not found. Enter plan mode first (/plan), complete the plan, and exit plan mode — Claude will automatically save the plan to .claude/plan.md before exiting."
+  exit 1
+}
+```
+
+The `-s` operator returns success only when the file exists AND has size greater than zero — empty (0-byte) files are treated as missing. If the check fails, abort the bootstrap run immediately. Do NOT invoke `prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `resource-architect`, or `role-planner`.
+
+The check is presence-and-non-empty only — structural validation of the plan body is the planner's responsibility at Step 5. The producer side of this contract is the `### Plan-Mode Persistence` rule in `src/claude.md`, which mandates that Claude Write the plan body to `.claude/plan.md` before calling `ExitPlanMode`.
+
 ### Step 1: Product Manager — PRD Documentation
 Delegate to `prd-writer` agent:
 - Read `docs/PRD.md` to understand the existing format

@@ -62,17 +62,28 @@ pub const PDF_BUDGET_BYTES: usize = 50 * 1024 * 1024;
 
 /// Resolve the absolute, canonicalized directory containing the pdfium dynamic
 /// library. Reject:
-///  - missing or empty `$HOME` (security-auditor HIGH #1)
+///  - missing or empty `$HOME` / `%USERPROFILE%` (security-auditor HIGH #1)
 ///  - world-writable lib directory (security-auditor HIGH #2)
 ///  - any canonicalization failure (mapped to FR-3.5 literal — security-auditor
 ///    MEDIUM #4)
+///
+/// Cross-platform home resolution: Unix sets `HOME`, Windows sets
+/// `USERPROFILE` (cmd.exe / PowerShell never sets `HOME` by default). Try
+/// `HOME` first (covers Unix and any Windows shell that sets it explicitly),
+/// then fall back to `USERPROFILE` (the canonical Windows variable).
 fn resolve_pdfium_lib_dir() -> Result<PathBuf, String> {
-    // M1: REJECT empty/missing HOME explicitly. unwrap_or_default would coerce
+    // M1: REJECT empty/missing home explicitly. unwrap_or_default would coerce
     // to "" and resolve a CWD-relative path.
     let home = std::env::var("HOME")
-        .map_err(|_| "HOME env var unset; cannot resolve pdfium library path".to_string())?;
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| {
+            "HOME (Unix) / USERPROFILE (Windows) env var unset; cannot resolve pdfium library path"
+                .to_string()
+        })?;
     if home.is_empty() {
-        return Err("HOME env var empty; cannot resolve pdfium library path".to_string());
+        return Err(
+            "HOME / USERPROFILE env var empty; cannot resolve pdfium library path".to_string(),
+        );
     }
 
     let expected_dir = PathBuf::from(home).join(".claude/tools/sdlc-knowledge/pdfium/lib");

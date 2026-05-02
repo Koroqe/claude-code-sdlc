@@ -161,6 +161,9 @@ Claude automatically:
 | Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
 | Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `sdlc-knowledge` CLI; agents query before authoring; cite hits in `## Facts` |
 | PDF extraction | `pdfium-render` handles all PDFs (CID fonts, calibre conversions, scanned-with-text-layer, multi-column) |
+| Plan-mode plans lost to global cache | Auto-persist rule: Claude `Write`s the full plan body to `<project>/.claude/plan.md` before `ExitPlanMode`; `/bootstrap-feature` Step 0 aborts when the file is missing or empty |
+
+Plan-mode plans are now auto-saved to `<project>/.claude/plan.md` whenever Claude exits plan mode. The persistence sequence (`git rev-parse` → `mkdir -p .claude` → `Write plan.md` → `ExitPlanMode`) is mandated by the `### Plan-Mode Persistence (MANDATORY)` rule in `src/claude.md`. Downstream, `/bootstrap-feature` Step 0 checks `[ -s .claude/plan.md ]` and aborts with a clear error message if the file is missing or empty — no agent runs until the plan is persisted. The planner agent at Step 5 reads this file as authoritative input and refines it in place rather than regenerating from scratch.
 
 ---
 

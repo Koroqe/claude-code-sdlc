@@ -209,3 +209,18 @@ Add a `## Review Notes` section at the end of the plan file:
 ```
 
 Only call ExitPlanMode after Review Notes are written.
+
+### Plan-Mode Persistence (MANDATORY — before ExitPlanMode)
+
+Before calling `ExitPlanMode`, you MUST persist the full plan body to `<project>/.claude/plan.md` so the plan survives the session boundary and is available to the `/bootstrap-feature` pipeline. The plan-mode artifact at `~/.claude/plans/<slug>.md` is NOT consulted by the bootstrap pipeline — only `<project>/.claude/plan.md` is.
+
+The persistence sequence MUST be performed in this exact order in the SAME response that ends plan mode:
+
+1. Resolve the project root via `Bash git rev-parse --show-toplevel`. If the command fails (the working directory is not inside a git repo), fall back to the current working directory as the project root.
+2. Ensure the target directory exists via `Bash mkdir -p <project-root>/.claude`. The `-p` flag is idempotent — no error if the directory already exists.
+3. Call `Write` with `file_path=<project-root>/.claude/plan.md` and `content=<full plan body>`. Overwrite the existing file unconditionally — the current plan supersedes any prior plan from earlier features. Append is NOT permitted.
+4. ONLY after `Write` succeeds, call `ExitPlanMode`.
+
+If any step fails (e.g., `mkdir -p` permission denied, `Write` rejected), do NOT call `ExitPlanMode`. Surface the error to the user and keep plan-mode active so the plan body remains in the conversation context for manual recovery.
+
+This rule is the producer side of the auto-persist contract. The consumer side is the `/bootstrap-feature` Step 0 precondition that aborts if `<project>/.claude/plan.md` is missing or empty. Together they guarantee plan-mode plans are never lost between plan mode and bootstrap.
