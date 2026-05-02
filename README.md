@@ -57,6 +57,19 @@ Scaffold a new project:
 cd your-project && bash install.sh --init-project
 ```
 
+### Windows
+
+Native Windows is supported via `install.bat` (cmd.exe wrapper) or `install.ps1` (PowerShell). After cloning the repo:
+
+```cmd
+install.bat
+install.bat -InitProject     :: scaffold a new project in the current directory
+install.bat -Yes             :: skip confirmation prompts
+install.bat -Help            :: show help
+```
+
+The Windows installer downloads `sdlc-knowledge.exe` and `pdfium.dll` from GitHub releases, registers a `claudeknows.cmd` wrapper in `%USERPROFILE%\.claude\bin\`, and adds that directory to your User PATH. Open a new terminal after install for the PATH change to take effect.
+
 ---
 
 ## How It Works

@@ -14,6 +14,10 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Added
+
+- Native Windows installer — `install.bat` (cmd.exe wrapper) and `install.ps1` (PowerShell) install the SDLC config to `%USERPROFILE%\.claude\`, download `sdlc-knowledge.exe` and `pdfium.dll` from GitHub releases, register a `claudeknows.cmd` wrapper, and add it to your User PATH. No Git Bash / MSYS2 / Cygwin required.
+
 ## [0.3.1] - 2026-05-02
 
 ### Added
