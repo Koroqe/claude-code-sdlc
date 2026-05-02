@@ -14,6 +14,8 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-02
+
 ### Added
 
 - Plan-mode plans are now automatically saved to `<project>/.claude/plan.md` so they are available to the pipeline without any manual copy-paste step. `/bootstrap-feature` Step 0 verifies the file exists and is non-empty before invoking any agent.
