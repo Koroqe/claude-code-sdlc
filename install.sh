@@ -1055,8 +1055,12 @@ echo "    /context-refresh    Rebuild session context"
 echo ""
 echo "  Knowledge base CLI (also invokable as 'claudeknows' if alias was registered):"
 echo "    claudeknows ingest <path>           Ingest PDF/MD/TXT into <cwd>/.claude/knowledge/"
-echo "    claudeknows search '<query>' --json BM25-ranked search over the index"
+echo "    claudeknows search '<query>' --json BM25-ranked search; PDF hits cite page numbers"
+echo "    claudeknows page --by-id <id> --page <N>   Fetch full text of a cited PDF page"
 echo "    claudeknows list  | status | delete Inspect / manage indexed sources"
+echo ""
+echo "  Tip: re-ingest existing PDFs (claudeknows ingest <path>) to upgrade pre-v2 indexes"
+echo "  to schema v2 — that's what unlocks per-page citations in search hits."
 echo ""
 
 if [ "$INIT_PROJECT" = false ]; then
