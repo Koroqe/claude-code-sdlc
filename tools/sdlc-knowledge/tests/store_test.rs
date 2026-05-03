@@ -54,12 +54,13 @@ fn pragma_journal_mode_is_wal() {
 }
 
 #[test]
-fn schema_version_is_one() {
+fn schema_version_is_two() {
+    // Iter-2: page-tracking migration steps freshly-opened DBs to v2.
     let (_tmp, _path, conn) = open_temp_db();
     let v: i64 = conn
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("read schema_version");
-    assert_eq!(v, 1);
+    assert_eq!(v, 2);
 }
 
 #[test]

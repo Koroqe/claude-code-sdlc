@@ -172,8 +172,13 @@ fn home_unset_returns_pdf_decode_error_not_panic() {
 //
 // We point HOME at a temp dir and create
 // `<tmp>/.claude/tools/sdlc-knowledge/pdfium/lib/` with mode 0o777.
+//
+// Unix-only: the world-writable bit (`mode & 0o002`) is POSIX semantics; on
+// Windows the equivalent ACL inspection is a separate concern (see
+// `pdf::resolve_pdfium_lib_dir`'s cfg(unix) block) and this test is skipped.
 // ---------------------------------------------------------------------------
 
+#[cfg(unix)]
 #[test]
 fn world_writable_lib_dir_rejected() {
     let _guard = HOME_MUTEX.lock().unwrap();

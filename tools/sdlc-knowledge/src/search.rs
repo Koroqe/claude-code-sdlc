@@ -41,6 +41,10 @@ pub const MAX_CONTEXT_RADIUS: u32 = 10;
 pub struct SearchHit {
     /// Source path of the document the chunk belongs to.
     pub source: String,
+    /// Document id (primary key of `documents`). Lets agents follow up with
+    /// `claudeknows page --by-id <ID> --page <N>` without re-parsing the
+    /// `source` path string.
+    pub doc_id: i64,
     /// Primary key of the chunk row (= FTS5 rowid).
     pub chunk_id: i64,
     /// Ordinal of the chunk inside the document (0-based).
@@ -49,6 +53,16 @@ pub struct SearchHit {
     pub score: f64,
     /// FTS5-generated snippet around the matching term(s).
     pub snippet: String,
+    /// 1-indexed PDF page where the matching chunk text begins. `None` for
+    /// non-PDF sources and for legacy chunks ingested before schema v2.
+    /// Omitted from JSON when None to keep the shape backward-compatible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_start: Option<i64>,
+    /// 1-indexed PDF page where the matching chunk text ends. Equal to
+    /// `page_start` under the current per-page chunker; the field pair stays
+    /// open for future cross-page chunkers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_end: Option<i64>,
     /// Optional ±N-chunk context window from the same document, populated
     /// only when the search was invoked with `--context N` where N > 0.
     /// Concatenation of `chunks.text` for ord in `[ord-N, ord+N]` joined by
@@ -98,6 +112,8 @@ pub fn search(
                       chunks.doc_id AS doc_id, \
                       documents.source_path AS source, \
                       chunks.ord AS ord, \
+                      chunks.page_start AS page_start, \
+                      chunks.page_end AS page_end, \
                       -bm25(chunks_fts) AS score, \
                       snippet(chunks_fts, 0, '', '', '…', 32) AS snippet \
                FROM chunks_fts \
@@ -108,34 +124,35 @@ pub fn search(
                LIMIT ?2";
 
     let mut stmt = conn.prepare(sql).map_err(map_fts_syntax)?;
-    // Collect (hit, doc_id) tuples — doc_id is needed only for context fetch
-    // and is dropped before returning.
+    // Collect hits — doc_id is BOTH exposed in the JSON shape (so agents can
+    // follow up with `page --by-id`) AND used for the context fetch below.
     let rows = stmt
         .query_map(rusqlite::params![query, top_k], |r| {
-            let hit = SearchHit {
+            Ok(SearchHit {
                 chunk_id: r.get("chunk_id")?,
+                doc_id: r.get("doc_id")?,
                 source: r.get("source")?,
                 ord: r.get("ord")?,
                 score: r.get("score")?,
                 snippet: r.get("snippet")?,
+                page_start: r.get("page_start")?,
+                page_end: r.get("page_end")?,
                 context: None,
-            };
-            let doc_id: i64 = r.get("doc_id")?;
-            Ok((hit, doc_id))
+            })
         })
         .map_err(map_fts_syntax)?;
 
-    let mut intermediate: Vec<(SearchHit, i64)> = Vec::new();
+    let mut intermediate: Vec<SearchHit> = Vec::new();
     for row in rows {
         match row {
-            Ok(t) => intermediate.push(t),
+            Ok(h) => intermediate.push(h),
             Err(e) => return Err(map_fts_syntax(e)),
         }
     }
 
-    // Backward-compat fast path: no context expansion, drop doc_id and return.
+    // Backward-compat fast path: no context expansion.
     if context_radius == 0 {
-        return Ok(intermediate.into_iter().map(|(h, _)| h).collect());
+        return Ok(intermediate);
     }
 
     // Per-hit context fetch. Static SQL, bound params, prepared once and
@@ -148,12 +165,14 @@ pub fn search(
                                ORDER BY ord";
 
     let mut out = Vec::with_capacity(intermediate.len());
-    for (mut hit, doc_id) in intermediate {
+    for mut hit in intermediate {
         let lo = hit.ord - context_radius;
         let hi = hit.ord + context_radius;
         let mut ctx_stmt = conn.prepare_cached(CONTEXT_SQL)?;
         let texts: Result<Vec<String>, rusqlite::Error> = ctx_stmt
-            .query_map(rusqlite::params![doc_id, lo, hi], |r| r.get::<_, String>(0))?
+            .query_map(rusqlite::params![hit.doc_id, lo, hi], |r| {
+                r.get::<_, String>(0)
+            })?
             .collect();
         let texts = texts?;
         if !texts.is_empty() {

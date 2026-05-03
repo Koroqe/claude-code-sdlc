@@ -161,7 +161,7 @@ fn e2e_d_status_json_returns_full_summary() {
     let chunk_count = v.get("chunk_count").and_then(|s| s.as_i64()).expect("i64");
     let db_path = v.get("db_path").and_then(|s| s.as_str()).expect("str");
 
-    assert_eq!(schema_version, 1);
+    assert_eq!(schema_version, 2);
     assert_eq!(doc_count, 1);
     assert_eq!(chunk_count, 8);
     // Absolute path

@@ -35,6 +35,14 @@ pub enum IndexError {
 }
 
 /// V1 schema — kept as a static `&str` literal; no user data interpolated.
+///
+/// V2 additions (page tracking) are applied via `migrations::run_migrations`:
+///   - `chunks.page_start` / `chunks.page_end` (nullable INTEGER) — first and
+///     last 1-indexed PDF page covered by the chunk text. NULL for non-PDF
+///     sources. For PDFs (per-page chunking) `page_start = page_end`.
+///   - new `pages` table — one row per (doc_id, page_no) holding the full
+///     extracted text of that page. Powers the `page` subcommand which
+///     returns the raw page text without re-running PDFium.
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY,
@@ -71,6 +79,22 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
   INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.id, old.text);
   INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
 END;
+"#;
+
+/// V2 schema additions — applied by `migrations::run_migrations` when stepping
+/// from any prior version up to v2. Each statement is idempotent: the page
+/// columns are added via `ALTER TABLE ... ADD COLUMN` guarded by a
+/// `pragma_table_info` probe in `migrations.rs`, and the `pages` table uses
+/// `IF NOT EXISTS`.
+pub(crate) const SCHEMA_V2_PAGES_TABLE: &str = r#"
+CREATE TABLE IF NOT EXISTS pages (
+  id INTEGER PRIMARY KEY,
+  doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_no INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  UNIQUE(doc_id, page_no)
+);
+CREATE INDEX IF NOT EXISTS pages_doc_page_idx ON pages(doc_id, page_no);
 "#;
 
 /// Open (or create) the SQLite database at `db_path`, ensure parent directories exist,
@@ -146,7 +170,8 @@ fn validate_schema_inner(conn: &Connection) -> Result<(), rusqlite::Error> {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
-    // schema_version row exists and is in 1..=2 (forward-compat for iter-2).
+    // schema_version row exists and is in 1..=2. v1 = original schema; v2 = page
+    // tracking (chunks.page_start/page_end + pages table) added by migrations.
     let v: i64 = conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
     if !(1..=2).contains(&v) {
         return Err(rusqlite::Error::QueryReturnedNoRows);
@@ -184,20 +209,164 @@ pub fn upsert_document(
 
 /// Replace all chunks for a document: delete prior rows then insert the new set.
 /// FTS5 triggers fire for each row, so the FTS5 index stays in sync.
+///
+/// Each chunk carries optional `page_start`/`page_end` (1-indexed PDF page
+/// numbers). For non-PDF sources callers pass `None` for both — these columns
+/// were added in schema v2 and stay NULL for markdown/txt where pagination is
+/// undefined. For PDFs the chunker emits one chunk per page, so
+/// `page_start == page_end == page_no`.
 pub fn replace_chunks(
     conn: &Connection,
     doc_id: i64,
-    chunks: &[(usize, &str)],
+    chunks: &[(usize, &str, Option<i64>, Option<i64>)],
 ) -> Result<(), rusqlite::Error> {
     conn.execute(
         "DELETE FROM chunks WHERE doc_id = ?1",
         rusqlite::params![doc_id],
     )?;
-    let mut stmt = conn.prepare("INSERT INTO chunks(doc_id, ord, text) VALUES (?1, ?2, ?3)")?;
-    for (ord, text) in chunks {
-        stmt.execute(rusqlite::params![doc_id, *ord as i64, *text])?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO chunks(doc_id, ord, text, page_start, page_end) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?;
+    for (ord, text, page_start, page_end) in chunks {
+        stmt.execute(rusqlite::params![
+            doc_id,
+            *ord as i64,
+            *text,
+            *page_start,
+            *page_end
+        ])?;
     }
     Ok(())
+}
+
+/// Replace all per-page text rows for a document. PDFs only — markdown/txt
+/// callers MUST NOT invoke this (the chunker for those formats emits chunks
+/// without page tracking and the `pages` table stays empty for them).
+///
+/// The unique `(doc_id, page_no)` constraint declared in `SCHEMA_V2_PAGES_TABLE`
+/// prevents accidental dupes when re-ingesting; we DELETE first to keep the
+/// "replace = atomic refresh" semantics that `replace_chunks` already follows.
+pub fn replace_pages(
+    conn: &Connection,
+    doc_id: i64,
+    pages: &[(i64, &str)],
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "DELETE FROM pages WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+    )?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO pages(doc_id, page_no, text) VALUES (?1, ?2, ?3)",
+    )?;
+    for (page_no, text) in pages {
+        stmt.execute(rusqlite::params![doc_id, *page_no, *text])?;
+    }
+    Ok(())
+}
+
+/// Fetch the full extracted text of a single page by `(source_path, page_no)`.
+/// Returns `Ok(None)` when no row matches — caller decides whether that means
+/// "document not found", "page out of range", or "non-PDF source has no
+/// pages" and renders the appropriate user-facing error.
+pub fn get_page_by_source(
+    conn: &Connection,
+    source_path: &str,
+    page_no: i64,
+) -> Result<Option<PageRecord>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT d.id, d.source_path, p.page_no, p.text \
+         FROM pages p JOIN documents d ON d.id = p.doc_id \
+         WHERE d.source_path = ?1 AND p.page_no = ?2",
+        rusqlite::params![source_path, page_no],
+        |r| {
+            Ok(PageRecord {
+                doc_id: r.get(0)?,
+                source_path: r.get(1)?,
+                page_no: r.get(2)?,
+                text: r.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Fetch the full extracted text of a single page by `(doc_id, page_no)`.
+pub fn get_page_by_id(
+    conn: &Connection,
+    doc_id: i64,
+    page_no: i64,
+) -> Result<Option<PageRecord>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT d.id, d.source_path, p.page_no, p.text \
+         FROM pages p JOIN documents d ON d.id = p.doc_id \
+         WHERE d.id = ?1 AND p.page_no = ?2",
+        rusqlite::params![doc_id, page_no],
+        |r| {
+            Ok(PageRecord {
+                doc_id: r.get(0)?,
+                source_path: r.get(1)?,
+                page_no: r.get(2)?,
+                text: r.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Returned by `get_page_by_source` / `get_page_by_id` — the full text of one
+/// extracted PDF page plus identifying metadata, JSON-serializable for the
+/// `page --json` output shape.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PageRecord {
+    pub doc_id: i64,
+    pub source_path: String,
+    pub page_no: i64,
+    pub text: String,
+}
+
+/// Look up a document id by source_path. Used by the `page` subcommand to
+/// disambiguate "document not found" from "page out of range" so the user
+/// sees the more helpful of the two error messages.
+pub fn lookup_doc_id(
+    conn: &Connection,
+    source_path: &str,
+) -> Result<Option<i64>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT id FROM documents WHERE source_path = ?1",
+        rusqlite::params![source_path],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Reverse of `lookup_doc_id`: id → source_path. The `page --by-id` path
+/// uses this to render the source path in error messages without an extra
+/// JOIN inside `get_page_by_id`.
+pub fn lookup_document_by_id(
+    conn: &Connection,
+    id: i64,
+) -> Result<Option<String>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT source_path FROM documents WHERE id = ?1",
+        rusqlite::params![id],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Count how many `pages` rows exist for a doc — used to render
+/// "page X of Y" errors. Returns 0 for non-PDF docs (they store no pages).
+pub fn page_count(conn: &Connection, doc_id: i64) -> Result<i64, rusqlite::Error> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pages WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+        |r| r.get(0),
+    )
 }
 
 /// Look up the prior `(mtime, sha256)` for a source path, if any.

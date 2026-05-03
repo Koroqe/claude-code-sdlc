@@ -148,22 +148,33 @@ fn resolve_pdfium_lib_path() -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-/// Extract text from a PDF using pdfium-render. Wraps the C++ FFI call in a
+/// Extract text from a PDF using pdfium-render — concatenated form retained
+/// for callers that don't need per-page tracking. Wraps the C++ FFI call in a
 /// panic boundary and a byte-budget gate.
 ///
-/// Public API signature is BYTE-UNCHANGED from iter-1 per FR-1.1 — callers in
-/// `ingest.rs` continue to invoke `pdf::read(&path)` with no awareness of the
-/// underlying engine swap.
+/// Implemented as a thin wrapper over `read_pages` (joins page texts with
+/// `\n`) so the byte-budget gate and panic boundary apply identically.
 pub fn read(p: &Path) -> Result<String, IngestError> {
-    extract_via_closure(p, extract_with_pdfium)
+    let pages = read_pages(p)?;
+    Ok(pages.join("\n"))
+}
+
+/// Extract text from a PDF as a `Vec<String>` indexed by zero-based page
+/// number (so the 1-indexed page label = `index + 1`). Used by the ingest
+/// pipeline to populate per-page citations and the `pages` SQLite table.
+///
+/// Same panic boundary + byte-budget gate as `read` — the budget is applied
+/// to the SUM of page-text byte lengths so a 50 MB single-page extract is
+/// rejected exactly like a 50 MB concatenated extract was.
+pub fn read_pages(p: &Path) -> Result<Vec<String>, IngestError> {
+    extract_pages_via_closure(p, extract_pages_with_pdfium)
 }
 
 /// Hot-path extraction body. Initializes pdfium-render singleton on the first
 /// call (subsequent calls reuse the cached binding to avoid PDFium's
 /// `PdfiumLibraryBindingsAlreadyInitialized` error on batch ingest). Opens the
-/// document from the in-memory byte slice, iterates pages, and concatenates
-/// per-page text joined by `\n`.
-fn extract_with_pdfium(bytes: &[u8]) -> Result<String, String> {
+/// document from the in-memory byte slice and returns per-page text.
+fn extract_pages_with_pdfium(bytes: &[u8]) -> Result<Vec<String>, String> {
     let mut guard = PDFIUM
         .lock()
         .map_err(|_| "pdfium singleton mutex poisoned".to_string())?;
@@ -179,14 +190,13 @@ fn extract_with_pdfium(bytes: &[u8]) -> Result<String, String> {
     let doc = pdfium
         .load_pdf_from_byte_slice(bytes, None)
         .map_err(|e| format!("pdfium load_pdf: {e}"))?;
-    let mut out = String::new();
+    let mut out = Vec::new();
     for (i, page) in doc.pages().iter().enumerate() {
         let text = page
             .text()
             .map_err(|e| format!("page {i} text: {e}"))?
             .all();
-        out.push_str(&text);
-        out.push('\n');
+        out.push(text);
     }
     Ok(out)
 }
@@ -216,6 +226,34 @@ where
     let result = catch_unwind(AssertUnwindSafe(|| f(&bytes)));
     match result {
         Ok(Ok(text)) => check_byte_budget(p_buf, text),
+        Ok(Err(msg)) => Err(IngestError::PdfDecode(p_buf, msg)),
+        Err(_) => Err(IngestError::PdfDecode(
+            p_buf,
+            "panic during pdfium-render extraction".to_string(),
+        )),
+    }
+}
+
+/// Per-page variant of `extract_via_closure`. Same panic boundary; the byte
+/// budget is applied to the SUM of per-page lengths so a multi-page extract
+/// over 50 MB is rejected even if no individual page is.
+fn extract_pages_via_closure<F>(p: &Path, f: F) -> Result<Vec<String>, IngestError>
+where
+    F: FnOnce(&[u8]) -> Result<Vec<String>, String> + std::panic::UnwindSafe,
+{
+    let bytes = std::fs::read(p)
+        .map_err(|e| IngestError::PdfDecode(p.to_path_buf(), format!("read: {e}")))?;
+    let p_buf = p.to_path_buf();
+    let result = catch_unwind(AssertUnwindSafe(|| f(&bytes)));
+    match result {
+        Ok(Ok(pages)) => {
+            let total: usize = pages.iter().map(|s| s.len()).sum();
+            if total > PDF_BUDGET_BYTES {
+                Err(IngestError::PdfBudgetExceeded(p_buf, total))
+            } else {
+                Ok(pages)
+            }
+        }
         Ok(Err(msg)) => Err(IngestError::PdfDecode(p_buf, msg)),
         Err(_) => Err(IngestError::PdfDecode(
             p_buf,

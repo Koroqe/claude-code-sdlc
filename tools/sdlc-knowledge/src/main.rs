@@ -22,6 +22,7 @@ fn main() -> std::process::ExitCode {
         Command::List(a) => a.project_root.as_deref(),
         Command::Status(a) => a.project_root.as_deref(),
         Command::Delete(a) => a.project_root.as_deref(),
+        Command::Page(a) => a.project_root.as_deref(),
     };
 
     let root = match cli::resolve_project_root(project_root_arg) {
@@ -40,6 +41,136 @@ fn main() -> std::process::ExitCode {
         Command::List(args) => run_list(&root, &args),
         Command::Status(args) => run_status(&root, &args),
         Command::Delete(args) => run_delete(&root, &args),
+        Command::Page(args) => run_page(&root, &args),
+    }
+}
+
+/// `page <source-path> --page N` OR `page --by-id ID --page N`.
+///
+/// Mutually-exclusive lookup keys (mirrors the `delete` shape). The page
+/// number is 1-indexed. PDFs only — markdown / plain-text sources have no
+/// `pages` rows so any lookup against them returns "page out of range".
+///
+/// Error semantics:
+///   - exit 2: malformed CLI (both keys, neither key, page < 1)
+///   - exit 1: document not found, page not in document, DB error
+///   - exit 0: page found, text rendered to stdout
+fn run_page(root: &std::path::Path, args: &cli::PageArgs) -> std::process::ExitCode {
+    match (&args.by_id, &args.source_path) {
+        (Some(_), Some(_)) => {
+            eprintln!("error: --by-id and <source-path> are mutually exclusive");
+            return std::process::ExitCode::from(2);
+        }
+        (None, None) => {
+            eprintln!("error: --by-id or <source-path> required");
+            return std::process::ExitCode::from(2);
+        }
+        _ => {}
+    }
+    if args.page < 1 {
+        eprintln!("error: --page must be >= 1 (1-indexed)");
+        return std::process::ExitCode::from(2);
+    }
+
+    let (conn, _db_path) = match open_and_validate(root) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+
+    // Resolve to a (doc_id, source_path) pair so error messages can be
+    // specific: "document not found" vs "page X of Y out of range".
+    let (doc_id, source_path_for_msg) = if let Some(id) = args.by_id {
+        match store::lookup_document_by_id(&conn, id) {
+            Ok(Some(path)) => (id, path),
+            Ok(None) => {
+                eprintln!("error: no document with id {id}");
+                return std::process::ExitCode::from(1);
+            }
+            Err(e) => {
+                eprintln!("error: page lookup failed: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        }
+    } else {
+        let raw = args
+            .source_path
+            .as_ref()
+            .expect("mutual exclusion guarantees source_path is Some here")
+            .clone();
+        // Try the path as supplied first (it may already be the canonical
+        // form ingest stored). Fall back to canonicalize-and-prefix-check
+        // when that misses, so users can pass relative paths from cwd.
+        match store::lookup_doc_id(&conn, &raw) {
+            Ok(Some(id)) => (id, raw),
+            Ok(None) => {
+                let candidate: std::path::PathBuf =
+                    if std::path::Path::new(&raw).is_absolute() {
+                        raw.clone().into()
+                    } else {
+                        root.join(&raw)
+                    };
+                let canonical = match std::fs::canonicalize(&candidate) {
+                    Ok(p) => p,
+                    Err(_) => {
+                        eprintln!("error: no document at source path: {raw}");
+                        return std::process::ExitCode::from(1);
+                    }
+                };
+                if !canonical.starts_with(root) {
+                    eprintln!(
+                        "error: source path must resolve under project root: {raw}"
+                    );
+                    return std::process::ExitCode::from(2);
+                }
+                let key = canonical.display().to_string();
+                match store::lookup_doc_id(&conn, &key) {
+                    Ok(Some(id)) => (id, key),
+                    Ok(None) => {
+                        eprintln!("error: no document at source path: {raw}");
+                        return std::process::ExitCode::from(1);
+                    }
+                    Err(e) => {
+                        eprintln!("error: page lookup failed: {e}");
+                        return std::process::ExitCode::from(1);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("error: page lookup failed: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        }
+    };
+
+    match store::get_page_by_id(&conn, doc_id, args.page) {
+        Ok(Some(rec)) => {
+            if args.json {
+                println!("{}", output::render_page_json(&rec));
+            } else {
+                print!("{}", output::render_page_human(&rec));
+            }
+            std::process::ExitCode::SUCCESS
+        }
+        Ok(None) => {
+            // Either page out of range OR a non-PDF document (no pages stored).
+            // page_count distinguishes the two for a more helpful message.
+            let total = store::page_count(&conn, doc_id).unwrap_or(0);
+            if total == 0 {
+                eprintln!(
+                    "error: document has no extracted pages (non-PDF source or pre-v2 ingest): {source_path_for_msg}"
+                );
+            } else {
+                eprintln!(
+                    "error: page {} out of range (document has {} page(s)): {}",
+                    args.page, total, source_path_for_msg
+                );
+            }
+            std::process::ExitCode::from(1)
+        }
+        Err(e) => {
+            eprintln!("error: page lookup failed: {e}");
+            std::process::ExitCode::from(1)
+        }
     }
 }
 

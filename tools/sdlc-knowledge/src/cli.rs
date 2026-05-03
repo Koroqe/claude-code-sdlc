@@ -125,6 +125,25 @@ pub struct DeleteArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct PageArgs {
+    /// Source path (positional). Mutually exclusive with `--by-id`. The path
+    /// is interpreted exactly as it appears in `documents.source_path` (i.e.
+    /// the canonicalized form ingest stored). Use `claudeknows list` to see
+    /// the indexed paths.
+    pub source_path: Option<String>,
+    /// Document id (mutually exclusive with positional `<source-path>`).
+    #[arg(long = "by-id")]
+    pub by_id: Option<i64>,
+    /// 1-indexed page number to fetch.
+    #[arg(long)]
+    pub page: i64,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Ingest a file or directory into the knowledge base.
@@ -137,6 +156,8 @@ pub enum Command {
     Status(StatusArgs),
     /// Delete a source by ID.
     Delete(DeleteArgs),
+    /// Fetch the full extracted text of a single PDF page.
+    Page(PageArgs),
 }
 
 #[derive(clap::Parser, Debug)]
