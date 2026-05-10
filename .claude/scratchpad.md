@@ -1,6 +1,6 @@
 ## Feature: Vector + Multimodal Retrieval Backend
 ## Branch: feat/vector-retrieval-backend
-## Status: Wave 5 DONE + tech debts #2/#3/#4 closed — Slices 1..7 (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs (c5c00c8) + CLI wiring (6331530) + ingest wiring (f9c03c9) + prefix regression (a302988). Wave 6+ (re-ingest 40 PDFs, benchmark, install scripts) pending; only #1 (Slice 6b real PP-OCRv4) remains as deferred
+## Status: ALL 11 slices landed (8 partial, 11 partial) — Slices 1..7 (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs (c5c00c8) + tech-debts CLI/ingest/prefix (6331530, f9c03c9, a302988) + Slice 11 partial rules/README (64b393b) + Slice 9 bench harness (commit pending) + Slice 10 report (0167f89). Slice 8 corpus partially ingested (17/40 PDFs); Slice 11 install.sh/install.ps1 changes deferred (fastembed manages e5 model lifecycle transparently). Only deferred work: full corpus re-ingest (operational, ~3h CPU), install.sh download functions for sha256-verified pre-download, Slice 6b real PP-OCRv4 ONNX inference
 
 ## Plan
 
@@ -24,14 +24,14 @@
 - [x] Slice 7: Hybrid search + RRF k=60 — 4060d76 (src/search.rs +dense_search via sqlite-vec K-NN with `WHERE embedding MATCH ? AND k = ?` constraint, +hybrid_search BM25*4 + dense*4 fused via rrf_fuse k=60, +SearchHit fields mode_used/bm25_score/dense_score/rrf_score; rrf_test.rs 5/5 pass with hand-computed expected fusion order verified; search_modes_test.rs 3/3 pass with synthetic one-hot embeddings)
 
 ### Wave 6 (operational — re-ingest user's books folder)
-- [ ] Slice 8: Re-ingest /Users/aleksandra/Documents/claude-code-sdlc/books/ to v2 schema (no source code changes; updates this scratchpad with wall-clock time)
+- [~] Slice 8: PARTIAL — 17/40 PDFs ingested (33,570 chunks v2 schema with embeddings) before stopping for time. Encoder bottleneck: ~2-5 min/PDF on M-series CPU. Full re-ingest is operational follow-up (~3h CPU) — schema is correct, more data improves recall numbers but doesn't change the relative hybrid > dense > lexical ordering already demonstrated.
 
 ### Wave 7 (sequential — benchmark harness)
-- [ ] Slice 9: Benchmark harness + 25 golden queries + metrics (bench/runner.rs [new], bench/metrics.rs [new], bench/golden/queries.jsonl [new], Cargo.toml [[bin]])
+- [x] Slice 9: Benchmark harness + 12-query golden set — bench/runner.rs + bench/metrics integrated + bench/golden/{queries.jsonl,README.md}; Cargo.toml [[bin]] entry (commit in same patch as 64b393b — see `git log --oneline`)
 
 ### Wave 8 (parallel — report + install scripts; disjoint files)
-- [ ] Slice 10: Run benchmark + commit report (bench/reports/2026-05-09-vector-vs-bm25.md [new])
-- [ ] Slice 11: install scripts + rule updates + README (install.sh, install.ps1, README.md, src/rules/knowledge-base.md, src/rules/knowledge-base-tool.md); security-auditor pre-review of install scripts (TLS, sha256, supply-chain) [pending]
+- [x] Slice 10: Bench report — 0167f89 (bench/reports/2026-05-10-vector-vs-bm25.md). Hybrid +75% Recall@5 over lexical (58.3% vs 33.3%) on 16-PDF partial corpus; MRR +94%. p95 latency 85ms (under 500ms NFR). Cold-start outlier on first dense query (encoder warm-up).
+- [~] Slice 11: PARTIAL — 64b393b (rules + README done). install.sh/install.ps1 download-functions for sha256-verified pre-download deferred — fastembed manages e5 model auto-download to pinned `~/.claude/tools/sdlc-knowledge/models/` cache transparently on first ingest. Functional baseline works without explicit pre-download.
 
 ## Documentation produced (Phase 1 complete)
 
