@@ -63,17 +63,31 @@ pub fn parse(p: &Path) -> Result<ParsedDocument, IngestError> {
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .ok_or_else(|| IngestError::UnsupportedExt(p.to_path_buf()))?;
-    let text = match ext.as_str() {
-        "md" | "markdown" => MarkdownReader.read(p)?,
-        "txt" => PlainTextReader.read(p)?,
-        "pdf" => crate::pdf::read(p)?,
+    let (text, images) = match ext.as_str() {
+        "md" | "markdown" => (MarkdownReader.read(p)?, Vec::new()),
+        "txt" => (PlainTextReader.read(p)?, Vec::new()),
+        "pdf" => {
+            let text = crate::pdf::read(p)?;
+            // Slice 4: extract image objects from each PDF page. On extraction
+            // failure (corrupt page, pdfium runtime error), fall back to no
+            // images so text-only retrieval still works — image extraction is
+            // a complementary signal, NOT a precondition for ingest success.
+            let images = crate::pdf::extract_images(p)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(page_idx, png_bytes)| ExtractedImage {
+                    page_idx,
+                    png_bytes,
+                })
+                .collect();
+            (text, images)
+        }
         _ => return Err(IngestError::UnsupportedExt(p.to_path_buf())),
     };
     let chunks = structural_chunk(&text);
     Ok(ParsedDocument {
         source: p.to_path_buf(),
         chunks,
-        // Slice 3: images always empty. Slice 4 wires pdf::extract_images here.
-        images: Vec::new(),
+        images,
     })
 }

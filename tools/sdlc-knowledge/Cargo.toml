@@ -32,6 +32,14 @@ serde_json = "1"
 # Hashing (content-hash dedupe in Slice 2)
 sha2 = "0.10"
 
+# Image encoding (Slice 4 of vector-retrieval-backend) — PNG encoding for
+# figures extracted from PDFs via pdfium-render's `PdfBitmap::as_image`.
+# pdfium-render itself depends on `image = 0.25` transitively (gated behind
+# its `image_latest` feature flag, default-on); pinning it here as a direct
+# dep makes `image::DynamicImage` and `image::ImageFormat::Png` importable
+# from our code without relying on the renamed `image_025` package alias.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # Error plumbing
 anyhow = "1"
 thiserror = "1"
