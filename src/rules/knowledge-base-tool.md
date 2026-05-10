@@ -171,7 +171,7 @@ The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` / `libpdfium.dll`
 
 ## What this tool is NOT
 
-- **NOT a vector database.** No embeddings, no semantic similarity. Queries match on lexical tokens. If a search returns weak results, reformulate with different terminology rather than trusting fuzzy semantic intent.
+- **Hybrid retrieval — BOTH lexical (BM25) AND dense (sqlite-vec) AND fused via RRF.** Iter-2 (vector-retrieval-backend, schema v2) added a `chunks_vec` virtual table populated with 384-dim e5-multilingual-small embeddings alongside the existing FTS5 `chunks_fts`. The default `claudeknows search` mode is `hybrid` (BM25 ⊕ dense via RRF k=60); `--mode lexical` preserves iter-1 BM25-only behavior; `--mode dense` runs pure semantic K-NN. Cross-lingual recall (RU↔EN), paraphrase robustness, and concept-level retrieval all work in `hybrid` / `dense` modes; `lexical` mode remains the regression-safe baseline for exact-keyword queries. **Fallback contract:** when the e5 model is missing OR the schema is at v1 (no chunks_vec), `hybrid`/`dense` automatically degrade to `lexical` with a stderr warning.
 - **NOT shared across projects.** Every project has its own isolated `<project>/.claude/knowledge/` directory, source folder, and index. There is no global corpus.
 - **NOT a replacement for reading the codebase.** Agents MUST still ground claims about THIS codebase by reading files via the Read tool. The knowledge base supplements with EXTERNAL domain knowledge.
 - **NOT a validation oracle.** Citation hits are evidence of what the source says, not proof the source is correct. The corpus quality is the user's responsibility — agents cite what is there, the user curates what gets indexed.

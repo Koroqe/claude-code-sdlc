@@ -34,7 +34,7 @@ was not registered.
 Five subcommands — invoke verbatim:
 
 - `claudeknows ingest <path> [--project-root <dir>] [--json]`
-- `claudeknows search <query> [--top-k 5] [--project-root <dir>] [--json]`
+- `claudeknows search <query> [--top-k 5] [--mode lexical|dense|hybrid] [--context N] [--project-root <dir>] [--json]`
 - `claudeknows list [--project-root <dir>] [--json]`
 - `claudeknows status [--project-root <dir>] [--json]`
 - `claudeknows delete <source-id> [--project-root <dir>] [--json]`
@@ -51,6 +51,18 @@ Typical agent query (the literal invocation referenced from per-agent
 ```
 claudeknows search "<query>" --top-k 5 --json
 ```
+
+The `--mode` flag (iter-2 vector-retrieval-backend) selects retrieval strategy:
+
+- `--mode lexical` — iter-1 BM25 baseline (FTS5 only); regression-safe for exact-keyword queries
+- `--mode dense` — pure semantic K-NN via sqlite-vec over 384-dim e5-multilingual-small embeddings
+- `--mode hybrid` — BM25 ⊕ dense fused via Reciprocal Rank Fusion with k=60 (Cormack et al. 2009); the **default mode**
+
+Hybrid is the recommended default — it captures both exact-keyword and semantic recall in a single ranking. Pure-lexical or pure-dense modes are useful for ablation analysis, regression-safety on a v1 corpus, or when one of the two backends is degraded.
+
+**Mode fallback contract.** When the e5 encoder model is unavailable OR the schema is at v1 (no `chunks_vec` virtual table), `--mode hybrid` and `--mode dense` automatically fall back to lexical retrieval with a stderr warning. The fallback is silent on stdout — the `mode_used` JSON field reflects the actual mode that produced each hit so agents can detect degraded-mode runs.
+
+The JSON output for non-lexical modes carries auxiliary score fields (`bm25_score`, `dense_score`, `rrf_score`, `mode_used`) alongside the canonical `score`. Lexical mode emits `score` (negated BM25, larger=better) and omits the dense/RRF fields.
 
 ## Citation format
 
