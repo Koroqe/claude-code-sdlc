@@ -543,6 +543,26 @@ Register-BashAllowlist
 Register-ReleaseBashAllowlist
 Install-PdfiumBinary
 
+# Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
+# encoder so the first `claudeknows ingest` / `claudeknows search --mode hybrid`
+# doesn't pay a ~30 s cold-start model-download stall. Idempotent (no-op
+# when model is already cached). Network failure is a warning, not a
+# fatal error — fastembed will lazy-download on first real use.
+$KnowledgeExe = Join-Path $ClaudeDir "tools\sdlc-knowledge\sdlc-knowledge.exe"
+if (Test-Path $KnowledgeExe) {
+    Write-Info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
+    try {
+        & $KnowledgeExe warmup --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "encoder ready (cached at $env:USERPROFILE\.claude\tools\sdlc-knowledge\models\)"
+        } else {
+            Write-Warn "encoder pre-load failed; fastembed will retry on first ingest"
+        }
+    } catch {
+        Write-Warn "encoder pre-load failed ($($_.Exception.Message)); fastembed will retry on first ingest"
+    }
+}
+
 if ($InitProject) {
     Initialize-Project
 }

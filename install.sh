@@ -1023,6 +1023,20 @@ register_bash_allowlist
 register_release_bash_allowlist
 install_pdfium_binary
 
+# Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
+# encoder so the first `claudeknows ingest` / `claudeknows search --mode hybrid`
+# doesn't pay a 30 s cold-start model-download stall. Idempotent (no-op
+# when model is already cached). Network failure is a warning, not a
+# fatal error — fastembed will lazy-download on first real use.
+if [ -x "$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge" ]; then
+  log_info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
+  if "$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge" warmup --quiet 2>&1; then
+    log_ok "encoder ready (cached at ~/.claude/tools/sdlc-knowledge/models/)"
+  else
+    log_warn "encoder pre-load failed; fastembed will retry on first ingest"
+  fi
+fi
+
 if [ "$INIT_PROJECT" = true ]; then
   scaffold_project
 fi
