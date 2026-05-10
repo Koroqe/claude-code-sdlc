@@ -1,6 +1,6 @@
 ## Feature: Vector + Multimodal Retrieval Backend
 ## Branch: feat/vector-retrieval-backend
-## Status: Wave 5 DONE — Slices 1..7 committed (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs c5c00c8. Wave 6+ (re-ingest, benchmark, install scripts) pending — needs real model download + manual golden-query authoring
+## Status: Wave 5 DONE + tech debts #2/#3/#4 closed — Slices 1..7 (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs (c5c00c8) + CLI wiring (6331530) + ingest wiring (f9c03c9) + prefix regression (a302988). Wave 6+ (re-ingest 40 PDFs, benchmark, install scripts) pending; only #1 (Slice 6b real PP-OCRv4) remains as deferred
 
 ## Plan
 
@@ -66,6 +66,13 @@
 - Plan persisted to `<project>/.claude/plan.md` (canonical) and `<project>/docs/design/vector-retrieval-backend.md` (durable design doc)
 - changelog-writer post-bootstrap hook ran successfully — added entry to CHANGELOG.md `[Unreleased]`
 - Pre-existing untracked `codefather.dev/` and `tools/sdlc-knowledge/.cargo/` directories left as-is
+
+## Tech-debt closure status (post-Slice-7)
+
+- [x] #2 — runtime prefix regression test (a302988) — passage vs query embedding cos<0.99 invariant catches fastembed auto-prepend drift
+- [x] #3 — CLI wiring `--mode lexical|dense|hybrid` (6331530) — usable end-to-end with graceful fallback
+- [x] #4 — production ingest writes chunks_vec embeddings (f9c03c9) — fresh `claudeknows ingest` populates dense index
+- [ ] #1 — Slice 6b real PP-OCRv4 ONNX inference (deferred — multi-day focused session). Current placeholder fallback works; image chunks remain dense-searchable at low recall via `[image: figure N from <doc>]` text
 
 ## Archive
 
