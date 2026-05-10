@@ -34,12 +34,17 @@ was not registered.
 Six subcommands — invoke verbatim:
 
 - `claudeknows ingest <path> [--project-root <dir>] [--json]`
-- `claudeknows search <query> [--top-k 5] [--context N] [--project-root <dir>] [--json]`
+- `claudeknows search <query> [--top-k 5] [--mode lexical|dense|hybrid] [--context N] [--project-root <dir>] [--json]`
 - `claudeknows list [--project-root <dir>] [--json]`
 - `claudeknows status [--project-root <dir>] [--json]`
 - `claudeknows delete <source-id> [--project-root <dir>] [--json]`
-- `claudeknows page <source-path> --page <N> [--project-root <dir>] [--json]`
-  OR `claudeknows page --by-id <ID> --page <N> [--project-root <dir>] [--json]`
+- `claudeknows page <doc> <N> [--range R] [--project-root <dir>] [--json]`
+  where `<doc>` is either an integer `documents.id` (from `list --json`) OR a
+  basename matching `documents.source_path`. `--range R` returns `[N-R..N+R]`
+  (default 0 = single page; max 20).
+- `claudeknows reindex-pages [--doc <id-or-name>] [--project-root <dir>] [--json]`
+  backfills the `pages` table for already-ingested PDFs without touching
+  chunks_fts / chunks_vec — useful after upgrading from a pre-v3 index.
 
 The `--project-root <dir>` flag pins the index location to a specific project;
 omitted, the binary resolves the project root relative to the current working
@@ -54,7 +59,19 @@ Typical agent query (the literal invocation referenced from per-agent
 claudeknows search "<query>" --top-k 5 --json
 ```
 
-### Search JSON shape (schema v2)
+The `--mode` flag (iter-2 vector-retrieval-backend) selects retrieval strategy:
+
+- `--mode lexical` — iter-1 BM25 baseline (FTS5 only); regression-safe for exact-keyword queries
+- `--mode dense` — pure semantic K-NN via sqlite-vec over 384-dim e5-multilingual-small embeddings
+- `--mode hybrid` — BM25 ⊕ dense fused via Reciprocal Rank Fusion with k=60 (Cormack et al. 2009); the **default mode**
+
+Hybrid is the recommended default — it captures both exact-keyword and semantic recall in a single ranking. Pure-lexical or pure-dense modes are useful for ablation analysis, regression-safety on a v1 corpus, or when one of the two backends is degraded.
+
+**Mode fallback contract.** When the e5 encoder model is unavailable OR the schema is at v1 (no `chunks_vec` virtual table), `--mode hybrid` and `--mode dense` automatically fall back to lexical retrieval with a stderr warning. The fallback is silent on stdout — the `mode_used` JSON field reflects the actual mode that produced each hit so agents can detect degraded-mode runs.
+
+**Distance metric.** `chunks_vec` uses sqlite-vec's default L2 (Euclidean) distance. Because the e5-multilingual-small encoder produces L2-normalized vectors, L2 ranking is mathematically identical to cosine-similarity ranking — the formula is `cos = 1 − L2² / 2`. The `dense_score` field shows `−L2_distance` (negated so larger=better, matching the BM25 convention); a `dense_score = −0.43` corresponds to cosine similarity ≈ 0.91. Agents reading this field do NOT need to convert; ranking order is what matters and is preserved across the L2/cosine equivalence.
+
+### Search JSON shape (schema v3)
 
 Each hit returned by `search --json` is an object of the form:
 
@@ -68,34 +85,39 @@ Each hit returned by `search --json` is an object of the form:
   "snippet": "<FTS5-generated snippet around the matching term>",
   "page_start": <1-indexed PDF page where the chunk text begins; OPTIONAL>,
   "page_end":   <1-indexed PDF page where the chunk text ends;   OPTIONAL>,
-  "context":    "<concatenated ±N neighbor chunks; OPTIONAL>"
+  "context":    "<concatenated ±N neighbor chunks; OPTIONAL>",
+  "mode_used":  "<lexical | dense | hybrid; OPTIONAL — present when search ran in non-lexical mode>",
+  "bm25_score": <float; OPTIONAL — lexical/hybrid only>,
+  "dense_score": <float; OPTIONAL — dense/hybrid only>,
+  "rrf_score": <float; OPTIONAL — hybrid only>
 }
 ```
 
 `page_start` / `page_end` are present ONLY for chunks ingested from PDF
-sources under schema v2 or later. For markdown / plain-text sources both
+sources under schema v3 or later. For markdown / plain-text sources both
 fields are omitted (pagination is undefined). For chunks ingested before
-schema v2 (legacy index re-using a pre-v2 DB without re-ingesting the
-source) both fields are also omitted — agents handle this gracefully by
-falling back to a chunk-id citation when `page_start` is absent.
+schema v3 both fields are also omitted — agents handle this gracefully
+by falling back to a chunk-id citation when `page_start` is absent.
 
-For PDFs the chunker is per-page, so `page_start == page_end`. The pair is
-kept open in the schema for a future cross-page chunker.
+For PDFs the chunker is per-page, so `page_start == page_end`. The pair
+is kept open in the schema for a future cross-page chunker.
 
 ### `page` subcommand — full-page text retrieval
 
 When a search hit cites a specific PDF page (`page_start: 127`), agents
-follow up with `page --by-id <doc_id> --page <page_start>` to fetch the
-full extracted text of that page. This is the one-step pivot from "I see a
-relevant snippet on page 127" to "show me the full page so I can quote /
-analyse the surrounding paragraph."
-
-Two invocation forms (mutually exclusive):
+follow up with `page <doc_id> 127` (or `page "<basename>.pdf" 127`) to
+fetch the full extracted text of that page — the one-step pivot from "I
+see a relevant snippet on page 127" to "show me the full page so I can
+quote / analyse the surrounding paragraph."
 
 ```
-claudeknows page --by-id <doc_id> --page <N> --json     # by integer id (preferred — comes verbatim from search hit)
-claudeknows page <source-path>     --page <N> --json    # by source path (positional)
+claudeknows page <doc> <N> [--range R] --json
 ```
+
+`<doc>` accepts either an integer `documents.id` (verbatim from a search
+hit's `doc_id`) OR a string matching `documents.source_path` by basename.
+`--range R` widens the response to `[N-R..N+R]` (max R=20) so the model
+can read a small page-spread without issuing R+1 separate calls.
 
 JSON output shape:
 
@@ -103,21 +125,25 @@ JSON output shape:
 {
   "doc_id": <integer>,
   "source_path": "<string>",
-  "page_no": <1-indexed integer>,
-  "text": "<full extracted text of the page>"
+  "total_pages": <integer or null — derived from MAX(page_no) over the pages table>,
+  "requested_page": <1-indexed integer>,
+  "range": <non-negative integer>,
+  "pages": [
+    { "page_no": <1-indexed integer>, "text": "<full extracted text of the page>" },
+    …
+  ]
 }
 ```
 
 Exit codes:
 
 - `0` — page found, JSON / human text written to stdout.
-- `1` — document not found, page out of range, OR document has no extracted
-  pages (non-PDF source: markdown / plain-text never have `pages` rows).
-- `2` — malformed CLI: both `--by-id` and `<source-path>` given, neither
-  given, or `--page < 1`.
+- `1` — document not found, page out of range, OR pages table not yet
+  backfilled (run `claudeknows reindex-pages --doc <id-or-name>` to fix).
 
-Agents MUST NOT call `page` with `--page 0` or any negative number — the
-schema is 1-indexed and the CLI rejects out-of-range values with exit 2.
+Agents MUST NOT call `page` with `<N>` ≤ 0 — the schema is 1-indexed and
+the CLI rejects out-of-range values with the literal stderr line
+`error: page number out of range`.
 
 ## Citation format
 

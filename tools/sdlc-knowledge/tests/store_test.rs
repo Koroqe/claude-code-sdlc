@@ -54,13 +54,17 @@ fn pragma_journal_mode_is_wal() {
 }
 
 #[test]
-fn schema_version_is_two() {
-    // Iter-2: page-tracking migration steps freshly-opened DBs to v2.
-    let (_tmp, _path, conn) = open_temp_db();
+fn schema_version_is_three_on_fresh_v2_db() {
+    // Iter-2 Slice 12: open_or_init_v2 applies SCHEMA_V1 + V2 + V3 deltas
+    // and stamps version=3 on a fresh DB (sqlite-vec + page columns + pages
+    // table all installed in one shot).
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let db_path = tmp.path().join("index.db");
+    let conn = store::open_or_init_v2(&db_path).expect("open_or_init_v2");
     let v: i64 = conn
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("read schema_version");
-    assert_eq!(v, 2);
+    assert_eq!(v, 3);
 }
 
 #[test]

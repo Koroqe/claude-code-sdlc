@@ -163,6 +163,10 @@ mod tests {
             page_start: None,
             page_end: None,
             context: None,
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let s = render_search_json(&[hit]);
         for f in ["source", "chunk_id", "ord", "score", "snippet", "doc_id"] {
@@ -186,6 +190,10 @@ mod tests {
             page_start: None,
             page_end: None,
             context: Some("para1\npara2\npara3".to_string()),
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let s = render_search_json(&[hit]);
         assert!(s.contains("\"context\""), "context field must appear: {s}");
@@ -204,6 +212,10 @@ mod tests {
             page_start: Some(17),
             page_end: Some(17),
             context: None,
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let s = render_search_json(&[hit]);
         assert!(s.contains("\"page_start\":17"), "page_start must serialize: {s}");
@@ -223,6 +235,10 @@ mod tests {
             page_start: Some(17),
             page_end: Some(17),
             context: None,
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let out = render_search_human(&[hit]);
         assert!(out.contains("[page 17]"), "human output must show page label: {out}");

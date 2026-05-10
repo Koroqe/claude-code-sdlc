@@ -12,9 +12,31 @@
 //! `validate_schema` confirms the four-table shape and `schema_version=1`.
 
 use std::path::Path;
+use std::sync::Once;
 
 use rusqlite::Connection;
 use thiserror::Error;
+
+/// Process-wide once-flag for sqlite-vec extension registration. The crate
+/// exposes a C entrypoint `sqlite3_vec_init` and we register it as a SQLite
+/// auto-extension via rusqlite's FFI. After registration EVERY new Connection
+/// opened in this process automatically loads the vec0 virtual table builtin.
+/// This must run BEFORE the first Connection::open in the process.
+static SQLITE_VEC_INIT: Once = Once::new();
+
+fn ensure_sqlite_vec_registered() {
+    SQLITE_VEC_INIT.call_once(|| {
+        // SAFETY: sqlite_vec::sqlite3_vec_init is the C entrypoint exported
+        // by libsqlite_vec0. Transmuting to the auto-extension function
+        // pointer signature is the documented usage pattern from the
+        // sqlite-vec crate's own integration tests (sqlite-vec 0.1.9).
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+    });
+}
 
 use crate::output::{DocumentSummary, StatusInfo};
 
@@ -81,12 +103,64 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
 END;
 "#;
 
-/// V2 schema additions — applied by `migrations::run_migrations` when stepping
-/// from any prior version up to v2. Each statement is idempotent: the page
-/// columns are added via `ALTER TABLE ... ADD COLUMN` guarded by a
-/// `pragma_table_info` probe in `migrations.rs`, and the `pages` table uses
-/// `IF NOT EXISTS`.
-pub(crate) const SCHEMA_V2_PAGES_TABLE: &str = r#"
+/// Open (or create) the SQLite database at `db_path`, ensure parent directories exist,
+/// flip journal_mode to WAL, and apply the v1 schema. Idempotent — safe to call on
+/// an already-initialized database.
+pub fn open_or_init(db_path: &Path) -> Result<Connection, StoreError> {
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    // Register sqlite-vec auto-extension here too (Slice 7 CLI-wiring fix):
+    // the extension is process-global once registered, and registering on the
+    // v1 path means hybrid search on a v2 DB opened via this entry point still
+    // sees vec0. v1 DBs simply won't have chunks_vec — vec0 SQL fails cleanly
+    // and the search fallback to lexical fires per design.
+    ensure_sqlite_vec_registered();
+    let conn = Connection::open(db_path)?;
+    // WAL is per-database persistent so this only matters first-run, but the call is
+    // idempotent and very cheap.
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.execute_batch(SCHEMA_V1)?;
+    Ok(conn)
+}
+
+/// V2 schema delta (Slice 2 of vector-retrieval-backend). Applied on top of
+/// `SCHEMA_V1` for fresh DBs. Existing v1 DBs go through
+/// `migrations::migrate_v1_to_v2` which is destructive (drop+recreate) per
+/// architect OQ-2 resolution.
+///
+/// Adds two columns to `chunks`:
+///   - `type` — 'text' | 'table' | 'image'; defaults to 'text' for legacy rows
+///   - `image_bytes` — PNG bytes BLOB for figure chunks (NULL for text)
+///
+/// Adds `chunks_vec` virtual table backed by sqlite-vec — vec0 with
+/// `embedding float[384]` for e5-multilingual-small (Slice 5 populates it).
+///
+/// SQL discipline: static `&str` literal, no user data interpolation.
+const SCHEMA_V2_DELTA: &str = r#"
+ALTER TABLE chunks ADD COLUMN type TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE chunks ADD COLUMN image_bytes BLOB;
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);
+"#;
+
+/// V3 schema delta — page-level addressing. Additive and non-destructive:
+///   - `chunks.page_start` / `page_end` — 1-indexed PDF page each chunk's
+///     text was sourced from. NULL for legacy v2 chunks; freshly-ingested
+///     PDFs populate them via `chunk_pages` in `ingest.rs`.
+///   - `pages(doc_id, page_no, text)` table — raw per-page text exposed
+///     to the LLM via `claudeknows page <doc> <page>` so it can navigate
+///     the source book the same way a human flips pages.
+///
+/// Page numbering is **pdfium 1-indexed** — independent of any "printed"
+/// page numbering the document might use (Roman for preface, Arabic for
+/// body). Out-of-range page lookups exit 1 with the literal stderr line
+/// `error: page number out of range`.
+///
+/// SQL discipline: static `&str` literal, no user-data interpolation.
+const SCHEMA_V3_DELTA: &str = r#"
+ALTER TABLE chunks ADD COLUMN page_start INTEGER;
+ALTER TABLE chunks ADD COLUMN page_end INTEGER;
 CREATE TABLE IF NOT EXISTS pages (
   id INTEGER PRIMARY KEY,
   doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -97,19 +171,96 @@ CREATE TABLE IF NOT EXISTS pages (
 CREATE INDEX IF NOT EXISTS pages_doc_page_idx ON pages(doc_id, page_no);
 "#;
 
-/// Open (or create) the SQLite database at `db_path`, ensure parent directories exist,
-/// flip journal_mode to WAL, and apply the v1 schema. Idempotent — safe to call on
-/// an already-initialized database.
-pub fn open_or_init(db_path: &Path) -> Result<Connection, StoreError> {
+/// Open (or create) the SQLite database at `db_path` with v2 schema enabled.
+/// Loads the sqlite-vec extension at connection-open time (architect OQ-2
+/// resolution: `sqlite_vec::load(&conn)` registers vec0 without enabling
+/// rusqlite's `load_extension` feature, preserving the security posture).
+///
+/// Migration semantics for existing DBs:
+///   - Fresh DB (schema_version absent): apply SCHEMA_V1 + SCHEMA_V2_DELTA, stamp version=2
+///   - schema_version=1: caller MUST run `migrations::migrate_v1_to_v2` (destructive re-ingest)
+///   - schema_version=2: idempotent no-op (CREATE ... IF NOT EXISTS clauses)
+///
+/// Returns the connection on success. Caller is responsible for invoking
+/// migration if the DB is at v1 and needs upgrading.
+pub fn open_or_init_v2(db_path: &Path) -> Result<Connection, StoreError> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let conn = Connection::open(db_path)?;
-    // WAL is per-database persistent so this only matters first-run, but the call is
-    // idempotent and very cheap.
+    // Register sqlite-vec auto-extension once per process BEFORE Connection::open
+    // so the new connection picks up vec0 virtual table builtin + vec_distance_cosine
+    // SQL function. Per architect OQ-2 this uses sqlite3_auto_extension (NOT
+    // rusqlite's `load_extension` feature, which stays OFF — security posture).
+    ensure_sqlite_vec_registered();
+    let mut conn = Connection::open(db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA_V1)?;
+    // Apply v2 delta only on fresh DBs (no schema_version row) OR when
+    // schema_version=2 (idempotent CREATE IF NOT EXISTS for chunks_vec; the
+    // ALTER TABLE statements would error on re-run for v2-already DBs, so we
+    // gate them via current_version).
+    let v: i64 = conn
+        .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+        .unwrap_or(0);
+    if v == 0 {
+        // Fresh DB — apply v2 + v3 deltas and stamp version=3.
+        conn.execute_batch(SCHEMA_V2_DELTA)?;
+        conn.execute_batch(SCHEMA_V3_DELTA)?;
+        conn.execute(
+            "INSERT INTO schema_version(version) VALUES (?1)",
+            rusqlite::params![3i64],
+        )?;
+    } else if v == 2 {
+        // v2 → v3 progression. Additive + non-destructive: ALTER TABLE adds
+        // the page columns, CREATE TABLE IF NOT EXISTS adds the pages table.
+        // Existing chunks keep NULL page_start/page_end until backfilled
+        // (pages table is empty until `claudeknows reindex-pages` runs).
+        // Wrap in a transaction so a partially-failed v2→v3 rolls back.
+        let tx = conn.transaction()?;
+        tx.execute_batch(SCHEMA_V3_DELTA)?;
+        tx.execute(
+            "UPDATE schema_version SET version = ?1",
+            rusqlite::params![3i64],
+        )?;
+        tx.commit()?;
+    } else if v == 3 {
+        // Already at v3 — ensure forward-compat objects exist (CREATE IF NOT
+        // EXISTS for both vec0 and pages so a corruption-free re-open is
+        // idempotent).
+        //
+        // Legacy v3 shape (Slice 12 first iteration before merge with main):
+        // pages had `page_num` column instead of `page_no`. Detect that shape
+        // and rename the column in-place — SQLite 3.25+ supports
+        // `ALTER TABLE ... RENAME COLUMN`. The data (doc_id, page_text) is
+        // schema-equivalent so the rename is a no-data-loss operation.
+        let has_page_num: bool = conn
+            .query_row(
+                "SELECT 1 FROM pragma_table_info('pages') WHERE name = 'page_num'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        if has_page_num {
+            conn.execute_batch(
+                "ALTER TABLE pages RENAME COLUMN page_num TO page_no; \
+                 DROP INDEX IF EXISTS idx_pages_doc;",
+            )?;
+        }
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]); \
+             CREATE TABLE IF NOT EXISTS pages ( \
+               id INTEGER PRIMARY KEY, \
+               doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, \
+               page_no INTEGER NOT NULL, \
+               text TEXT NOT NULL, \
+               UNIQUE(doc_id, page_no) \
+             ); \
+             CREATE INDEX IF NOT EXISTS pages_doc_page_idx ON pages(doc_id, page_no);",
+        )?;
+    }
+    // v == 1: caller runs migrate_v1_to_v2 explicitly. We don't auto-migrate
+    // here because migration is destructive (architect-resolved).
     Ok(conn)
 }
 
@@ -170,10 +321,11 @@ fn validate_schema_inner(conn: &Connection) -> Result<(), rusqlite::Error> {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
-    // schema_version row exists and is in 1..=2. v1 = original schema; v2 = page
-    // tracking (chunks.page_start/page_end + pages table) added by migrations.
+    // schema_version row exists and is in 1..=3 (forward-compat through v3
+    // page-level addressing — chunks.page_start/page_end + pages table +
+    // documents.total_pages).
     let v: i64 = conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
-    if !(1..=2).contains(&v) {
+    if !(1..=3).contains(&v) {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
@@ -498,6 +650,93 @@ pub fn delete_by_id_with_summary(
         source_path,
         chunks_removed,
     }))
+}
+
+// ===========================================================================
+// Schema v3 — page-range fetch helpers (Slice 12 of vector-retrieval-backend).
+// Built on top of the `pages` table populated by `replace_pages` (above) which
+// is the canonical insert path; these helpers only READ.
+// ===========================================================================
+
+/// One page of raw extracted text from a source document. `page_no` is
+/// 1-indexed per the pdfium convention (pages numbered 1..N where N is the
+/// PDF's reported page count, independent of any "printed" numbering like
+/// Roman numerals for preface).
+#[derive(Debug, Clone)]
+pub struct PageRow {
+    pub page_no: i64,
+    pub text: String,
+}
+
+/// Resolve a user-facing doc identifier to `(documents.id, source_path,
+/// total_pages)`. Accepts either an integer id (parsed as `documents.id`
+/// directly) or a basename string matched against `documents.source_path` so
+/// the LLM can request pages from a specific book by its printed filename.
+/// `total_pages` is derived via `MAX(page_no) FROM pages` since the schema
+/// keeps it on the pages table rather than denormalizing onto `documents`.
+pub fn resolve_doc_id(
+    conn: &Connection,
+    identifier: &str,
+) -> Result<Option<(i64, String, Option<i64>)>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    let row: Option<(i64, String)> = if let Ok(id) = identifier.parse::<i64>() {
+        conn.query_row(
+            "SELECT id, source_path FROM documents WHERE id = ?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+    } else {
+        conn.query_row(
+            "SELECT id, source_path FROM documents \
+             WHERE source_path = ?1 OR source_path LIKE ?2 \
+             ORDER BY ingested_at DESC LIMIT 1",
+            rusqlite::params![identifier, format!("%/{identifier}")],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+    };
+    if let Some((doc_id, source_path)) = row {
+        let total: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(page_no) FROM pages WHERE doc_id = ?1",
+                rusqlite::params![doc_id],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(Some((doc_id, source_path, total)))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Fetch a page range `[lo..=hi]` (1-indexed, inclusive). Empty result means
+/// no page in that range has been populated for the document (either the
+/// range is out of bounds OR the document has no `pages` rows yet — caller
+/// disambiguates via `resolve_doc_id`'s `total_pages`).
+pub fn fetch_page_range(
+    conn: &Connection,
+    doc_id: i64,
+    lo: i64,
+    hi: i64,
+) -> Result<Vec<PageRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT page_no, text FROM pages \
+         WHERE doc_id = ?1 AND page_no BETWEEN ?2 AND ?3 \
+         ORDER BY page_no",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![doc_id, lo, hi], |r| {
+        Ok(PageRow {
+            page_no: r.get(0)?,
+            text: r.get(1)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
 }
 
 /// Delete a documents row by exact `source_path` string. Returns rows deleted.

@@ -275,3 +275,84 @@ fn check_byte_budget(p: PathBuf, text: String) -> Result<String, IngestError> {
 pub fn check_byte_budget_for_test(p: PathBuf, text: String) -> Result<String, IngestError> {
     check_byte_budget(p, text)
 }
+
+/// Extract all image objects from a PDF as `(page_idx, png_bytes)` tuples
+/// (Slice 4 of vector-retrieval-backend).
+///
+/// Walks every page, iterates `PdfPage::objects()` (via the
+/// `PdfPageObjectsCommon` trait from pdfium-render's prelude), filters to
+/// `PdfPageObjectType::Image`, calls `get_processed_bitmap` to render each
+/// image with applied transforms, converts to a `DynamicImage`, and encodes
+/// to PNG bytes via the `image` crate.
+///
+/// Errors are mapped to `IngestError::PdfDecode` so callers (parser.rs,
+/// tests) can use the same error path as `pdf::read`. A panic from inside
+/// pdfium-render is caught by the same `catch_unwind` boundary used in
+/// `extract_via_closure` — this function uses the same singleton pdfium
+/// binding through the `PDFIUM` mutex so initialization is deferred and
+/// reused across calls.
+///
+/// Returns an empty Vec for PDFs with no image objects (e.g., text-only
+/// papers). The function does NOT panic on missing pdfium dynamic library;
+/// instead it surfaces `IngestError::PdfDecode` per the existing pdfium
+/// fallback contract.
+pub fn extract_images(p: &Path) -> Result<Vec<(usize, Vec<u8>)>, IngestError> {
+    use pdfium_render::prelude::PdfPageObjectsCommon;
+
+    let bytes = std::fs::read(p)
+        .map_err(|e| IngestError::PdfDecode(p.to_path_buf(), format!("read: {e}")))?;
+    let p_buf = p.to_path_buf();
+
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<Vec<(usize, Vec<u8>)>, String> {
+        let mut guard = PDFIUM
+            .lock()
+            .map_err(|_| "pdfium singleton mutex poisoned".to_string())?;
+        if guard.is_none() {
+            let lib_path = resolve_pdfium_lib_path()?;
+            let bindings = pdfium_render::prelude::Pdfium::bind_to_library(&lib_path)
+                .map_err(|e| format!("pdfium bind_to_library: {e}"))?;
+            *guard = Some(pdfium_render::prelude::Pdfium::new(bindings));
+        }
+        let pdfium = guard
+            .as_ref()
+            .expect("pdfium singleton initialized just above");
+        let doc = pdfium
+            .load_pdf_from_byte_slice(&bytes, None)
+            .map_err(|e| format!("pdfium load_pdf: {e}"))?;
+        let mut out: Vec<(usize, Vec<u8>)> = Vec::new();
+        for (page_idx, page) in doc.pages().iter().enumerate() {
+            for object in page.objects().iter() {
+                if let Some(image_obj) = object.as_image_object() {
+                    let bitmap = match image_obj.get_processed_bitmap(&doc) {
+                        Ok(b) => b,
+                        Err(_e) => continue, // skip unrenderable images
+                    };
+                    let dyn_image = match bitmap.as_image() {
+                        Ok(d) => d,
+                        Err(_e) => continue,
+                    };
+                    let mut buf: Vec<u8> = Vec::new();
+                    if dyn_image
+                        .write_to(
+                            &mut std::io::Cursor::new(&mut buf),
+                            image::ImageFormat::Png,
+                        )
+                        .is_err()
+                    {
+                        continue; // skip on PNG-encode failure
+                    }
+                    out.push((page_idx, buf));
+                }
+            }
+        }
+        Ok(out)
+    }));
+    match result {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(msg)) => Err(IngestError::PdfDecode(p_buf, msg)),
+        Err(_) => Err(IngestError::PdfDecode(
+            p_buf,
+            "panic during pdfium-render image extraction".to_string(),
+        )),
+    }
+}

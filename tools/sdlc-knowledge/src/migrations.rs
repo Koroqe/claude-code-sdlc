@@ -1,18 +1,31 @@
-//! Schema migrations.
-//!
-//! v0 → v1: stamp the `schema_version` row at 1 (schema body created by
-//!          `store::open_or_init`).
-//! v1 → v2: add `chunks.page_start` / `chunks.page_end` (nullable INTEGER) and
-//!          create the `pages` table for full-page PDF text. Existing chunks
-//!          keep `page_start = page_end = NULL` until the document is
-//!          re-ingested — this is fully backward-compatible (search results
-//!          for legacy chunks just lack page citations).
+//! Schema migrations. Iter-1 has a single v1 migration; iter-2
+//! (vector-retrieval-backend Slice 2) adds the v1→v2 destructive re-ingest
+//! path per architect OQ-2 resolution. v3 (Slice 12 page-level addressing)
+//! is applied additively inside `store::open_or_init_v2` rather than via a
+//! separate migration step, since the only structural change is two
+//! `ALTER TABLE chunks` columns + a new `pages` table.
 //!
 //! SQL discipline: ONLY ?N parameterized statements; never format!/+ for user data.
+
+use std::io::{self, BufRead, IsTerminal, Write};
 
 use rusqlite::Connection;
 
 use crate::store::StoreError;
+
+/// Outcome of v1→v2 migration attempt. Communicated to the caller (CLI / tests)
+/// so they can print the right hint and exit code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationOutcome {
+    /// DB had no schema_version row (fresh) — caller initializes v2 directly.
+    Fresh,
+    /// DB is already at v2 — no-op.
+    AlreadyV2,
+    /// v1 → v2 migration completed (drop+recreate); user must re-ingest.
+    Migrated,
+    /// v1 detected but user declined or non-TTY without env-var override.
+    Declined,
+}
 
 /// Read the current `schema_version` row (returns 0 if the row is missing).
 pub fn current_version(conn: &Connection) -> u32 {
@@ -35,44 +48,65 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), StoreError> {
             )?;
         }
     }
-    if current_version(conn) < 2 {
-        apply_v2(conn)?;
-    }
     Ok(())
 }
 
-/// v1 → v2 step: add nullable page columns to `chunks` (idempotent via
-/// `pragma_table_info` probe), create the `pages` table, bump schema_version.
-fn apply_v2(conn: &mut Connection) -> Result<(), StoreError> {
-    if !column_exists(conn, "chunks", "page_start")? {
-        // Static SQL — no user data interpolated. ALTER TABLE ... ADD COLUMN
-        // is the SQLite-supported way to extend an existing table.
-        conn.execute("ALTER TABLE chunks ADD COLUMN page_start INTEGER", [])?;
+/// Migrate a v1 schema DB to v2 (Slice 2 of vector-retrieval-backend).
+/// Architect OQ-2 resolution: destructive — drop all tables + recreate via
+/// SCHEMA_V1 + SCHEMA_V2_DELTA. User must re-run `claudeknows ingest`
+/// afterwards to repopulate chunks + embeddings.
+///
+/// Confirmation flow:
+/// - `CLAUDEKNOWS_AUTO_REINGEST=1` env var → skip prompt, auto-confirm
+/// - TTY interactive → prompt `Re-ingest required for v2 schema. Proceed? [y/N] `;
+///   only `y` / `yes` (case-insensitive) confirms, default-deny otherwise
+/// - non-TTY without env var → default-deny (returns `Declined`)
+pub fn migrate_v1_to_v2(conn: &mut Connection) -> Result<MigrationOutcome, StoreError> {
+    let v = current_version(conn);
+    if v == 0 {
+        return Ok(MigrationOutcome::Fresh);
     }
-    if !column_exists(conn, "chunks", "page_end")? {
-        conn.execute("ALTER TABLE chunks ADD COLUMN page_end INTEGER", [])?;
+    if v >= 2 {
+        return Ok(MigrationOutcome::AlreadyV2);
     }
-    conn.execute_batch(crate::store::SCHEMA_V2_PAGES_TABLE)?;
-    // Bump schema_version → 2. There's exactly one row in schema_version
-    // (FR-1.6 / iter-1 invariant); UPDATE without WHERE is fine.
-    conn.execute(
-        "UPDATE schema_version SET version = ?1",
-        rusqlite::params![2i64],
+    // v == 1: needs migration
+    if !confirm_destructive_migration() {
+        return Ok(MigrationOutcome::Declined);
+    }
+    // Drop all data tables. chunks_fts triggers cascade-drop with chunks.
+    // Drop schema_version last so a partially-failed migration leaves the
+    // version row intact for retry.
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS chunks_fts; \
+         DROP TRIGGER IF EXISTS chunks_ai; \
+         DROP TRIGGER IF EXISTS chunks_ad; \
+         DROP TRIGGER IF EXISTS chunks_au; \
+         DROP TABLE IF EXISTS chunks; \
+         DROP TABLE IF EXISTS documents;",
     )?;
-    Ok(())
+    // Reset schema_version row so the next open_or_init_v2 sees a fresh DB
+    // and applies SCHEMA_V1 + SCHEMA_V2_DELTA + SCHEMA_V3_DELTA and stamps version=3.
+    conn.execute("DELETE FROM schema_version", [])?;
+    Ok(MigrationOutcome::Migrated)
 }
 
-fn column_exists(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-) -> Result<bool, rusqlite::Error> {
-    // pragma_table_info is itself a virtual table — its name is part of the
-    // SQL grammar, not user-controlled, so referencing it via a static literal
-    // is correct. The user-controlled `table` and `column` go through `?N`.
-    let mut stmt = conn.prepare(
-        "SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2",
-    )?;
-    let mut rows = stmt.query(rusqlite::params![table, column])?;
-    Ok(rows.next()?.is_some())
+/// User confirmation gate for destructive migration. Honors
+/// `CLAUDEKNOWS_AUTO_REINGEST=1` for headless runs.
+fn confirm_destructive_migration() -> bool {
+    if std::env::var("CLAUDEKNOWS_AUTO_REINGEST").as_deref() == Ok("1") {
+        return true;
+    }
+    let stdin = io::stdin();
+    if !stdin.is_terminal() {
+        // Headless without env-var override: default-deny per architect spec.
+        return false;
+    }
+    print!("Re-ingest required for v2 schema. Proceed? [y/N] ");
+    let _ = io::stdout().flush();
+    let mut buf = String::new();
+    let mut handle = stdin.lock();
+    if handle.read_line(&mut buf).is_err() {
+        return false;
+    }
+    matches!(buf.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }

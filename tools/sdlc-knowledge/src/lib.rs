@@ -5,10 +5,14 @@
 //! target without any Cargo.toml edits (architect-approved invariant for
 //! Slice 2).
 
+pub mod chunker;
 pub mod cli;
+pub mod encoder;
 pub mod ingest;
 pub mod migrations;
+pub mod ocr;
 pub mod output;
+pub mod parser;
 pub mod pdf;
 pub mod search;
 pub mod store;

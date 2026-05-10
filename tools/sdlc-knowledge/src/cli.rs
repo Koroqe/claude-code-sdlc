@@ -15,9 +15,30 @@
 //!   6. Map ALL `canonicalize` errors uniformly to `EscapesCwd` (no info leak).
 //!   7. Callers receive the canonicalized `PathBuf`, never the original arg (TOCTOU discipline).
 
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+
+/// Search mode (Slice 7 of vector-retrieval-backend). Default is `hybrid` —
+/// best quality when the e5-multilingual-small model is installed; falls
+/// back to `lexical` automatically when the encoder model is missing or
+/// the schema is at v1 (no chunks_vec virtual table).
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SearchMode {
+    /// BM25-only via FTS5 (iter-1 baseline; works on v1 + v2 DBs without encoder)
+    Lexical,
+    /// Pure dense via sqlite-vec K-NN; requires e5 encoder + v2 schema
+    Dense,
+    /// BM25 ⊕ dense fused via RRF k=60; default mode (auto-fallback to lexical
+    /// when encoder unavailable)
+    Hybrid,
+}
+
+impl Default for SearchMode {
+    fn default() -> Self {
+        SearchMode::Hybrid
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum ProjectRootError {
@@ -90,6 +111,12 @@ pub struct SearchArgs {
     /// field, omitted when N=0.
     #[arg(long, default_value_t = 0)]
     pub context: usize,
+    /// Search mode: `lexical` (BM25 FTS5), `dense` (sqlite-vec K-NN), or
+    /// `hybrid` (BM25 ⊕ dense via RRF k=60). Default `hybrid` — auto-falls-back
+    /// to lexical when the e5 encoder model or chunks_vec virtual table is
+    /// unavailable, with a warning printed to stderr.
+    #[arg(long, value_enum, default_value_t = SearchMode::Hybrid)]
+    pub mode: SearchMode,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
     #[arg(long)]
@@ -113,31 +140,103 @@ pub struct StatusArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct WarmupArgs {
+    /// Suppress success output; only stderr warnings on failure.
+    #[arg(long)]
+    pub quiet: bool,
+}
+
+/// `claudeknows page <doc> <page>` — fetch raw text of a specific page
+/// from a specific document, exposing the LLM-navigable page-flip surface
+/// described in Slice 12 of vector-retrieval-backend. Page numbering is
+/// pdfium 1-indexed; out-of-range page numbers exit 1 with the literal
+/// stderr line `error: page number out of range`.
+#[derive(Args, Debug)]
+pub struct PageArgs {
+    /// Document identifier — either an integer `documents.id` (returned
+    /// in `claudeknows list --json`) OR a string matching `documents.source_path`
+    /// by basename (e.g. `Mastering LangChain.pdf`).
+    pub doc: String,
+    /// 1-indexed page number per the pdfium convention. Independent of
+    /// any "printed" numbering the document might use (Roman vs Arabic
+    /// for preface vs body) — always counts physical pages 1..N.
+    pub page: i64,
+    /// Fetch ±N neighbor pages around `page` so the LLM can see a
+    /// page-spread instead of a single page. Default 0 (single page).
+    /// Capped at 20 (40-page neighborhood) for safety.
+    #[arg(long, default_value_t = 0)]
+    pub range: i64,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON `{doc, total_pages, pages: [{page_no, text}, …]}` instead
+    /// of the human-readable concatenated form.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// `claudeknows reindex-pages` — backfill the `pages` table for documents
+/// already ingested under v2 schema (i.e., chunks + embeddings populated
+/// but pages table empty). Re-parses each PDF via pdfium and populates
+/// pages without touching chunks_fts or chunks_vec — preserves existing
+/// embeddings + BM25 index. Idempotent: re-runs replace existing pages
+/// rows for each document.
+#[derive(Args, Debug)]
+pub struct ReindexPagesArgs {
+    /// Restrict backfill to a specific document (basename or integer id).
+    /// When omitted, backfills every document whose source_path is still
+    /// readable on disk.
+    #[arg(long = "doc")]
+    pub doc: Option<String>,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON summary `{succeeded: [...], skipped: [...], failed: [...]}`
+    /// instead of human text.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// `claudeknows compare <query>` — A/B-test all 3 search modes side-by-side.
+/// Runs the same query through lexical / dense / hybrid and prints the
+/// FULL chunk text (not the FTS5 snippet) for each hit so the operator
+/// can judge retrieval quality + see exactly what would be sent to an
+/// LLM as context-augmentation input.
+#[derive(Args, Debug)]
+pub struct CompareArgs {
+    /// Query string to A/B test across modes.
+    pub query: String,
+    /// Top-K hits per mode (default 5).
+    #[arg(long, default_value_t = 5)]
+    pub top_k: usize,
+    /// Expand each hit with ±N neighbor chunks from the same document so the
+    /// preview shows about a page of context around the matched text.
+    /// Chunks are ~500 chars (sliding-window fallback) or up to 1500 chars
+    /// (heading-aware structural). At `--context 2` each hit returns 5
+    /// chunks ≈ 2500 chars ≈ one printed page. Default 2 ("page-ish");
+    /// pass `--context 0` for the bare matched chunk only. Capped at 10
+    /// (search.rs MAX_CONTEXT_RADIUS).
+    #[arg(long, default_value_t = 2)]
+    pub context: usize,
+    /// Truncate the assembled text (chunk + neighbors when --context > 0)
+    /// to this many chars (0 = no truncation). Default 1500 ≈ one printed
+    /// page — readable in a terminal AND fits comfortably in an LLM context
+    /// window without overwhelming it. Pass `--max-chars 0` for the full
+    /// assembled blob (when `--context 2` that's ~2500 chars).
+    #[arg(long, default_value_t = 1500)]
+    pub max_chars: usize,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON instead of human-readable side-by-side blocks.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
 pub struct DeleteArgs {
     /// Source path (legacy positional form; mutually exclusive with `--by-id`).
     pub source_path: Option<String>,
     /// Delete by integer document id (mutually exclusive with positional `<source-path>`).
     #[arg(long = "by-id")]
     pub by_id: Option<i64>,
-    #[arg(long)]
-    pub project_root: Option<PathBuf>,
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Args, Debug)]
-pub struct PageArgs {
-    /// Source path (positional). Mutually exclusive with `--by-id`. The path
-    /// is interpreted exactly as it appears in `documents.source_path` (i.e.
-    /// the canonicalized form ingest stored). Use `claudeknows list` to see
-    /// the indexed paths.
-    pub source_path: Option<String>,
-    /// Document id (mutually exclusive with positional `<source-path>`).
-    #[arg(long = "by-id")]
-    pub by_id: Option<i64>,
-    /// 1-indexed page number to fetch.
-    #[arg(long)]
-    pub page: i64,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
     #[arg(long)]
@@ -156,8 +255,27 @@ pub enum Command {
     Status(StatusArgs),
     /// Delete a source by ID.
     Delete(DeleteArgs),
-    /// Fetch the full extracted text of a single PDF page.
+    /// Pre-download the e5-multilingual-small encoder model so the first
+    /// `ingest` / `search --mode hybrid` doesn't pay a 30-second cold-start
+    /// model-download stall. Idempotent: re-runs are no-ops once the
+    /// model is cached at `~/.claude/tools/sdlc-knowledge/models/`. Network
+    /// failures (offline install, HF rate limit) are warnings, not errors —
+    /// fastembed falls back to lazy download on first real use.
+    Warmup(WarmupArgs),
+    /// A/B-test all three search modes (lexical / dense / hybrid) for the
+    /// same query, side-by-side, with FULL chunk text so the operator can
+    /// judge retrieval quality + preview exactly what an LLM would receive
+    /// as context-augmentation input.
+    Compare(CompareArgs),
+    /// Fetch raw text of a specific page from a specific document.
+    /// Lets the LLM navigate the source book by page number when a search
+    /// hit's chunk doesn't carry enough context. Page numbering is pdfium
+    /// 1-indexed; out-of-range page exits 1 with `error: page number out of range`.
     Page(PageArgs),
+    /// Backfill the `pages` table for documents already ingested under v2
+    /// schema. Re-parses each PDF via pdfium and populates pages without
+    /// touching chunks_fts / chunks_vec — preserves embeddings.
+    ReindexPages(ReindexPagesArgs),
 }
 
 #[derive(clap::Parser, Debug)]
