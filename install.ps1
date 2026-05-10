@@ -32,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $Version = "3.0.0"
-$KnowledgeVersion = "0.3.1"
+$KnowledgeVersion = "0.4.0"
 $KnowledgePdfiumVersion = "chromium/7802"
 $RepoUrl = "https://github.com/codefather-labs/claude-code-sdlc.git"
 $RepoOwnerRepo = "codefather-labs/claude-code-sdlc"

@@ -14,10 +14,15 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-10
+
 ### Added
 
 - Native Windows installer — `install.bat` (cmd.exe wrapper) and `install.ps1` (PowerShell) install the SDLC config to `%USERPROFILE%\.claude\`, download `sdlc-knowledge.exe` and `pdfium.dll` from GitHub releases, register a `claudeknows.cmd` wrapper, and add it to your User PATH. No Git Bash / MSYS2 / Cygwin required.
 - The knowledge-base search tool now understands your queries semantically — matching concepts and cross-lingual paraphrases rather than exact keywords — and can also find text embedded in figures and diagrams extracted from PDFs.
+- New `claudeknows page <doc> <N>` subcommand returns the raw text of a specific page of an indexed book (with optional `--range r` for a `[N-r..N+r]` neighborhood) so the LLM can navigate source material by printed page number when chunk-level context is insufficient. Pages populate automatically on fresh ingest; existing indexes backfill via `claudeknows reindex-pages`.
+- New `claudeknows compare <query>` subcommand runs the same query through `lexical`, `dense`, and `hybrid` retrieval modes side-by-side so you can see which mode finds your content best on your own corpus.
+- New `claudeknows search --context N` flag expands each hit with ±N neighbor chunks (~one page when N=2) for paragraph-level reading context.
 
 ## [0.3.1] - 2026-05-02
 
