@@ -51,6 +51,7 @@ fastembed = "5"
 # Error plumbing
 anyhow = "1"
 thiserror = "1"
+ocr-rs = "2.2.2"
 
 [dev-dependencies]
 assert_cmd = "2"
