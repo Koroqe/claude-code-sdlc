@@ -24,7 +24,7 @@ fn open_or_init_v2_fresh_db_stamps_schema_version_2() {
     let v: i64 = conn
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("schema_version row");
-    assert_eq!(v, 2, "fresh DB should be at schema_version 2");
+    assert_eq!(v, 3, "fresh DB should be at schema_version 3 (sqlite-vec + page-level addressing both applied)");
 }
 
 #[test]
@@ -169,5 +169,5 @@ fn open_or_init_v2_idempotent_on_existing_v2_db() {
     let v: i64 = conn
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("schema_version persists");
-    assert_eq!(v, 2);
+    assert_eq!(v, 3);
 }

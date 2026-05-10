@@ -117,7 +117,7 @@ fn run_page(root: &std::path::Path, args: &cli::PageArgs) -> std::process::ExitC
             "requested_page": args.page,
             "range": range,
             "pages": pages.iter().map(|p| serde_json::json!({
-                "page_num": p.page_num,
+                "page_no": p.page_no,
                 "text": p.text,
             })).collect::<Vec<_>>(),
         });
@@ -136,7 +136,7 @@ fn run_page(root: &std::path::Path, args: &cli::PageArgs) -> std::process::ExitC
         }
         for p in &pages {
             println!();
-            println!("──── PAGE {} ────", p.page_num);
+            println!("──── PAGE {} ────", p.page_no);
             println!();
             println!("{}", p.text);
         }
@@ -147,8 +147,8 @@ fn run_page(root: &std::path::Path, args: &cli::PageArgs) -> std::process::ExitC
 /// `reindex-pages [--doc X] [--json]` — Slice 12 backfill subcommand.
 ///
 /// For each ingested document (or just the one selected via `--doc`),
-/// re-parses the source PDF via `pdf::extract_pages` and populates the
-/// `pages` table + `documents.total_pages`. Does NOT touch chunks /
+/// re-parses the source PDF via `pdf::read_pages` and populates the
+/// `pages` table. Does NOT touch chunks /
 /// chunks_fts / chunks_vec — preserves existing BM25 + embedding state.
 /// Skips non-PDF sources (text/markdown documents have no concept of
 /// pages) and missing-on-disk sources (logged as skipped, not failed).
@@ -231,10 +231,21 @@ fn run_reindex_pages(
         if !args.json {
             eprintln!("processing: {basename}");
         }
-        match pdf::extract_pages(&path) {
+        match pdf::read_pages(&path) {
             Ok(pages) => {
                 let n = pages.len();
-                if let Err(e) = store::replace_pages(&mut conn, *doc_id, &pages) {
+                let page_refs: Vec<(i64, &str)> = pages
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| ((i + 1) as i64, t.as_str()))
+                    .collect();
+                let tx_result = conn
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                    .and_then(|tx| {
+                        store::replace_pages(&tx, *doc_id, &page_refs)?;
+                        tx.commit()
+                    });
+                if let Err(e) = tx_result {
                     if !args.json {
                         eprintln!("FAIL: {basename}: {e}");
                     }

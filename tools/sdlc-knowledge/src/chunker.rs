@@ -136,14 +136,14 @@ fn structural_split(chars: &[char], boundaries: &[usize]) -> Vec<Chunk> {
         }
         let section: &[char] = &chars[start..end];
         if section.len() <= STRUCTURAL_CAP {
-            out.push(Chunk { ord, text: section.iter().collect() });
+            out.push(Chunk { ord, text: section.iter().collect(), page_start: None, page_end: None });
             ord += 1;
         } else {
             let step = STRUCTURAL_CAP - STRUCTURAL_OVERLAP;
             let mut s = 0usize;
             loop {
                 let e = (s + STRUCTURAL_CAP).min(section.len());
-                out.push(Chunk { ord, text: section[s..e].iter().collect() });
+                out.push(Chunk { ord, text: section[s..e].iter().collect(), page_start: None, page_end: None });
                 ord += 1;
                 if e == section.len() {
                     break;
@@ -164,7 +164,7 @@ fn fallback_sliding(chars: &[char]) -> Vec<Chunk> {
     let mut ord = 0usize;
     loop {
         let end = (start + FALLBACK_WINDOW).min(chars.len());
-        out.push(Chunk { ord, text: chars[start..end].iter().collect() });
+        out.push(Chunk { ord, text: chars[start..end].iter().collect(), page_start: None, page_end: None });
         ord += 1;
         if end == chars.len() {
             break;

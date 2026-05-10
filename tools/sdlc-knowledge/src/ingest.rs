@@ -56,6 +56,12 @@ pub enum IngestError {
 pub struct Chunk {
     pub ord: usize,
     pub text: String,
+    /// 1-indexed PDF page this chunk's text was sourced from. `None` for
+    /// markdown / plain-text where pagination is undefined. PDFs use per-page
+    /// chunking so `page_start == page_end`; the field pair is kept open for
+    /// future cross-page chunkers.
+    pub page_start: Option<i64>,
+    pub page_end: Option<i64>,
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +74,8 @@ pub struct BatchResult {
 /// 500-char sliding window, 100-char overlap.
 ///
 /// Operates on `Vec<char>` so indexing is per-codepoint — Phase 1.5 MUST #5.
+/// Page columns are left as `None` — callers that have page provenance
+/// (PDF ingest) use `chunk_pages` instead.
 pub fn chunk(text: &str) -> Vec<Chunk> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
@@ -80,12 +88,55 @@ pub fn chunk(text: &str) -> Vec<Chunk> {
     loop {
         let end = (start + CHUNK_WINDOW).min(chars.len());
         let slice: String = chars[start..end].iter().collect();
-        out.push(Chunk { ord, text: slice });
+        out.push(Chunk {
+            ord,
+            text: slice,
+            page_start: None,
+            page_end: None,
+        });
         ord += 1;
         if end == chars.len() {
             break;
         }
         start += step;
+    }
+    out
+}
+
+/// Per-page chunker for PDF sources. Each page is chunked independently with
+/// the same 500/100 window/overlap as `chunk`, and every emitted `Chunk`
+/// carries `page_start = page_end = page_no` (1-indexed). Empty pages
+/// contribute zero chunks — common in calibre-converted PDFs that have blank
+/// front-matter pages, which we skip silently rather than emit empty rows.
+///
+/// `ord` is monotonically increasing across the whole document so chunk
+/// ordering stays stable for context-window expansion in `search.rs`.
+pub fn chunk_pages(pages: &[String]) -> Vec<Chunk> {
+    let mut out = Vec::new();
+    let mut ord = 0usize;
+    for (i, page_text) in pages.iter().enumerate() {
+        let page_no = (i + 1) as i64;
+        let chars: Vec<char> = page_text.chars().collect();
+        if chars.is_empty() {
+            continue;
+        }
+        let step = CHUNK_WINDOW - CHUNK_OVERLAP;
+        let mut start = 0usize;
+        loop {
+            let end = (start + CHUNK_WINDOW).min(chars.len());
+            let slice: String = chars[start..end].iter().collect();
+            out.push(Chunk {
+                ord,
+                text: slice,
+                page_start: Some(page_no),
+                page_end: Some(page_no),
+            });
+            ord += 1;
+            if end == chars.len() {
+                break;
+            }
+            start += step;
+        }
     }
     out
 }
@@ -106,6 +157,12 @@ fn read_source(p: &Path) -> Result<String, IngestError> {
         Some("pdf") => crate::pdf::read(p),
         _ => Err(IngestError::UnsupportedExt(p.to_path_buf())),
     }
+}
+
+fn ext_lower(p: &Path) -> Option<String> {
+    p.extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
 }
 
 fn supported_ext(p: &Path) -> bool {
@@ -182,13 +239,36 @@ pub fn ingest_path(
 
     // Read text BEFORE opening the transaction so a panic in pdf_extract is
     // contained outside the tx-guard (Phase 1.5 MUST #2 ordering).
-    let text = read_source(p)?;
-    let chunks = chunk(&text);
+    //
+    // PDF dispatch: extract per-page text via `pdf::read_pages` so we can
+    // populate the `pages` table AND tag chunks with their page number.
+    // Markdown / plain-text dispatch: flat chunking, page columns NULL.
+    let ext = ext_lower(p);
+    let (chunks, pages_for_table): (Vec<Chunk>, Option<Vec<String>>) =
+        if ext.as_deref() == Some("pdf") {
+            let pages = crate::pdf::read_pages(p)?;
+            let chunks = chunk_pages(&pages);
+            (chunks, Some(pages))
+        } else {
+            let text = read_source(p)?;
+            (chunk(&text), None)
+        };
 
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let doc_id = store::upsert_document(&tx, &path_str, mtime, &sha, now_secs())?;
-    let chunk_refs: Vec<(usize, &str)> = chunks.iter().map(|c| (c.ord, c.text.as_str())).collect();
+    let chunk_refs: Vec<(usize, &str, Option<i64>, Option<i64>)> = chunks
+        .iter()
+        .map(|c| (c.ord, c.text.as_str(), c.page_start, c.page_end))
+        .collect();
     store::replace_chunks(&tx, doc_id, &chunk_refs)?;
+    if let Some(pages) = &pages_for_table {
+        let page_refs: Vec<(i64, &str)> = pages
+            .iter()
+            .enumerate()
+            .map(|(i, t)| ((i + 1) as i64, t.as_str()))
+            .collect();
+        store::replace_pages(&tx, doc_id, &page_refs)?;
+    }
     tx.commit()?;
 
     // Tech-debt #4: best-effort embedding population for chunks_vec (Slice 5
@@ -202,12 +282,6 @@ pub fn ingest_path(
     // chunks_vec until next vacuum; they don't cause query bugs because the
     // dense_search JOIN with chunks filters non-existent ids out.
     let _ = try_populate_chunks_vec(conn, doc_id, &chunks);
-
-    // Slice 12: best-effort page extraction for PDFs. Populates the v3 pages
-    // table + documents.total_pages so `claudeknows page <doc> <N>` works on
-    // freshly-ingested documents without a separate `reindex-pages` step.
-    // Silent no-op for non-PDF sources, missing v3 schema, or pdfium errors.
-    let _ = try_populate_pages(conn, doc_id, p);
 
     Ok(IngestOutcome::Wrote {
         chunks: chunks.len(),
@@ -277,36 +351,6 @@ fn try_populate_chunks_vec(
         }
     }
     tx.commit().map_err(|_| ())?;
-    Ok(())
-}
-
-/// Best-effort population of the `pages` table for a freshly-ingested PDF.
-/// Silent no-op when the source is not a PDF, the v3 `pages` table is
-/// absent (v1/v2 schema), or pdfium fails to extract pages.
-fn try_populate_pages(conn: &mut Connection, doc_id: i64, p: &Path) -> Result<(), ()> {
-    let is_pdf = p
-        .extension()
-        .and_then(|s| s.to_str())
-        .map(|s| s.eq_ignore_ascii_case("pdf"))
-        .unwrap_or(false);
-    if !is_pdf {
-        return Ok(());
-    }
-    let has_pages: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pages'",
-            [],
-            |_| Ok(true),
-        )
-        .unwrap_or(false);
-    if !has_pages {
-        return Err(());
-    }
-    let pages = match crate::pdf::extract_pages(p) {
-        Ok(v) => v,
-        Err(_) => return Err(()),
-    };
-    store::replace_pages(conn, doc_id, &pages).map_err(|_| ())?;
     Ok(())
 }
 

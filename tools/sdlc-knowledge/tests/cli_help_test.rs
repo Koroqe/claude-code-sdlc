@@ -14,13 +14,13 @@ fn bin() -> Command {
 }
 
 #[test]
-fn help_lists_all_five_subcommands() {
+fn help_lists_all_subcommands() {
     let assert = bin().arg("--help").assert().success();
 
     let output = assert.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    for sub in ["ingest", "search", "list", "status", "delete"] {
+    for sub in ["ingest", "search", "list", "status", "delete", "page"] {
         assert!(
             stdout.contains(sub),
             "expected --help stdout to contain subcommand `{sub}`; got:\n{stdout}"

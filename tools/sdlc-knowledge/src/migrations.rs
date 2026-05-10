@@ -1,6 +1,9 @@
 //! Schema migrations. Iter-1 has a single v1 migration; iter-2
 //! (vector-retrieval-backend Slice 2) adds the v1→v2 destructive re-ingest
-//! path per architect OQ-2 resolution.
+//! path per architect OQ-2 resolution. v3 (Slice 12 page-level addressing)
+//! is applied additively inside `store::open_or_init_v2` rather than via a
+//! separate migration step, since the only structural change is two
+//! `ALTER TABLE chunks` columns + a new `pages` table.
 //!
 //! SQL discipline: ONLY ?N parameterized statements; never format!/+ for user data.
 
@@ -31,8 +34,7 @@ pub fn current_version(conn: &Connection) -> u32 {
     r.map(|v| v as u32).unwrap_or(0)
 }
 
-/// Apply pending migrations. v1 ensures the row equals 1; future versions will
-/// step through subsequent integer versions.
+/// Apply pending migrations up to the latest version (currently 2).
 pub fn run_migrations(conn: &mut Connection) -> Result<(), StoreError> {
     let v = current_version(conn);
     if v == 0 {
@@ -46,7 +48,6 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), StoreError> {
             )?;
         }
     }
-    // Future: while current_version(conn) < TARGET { apply_next(conn)?; }
     Ok(())
 }
 
@@ -84,10 +85,8 @@ pub fn migrate_v1_to_v2(conn: &mut Connection) -> Result<MigrationOutcome, Store
          DROP TABLE IF EXISTS documents;",
     )?;
     // Reset schema_version row so the next open_or_init_v2 sees a fresh DB
-    // and applies SCHEMA_V1 + SCHEMA_V2_DELTA + stamps version=2.
+    // and applies SCHEMA_V1 + SCHEMA_V2_DELTA + SCHEMA_V3_DELTA and stamps version=3.
     conn.execute("DELETE FROM schema_version", [])?;
-    // The caller (CLI startup) re-runs open_or_init_v2 which performs the
-    // CREATE TABLE / CREATE VIRTUAL TABLE sequence and stamps version=2.
     Ok(MigrationOutcome::Migrated)
 }
 

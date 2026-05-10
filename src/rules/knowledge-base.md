@@ -31,13 +31,20 @@ alias `claudeknows`** in citations and command examples; the absolute path
 remains valid as a backward-compat fallback for environments where the alias
 was not registered.
 
-Five subcommands — invoke verbatim:
+Six subcommands — invoke verbatim:
 
 - `claudeknows ingest <path> [--project-root <dir>] [--json]`
 - `claudeknows search <query> [--top-k 5] [--mode lexical|dense|hybrid] [--context N] [--project-root <dir>] [--json]`
 - `claudeknows list [--project-root <dir>] [--json]`
 - `claudeknows status [--project-root <dir>] [--json]`
 - `claudeknows delete <source-id> [--project-root <dir>] [--json]`
+- `claudeknows page <doc> <N> [--range R] [--project-root <dir>] [--json]`
+  where `<doc>` is either an integer `documents.id` (from `list --json`) OR a
+  basename matching `documents.source_path`. `--range R` returns `[N-R..N+R]`
+  (default 0 = single page; max 20).
+- `claudeknows reindex-pages [--doc <id-or-name>] [--project-root <dir>] [--json]`
+  backfills the `pages` table for already-ingested PDFs without touching
+  chunks_fts / chunks_vec — useful after upgrading from a pre-v3 index.
 
 The `--project-root <dir>` flag pins the index location to a specific project;
 omitted, the binary resolves the project root relative to the current working
@@ -64,22 +71,118 @@ Hybrid is the recommended default — it captures both exact-keyword and semanti
 
 **Distance metric.** `chunks_vec` uses sqlite-vec's default L2 (Euclidean) distance. Because the e5-multilingual-small encoder produces L2-normalized vectors, L2 ranking is mathematically identical to cosine-similarity ranking — the formula is `cos = 1 − L2² / 2`. The `dense_score` field shows `−L2_distance` (negated so larger=better, matching the BM25 convention); a `dense_score = −0.43` corresponds to cosine similarity ≈ 0.91. Agents reading this field do NOT need to convert; ranking order is what matters and is preserved across the L2/cosine equivalence.
 
-The JSON output for non-lexical modes carries auxiliary score fields (`bm25_score`, `dense_score`, `rrf_score`, `mode_used`) alongside the canonical `score`. Lexical mode emits `score` (negated BM25, larger=better) and omits the dense/RRF fields.
+### Search JSON shape (schema v3)
+
+Each hit returned by `search --json` is an object of the form:
+
+```json
+{
+  "source": "<absolute path to the source document>",
+  "doc_id": <integer document id>,
+  "chunk_id": <integer chunk row id (= FTS5 rowid)>,
+  "ord": <integer chunk ordinal within the document, 0-indexed>,
+  "score": <positive float, larger = better match>,
+  "snippet": "<FTS5-generated snippet around the matching term>",
+  "page_start": <1-indexed PDF page where the chunk text begins; OPTIONAL>,
+  "page_end":   <1-indexed PDF page where the chunk text ends;   OPTIONAL>,
+  "context":    "<concatenated ±N neighbor chunks; OPTIONAL>",
+  "mode_used":  "<lexical | dense | hybrid; OPTIONAL — present when search ran in non-lexical mode>",
+  "bm25_score": <float; OPTIONAL — lexical/hybrid only>,
+  "dense_score": <float; OPTIONAL — dense/hybrid only>,
+  "rrf_score": <float; OPTIONAL — hybrid only>
+}
+```
+
+`page_start` / `page_end` are present ONLY for chunks ingested from PDF
+sources under schema v3 or later. For markdown / plain-text sources both
+fields are omitted (pagination is undefined). For chunks ingested before
+schema v3 both fields are also omitted — agents handle this gracefully
+by falling back to a chunk-id citation when `page_start` is absent.
+
+For PDFs the chunker is per-page, so `page_start == page_end`. The pair
+is kept open in the schema for a future cross-page chunker.
+
+### `page` subcommand — full-page text retrieval
+
+When a search hit cites a specific PDF page (`page_start: 127`), agents
+follow up with `page <doc_id> 127` (or `page "<basename>.pdf" 127`) to
+fetch the full extracted text of that page — the one-step pivot from "I
+see a relevant snippet on page 127" to "show me the full page so I can
+quote / analyse the surrounding paragraph."
+
+```
+claudeknows page <doc> <N> [--range R] --json
+```
+
+`<doc>` accepts either an integer `documents.id` (verbatim from a search
+hit's `doc_id`) OR a string matching `documents.source_path` by basename.
+`--range R` widens the response to `[N-R..N+R]` (max R=20) so the model
+can read a small page-spread without issuing R+1 separate calls.
+
+JSON output shape:
+
+```json
+{
+  "doc_id": <integer>,
+  "source_path": "<string>",
+  "total_pages": <integer or null — derived from MAX(page_no) over the pages table>,
+  "requested_page": <1-indexed integer>,
+  "range": <non-negative integer>,
+  "pages": [
+    { "page_no": <1-indexed integer>, "text": "<full extracted text of the page>" },
+    …
+  ]
+}
+```
+
+Exit codes:
+
+- `0` — page found, JSON / human text written to stdout.
+- `1` — document not found, page out of range, OR pages table not yet
+  backfilled (run `claudeknows reindex-pages --doc <id-or-name>` to fix).
+
+Agents MUST NOT call `page` with `<N>` ≤ 0 — the schema is 1-indexed and
+the CLI rejects out-of-range values with the literal stderr line
+`error: page number out of range`.
 
 ## Citation format
 
 When a search hit load-bears on a decision (i.e., the agent would have written
 something different without it), the agent MUST cite the hit in its fact
-block under `### External contracts` using this exact byte shape:
+block under `### External contracts` using one of these two exact byte
+shapes — pick the one matching the hit's source format:
+
+**(a) PDF source with page citation (schema v2 — `page_start` present in the JSON):**
+
+```
+knowledge-base: <source-filename>:p<page>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+```
+
+`<page>` is the integer `page_start` field from the JSON. When `page_start`
+and `page_end` differ (future cross-page chunkers), use the form
+`p<page_start>-<page_end>` instead of `p<page>`.
+
+**(b) Non-PDF source OR pre-v2 legacy chunk (`page_start` absent from the JSON):**
 
 ```
 knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
 ```
 
-`<source-filename>` is the document path returned in the `source` JSON field;
-`<chunk-id>` is the integer `chunk_id` field; `<query>` is the literal query
-string the agent passed; `<score>` is the JSON `score` field rendered with
-fixed-point precision.
+In both forms `<source-filename>` is the document path returned in the
+`source` JSON field, `<chunk-id>` is the integer `chunk_id` field, `<query>`
+is the literal query string the agent passed, and `<score>` is the JSON
+`score` field rendered with fixed-point precision. The agent decides between
+(a) and (b) by inspecting the JSON: if the hit object contains a
+`page_start` field, use form (a); otherwise use form (b). Both forms are
+greppable for reviewer audits — `knowledge-base:` is the load-bearing
+prefix.
+
+**Reviewer note:** when an agent quotes prose from a cited PDF, the page
+citation in form (a) is the load-bearing breadcrumb that lets a human open
+the source document and verify the quote in seconds. Pre-v2 legacy chunks
+(form b on a PDF source) are a known degraded case — the user can re-run
+`claudeknows ingest <path>` on the document to upgrade it to schema v2 and
+restore page citations on subsequent searches.
 
 **BM25 score-direction convention (architect action item #3).** SQLite's FTS5
 `bm25()` function returns NEGATIVE values where smaller (more negative) indicates
@@ -200,6 +303,15 @@ open; `claudeknows ingest` surfaces the error and skips the document.
   implemented at `tools/sdlc-knowledge/src/search.rs:1-18, 70-82`.
 - The 12-agent / 5-executor split mirrors the cognitive-self-check rule —
   source: `~/.claude/rules/cognitive-self-check.md` `## Application Scope`.
+- Schema v2 adds nullable `chunks.page_start` / `chunks.page_end` columns and
+  a `pages(doc_id, page_no, text)` table; PDF ingest tags every chunk with
+  its 1-indexed page number and stores per-page extracted text — source:
+  `tools/sdlc-knowledge/src/store.rs` (`SCHEMA_V2_PAGES_TABLE`,
+  `replace_pages`, `get_page_by_id`), `tools/sdlc-knowledge/src/migrations.rs`
+  (`apply_v2`), and `tools/sdlc-knowledge/src/ingest.rs` (`chunk_pages`).
+- The `page` subcommand returns `{doc_id, source_path, page_no, text}` JSON
+  with exit 0/1/2 semantics defined in `tools/sdlc-knowledge/src/main.rs`
+  (`run_page`).
 
 ### External contracts
 - `rusqlite` — symbol: `Connection::prepare`, `params!`, `query_map` — source:
@@ -209,6 +321,12 @@ open; `claudeknows ingest` surfaces the error and skips the document.
   (smaller = better) — source: SQLite FTS5 docs (referenced from
   `tools/sdlc-knowledge/src/search.rs:5-6`); negation convention verified at
   `tools/sdlc-knowledge/src/search.rs:75` — verified: yes.
+- SQLite `ALTER TABLE ... ADD COLUMN` — symbol: schema migration primitive
+  used by `apply_v2` to add nullable `page_start` / `page_end` to `chunks`
+  without rewriting the table — source: `tools/sdlc-knowledge/src/migrations.rs`
+  (idempotent via `pragma_table_info` probe) — verified: yes (live migration
+  exercised by `tests/page_test.rs::v1_to_v2_migration_adds_page_columns_and_pages_table`
+  and `migration_is_idempotent`).
 - `pdfium-render` crate v0.9 — symbol: `Pdfium::bind_to_library`,
   `load_pdf_from_byte_slice`, `pages()`, `text()` — source: pdfium-render
   rustdoc (referenced via Slice 1 architect pre-review of pdfium-pdf-extraction)
@@ -231,6 +349,13 @@ open; `claudeknows ingest` surfaces the error and skips the document.
   parseable by reviewers grepping for `knowledge-base:` — risk: multi-line
   citations or differently-quoted queries could break grep-based audits — how
   to verify: code-reviewer pass at the merge-ready gate.
+- Pre-v2 legacy chunks (PDF chunks ingested before the page-tracking
+  migration) appear in search results without `page_start` and are cited
+  in citation form (b) — risk: agents may not realise the source IS a PDF
+  and miss an opportunity to follow up with `page --by-id` after a
+  re-ingest — how to verify: when an agent cites form (b) for a `.pdf`
+  source path, surface a hint suggesting `claudeknows ingest <path>` to
+  upgrade the document to v2.
 
 ### Open questions
 - (none)

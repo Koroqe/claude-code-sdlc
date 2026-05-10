@@ -69,7 +69,9 @@ fn migrate_v1_to_v2_with_auto_reingest_env_succeeds() {
     let v: i64 = conn2
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("v2 stamp");
-    assert_eq!(v, 2, "post-migration re-init should stamp version=2");
+    // open_or_init_v2 now applies SCHEMA_V2_DELTA + SCHEMA_V3_DELTA on a
+    // fresh DB and stamps version=3 (Slice 12 page-level addressing).
+    assert_eq!(v, 3, "post-migration re-init should stamp version=3");
 }
 
 #[test]

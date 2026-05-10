@@ -24,7 +24,7 @@ fn seed_db(
 ) -> (tempfile::TempDir, rusqlite::Connection) {
     let tmp = tempfile::tempdir().expect("tempdir");
     let db_path = tmp.path().join("index.db");
-    let mut conn = store::open_or_init(&db_path).expect("open_or_init");
+    let mut conn = store::open_or_init_v2(&db_path).expect("open_or_init_v2");
     migrations::run_migrations(&mut conn).expect("run_migrations");
 
     for d in 0..n_docs {

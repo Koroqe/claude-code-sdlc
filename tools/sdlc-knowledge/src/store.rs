@@ -57,6 +57,14 @@ pub enum IndexError {
 }
 
 /// V1 schema — kept as a static `&str` literal; no user data interpolated.
+///
+/// V2 additions (page tracking) are applied via `migrations::run_migrations`:
+///   - `chunks.page_start` / `chunks.page_end` (nullable INTEGER) — first and
+///     last 1-indexed PDF page covered by the chunk text. NULL for non-PDF
+///     sources. For PDFs (per-page chunking) `page_start = page_end`.
+///   - new `pages` table — one row per (doc_id, page_no) holding the full
+///     extracted text of that page. Powers the `page` subcommand which
+///     returns the raw page text without re-running PDFium.
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY,
@@ -137,31 +145,30 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);
 "#;
 
 /// V3 schema delta — page-level addressing. Additive and non-destructive:
-///   - `chunks.page_start` / `page_end` (NULL for legacy rows; populated
-///     by future Slice 12 chunker that tracks per-page char-offsets)
-///   - `documents.total_pages` (NULL until first `reindex-pages` run)
-///   - `pages(doc_id, page_num, text)` table — raw per-page text exposed
+///   - `chunks.page_start` / `page_end` — 1-indexed PDF page each chunk's
+///     text was sourced from. NULL for legacy v2 chunks; freshly-ingested
+///     PDFs populate them via `chunk_pages` in `ingest.rs`.
+///   - `pages(doc_id, page_no, text)` table — raw per-page text exposed
 ///     to the LLM via `claudeknows page <doc> <page>` so it can navigate
-///     the source book the same way a human flips pages
+///     the source book the same way a human flips pages.
 ///
-/// Page numbering is **pdfium 1-indexed** (the convention `wallet/getpages`
-/// returns) — independent of any "printed" page numbering the document
-/// might use (Roman for preface, Arabic for body). Out-of-range page
-/// lookups return exit 1 with the literal stderr line
-/// `error: page number out of range` (no silent fallback).
+/// Page numbering is **pdfium 1-indexed** — independent of any "printed"
+/// page numbering the document might use (Roman for preface, Arabic for
+/// body). Out-of-range page lookups exit 1 with the literal stderr line
+/// `error: page number out of range`.
 ///
 /// SQL discipline: static `&str` literal, no user-data interpolation.
 const SCHEMA_V3_DELTA: &str = r#"
 ALTER TABLE chunks ADD COLUMN page_start INTEGER;
 ALTER TABLE chunks ADD COLUMN page_end INTEGER;
-ALTER TABLE documents ADD COLUMN total_pages INTEGER;
 CREATE TABLE IF NOT EXISTS pages (
-  doc_id   INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  page_num INTEGER NOT NULL,
-  text     TEXT NOT NULL,
-  PRIMARY KEY (doc_id, page_num)
+  id INTEGER PRIMARY KEY,
+  doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_no INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  UNIQUE(doc_id, page_no)
 );
-CREATE INDEX IF NOT EXISTS idx_pages_doc ON pages(doc_id);
+CREATE INDEX IF NOT EXISTS pages_doc_page_idx ON pages(doc_id, page_no);
 "#;
 
 /// Open (or create) the SQLite database at `db_path` with v2 schema enabled.
@@ -221,15 +228,35 @@ pub fn open_or_init_v2(db_path: &Path) -> Result<Connection, StoreError> {
         // Already at v3 — ensure forward-compat objects exist (CREATE IF NOT
         // EXISTS for both vec0 and pages so a corruption-free re-open is
         // idempotent).
+        //
+        // Legacy v3 shape (Slice 12 first iteration before merge with main):
+        // pages had `page_num` column instead of `page_no`. Detect that shape
+        // and rename the column in-place — SQLite 3.25+ supports
+        // `ALTER TABLE ... RENAME COLUMN`. The data (doc_id, page_text) is
+        // schema-equivalent so the rename is a no-data-loss operation.
+        let has_page_num: bool = conn
+            .query_row(
+                "SELECT 1 FROM pragma_table_info('pages') WHERE name = 'page_num'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        if has_page_num {
+            conn.execute_batch(
+                "ALTER TABLE pages RENAME COLUMN page_num TO page_no; \
+                 DROP INDEX IF EXISTS idx_pages_doc;",
+            )?;
+        }
         conn.execute_batch(
             "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]); \
              CREATE TABLE IF NOT EXISTS pages ( \
-               doc_id   INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, \
-               page_num INTEGER NOT NULL, \
-               text     TEXT NOT NULL, \
-               PRIMARY KEY (doc_id, page_num) \
+               id INTEGER PRIMARY KEY, \
+               doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, \
+               page_no INTEGER NOT NULL, \
+               text TEXT NOT NULL, \
+               UNIQUE(doc_id, page_no) \
              ); \
-             CREATE INDEX IF NOT EXISTS idx_pages_doc ON pages(doc_id);",
+             CREATE INDEX IF NOT EXISTS pages_doc_page_idx ON pages(doc_id, page_no);",
         )?;
     }
     // v == 1: caller runs migrate_v1_to_v2 explicitly. We don't auto-migrate
@@ -295,7 +322,8 @@ fn validate_schema_inner(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     // schema_version row exists and is in 1..=3 (forward-compat through v3
-    // page-level addressing).
+    // page-level addressing — chunks.page_start/page_end + pages table +
+    // documents.total_pages).
     let v: i64 = conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
     if !(1..=3).contains(&v) {
         return Err(rusqlite::Error::QueryReturnedNoRows);
@@ -333,20 +361,164 @@ pub fn upsert_document(
 
 /// Replace all chunks for a document: delete prior rows then insert the new set.
 /// FTS5 triggers fire for each row, so the FTS5 index stays in sync.
+///
+/// Each chunk carries optional `page_start`/`page_end` (1-indexed PDF page
+/// numbers). For non-PDF sources callers pass `None` for both — these columns
+/// were added in schema v2 and stay NULL for markdown/txt where pagination is
+/// undefined. For PDFs the chunker emits one chunk per page, so
+/// `page_start == page_end == page_no`.
 pub fn replace_chunks(
     conn: &Connection,
     doc_id: i64,
-    chunks: &[(usize, &str)],
+    chunks: &[(usize, &str, Option<i64>, Option<i64>)],
 ) -> Result<(), rusqlite::Error> {
     conn.execute(
         "DELETE FROM chunks WHERE doc_id = ?1",
         rusqlite::params![doc_id],
     )?;
-    let mut stmt = conn.prepare("INSERT INTO chunks(doc_id, ord, text) VALUES (?1, ?2, ?3)")?;
-    for (ord, text) in chunks {
-        stmt.execute(rusqlite::params![doc_id, *ord as i64, *text])?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO chunks(doc_id, ord, text, page_start, page_end) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?;
+    for (ord, text, page_start, page_end) in chunks {
+        stmt.execute(rusqlite::params![
+            doc_id,
+            *ord as i64,
+            *text,
+            *page_start,
+            *page_end
+        ])?;
     }
     Ok(())
+}
+
+/// Replace all per-page text rows for a document. PDFs only — markdown/txt
+/// callers MUST NOT invoke this (the chunker for those formats emits chunks
+/// without page tracking and the `pages` table stays empty for them).
+///
+/// The unique `(doc_id, page_no)` constraint declared in `SCHEMA_V2_PAGES_TABLE`
+/// prevents accidental dupes when re-ingesting; we DELETE first to keep the
+/// "replace = atomic refresh" semantics that `replace_chunks` already follows.
+pub fn replace_pages(
+    conn: &Connection,
+    doc_id: i64,
+    pages: &[(i64, &str)],
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "DELETE FROM pages WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+    )?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO pages(doc_id, page_no, text) VALUES (?1, ?2, ?3)",
+    )?;
+    for (page_no, text) in pages {
+        stmt.execute(rusqlite::params![doc_id, *page_no, *text])?;
+    }
+    Ok(())
+}
+
+/// Fetch the full extracted text of a single page by `(source_path, page_no)`.
+/// Returns `Ok(None)` when no row matches — caller decides whether that means
+/// "document not found", "page out of range", or "non-PDF source has no
+/// pages" and renders the appropriate user-facing error.
+pub fn get_page_by_source(
+    conn: &Connection,
+    source_path: &str,
+    page_no: i64,
+) -> Result<Option<PageRecord>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT d.id, d.source_path, p.page_no, p.text \
+         FROM pages p JOIN documents d ON d.id = p.doc_id \
+         WHERE d.source_path = ?1 AND p.page_no = ?2",
+        rusqlite::params![source_path, page_no],
+        |r| {
+            Ok(PageRecord {
+                doc_id: r.get(0)?,
+                source_path: r.get(1)?,
+                page_no: r.get(2)?,
+                text: r.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Fetch the full extracted text of a single page by `(doc_id, page_no)`.
+pub fn get_page_by_id(
+    conn: &Connection,
+    doc_id: i64,
+    page_no: i64,
+) -> Result<Option<PageRecord>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT d.id, d.source_path, p.page_no, p.text \
+         FROM pages p JOIN documents d ON d.id = p.doc_id \
+         WHERE d.id = ?1 AND p.page_no = ?2",
+        rusqlite::params![doc_id, page_no],
+        |r| {
+            Ok(PageRecord {
+                doc_id: r.get(0)?,
+                source_path: r.get(1)?,
+                page_no: r.get(2)?,
+                text: r.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Returned by `get_page_by_source` / `get_page_by_id` — the full text of one
+/// extracted PDF page plus identifying metadata, JSON-serializable for the
+/// `page --json` output shape.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PageRecord {
+    pub doc_id: i64,
+    pub source_path: String,
+    pub page_no: i64,
+    pub text: String,
+}
+
+/// Look up a document id by source_path. Used by the `page` subcommand to
+/// disambiguate "document not found" from "page out of range" so the user
+/// sees the more helpful of the two error messages.
+pub fn lookup_doc_id(
+    conn: &Connection,
+    source_path: &str,
+) -> Result<Option<i64>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT id FROM documents WHERE source_path = ?1",
+        rusqlite::params![source_path],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Reverse of `lookup_doc_id`: id → source_path. The `page --by-id` path
+/// uses this to render the source path in error messages without an extra
+/// JOIN inside `get_page_by_id`.
+pub fn lookup_document_by_id(
+    conn: &Connection,
+    id: i64,
+) -> Result<Option<String>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT source_path FROM documents WHERE id = ?1",
+        rusqlite::params![id],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Count how many `pages` rows exist for a doc — used to render
+/// "page X of Y" errors. Returns 0 for non-PDF docs (they store no pages).
+pub fn page_count(conn: &Connection, doc_id: i64) -> Result<i64, rusqlite::Error> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pages WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+        |r| r.get(0),
+    )
 }
 
 /// Look up the prior `(mtime, sha256)` for a source path, if any.
@@ -481,108 +653,68 @@ pub fn delete_by_id_with_summary(
 }
 
 // ===========================================================================
-// Schema v3 — page-level addressing helpers (Slice 12 of vector-retrieval-backend).
+// Schema v3 — page-range fetch helpers (Slice 12 of vector-retrieval-backend).
+// Built on top of the `pages` table populated by `replace_pages` (above) which
+// is the canonical insert path; these helpers only READ.
 // ===========================================================================
 
-/// One page of raw extracted text from a source document. `page_num` is
-/// 1-indexed per the pdfium convention (pages numbered 1..N where N is
-/// the PDF's reported page count, independent of any "printed" numbering
-/// like Roman numerals for preface).
+/// One page of raw extracted text from a source document. `page_no` is
+/// 1-indexed per the pdfium convention (pages numbered 1..N where N is the
+/// PDF's reported page count, independent of any "printed" numbering like
+/// Roman numerals for preface).
 #[derive(Debug, Clone)]
 pub struct PageRow {
-    pub page_num: i64,
+    pub page_no: i64,
     pub text: String,
 }
 
-/// Replace all `pages` rows for a document and update `documents.total_pages`.
-/// Idempotent — used by both fresh ingest and `reindex-pages` backfill.
-/// Wraps the multi-statement update in a `BEGIN IMMEDIATE` transaction so
-/// readers never see a half-populated pages table for the document.
-pub fn replace_pages(
-    conn: &mut Connection,
-    doc_id: i64,
-    pages: &[String],
-) -> Result<(), rusqlite::Error> {
-    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    tx.execute(
-        "DELETE FROM pages WHERE doc_id = ?1",
-        rusqlite::params![doc_id],
-    )?;
-    {
-        let mut stmt =
-            tx.prepare("INSERT INTO pages(doc_id, page_num, text) VALUES (?1, ?2, ?3)")?;
-        for (i, text) in pages.iter().enumerate() {
-            // pdfium 1-indexed convention: page_num = i + 1.
-            stmt.execute(rusqlite::params![doc_id, (i as i64) + 1, text])?;
-        }
-    }
-    tx.execute(
-        "UPDATE documents SET total_pages = ?1 WHERE id = ?2",
-        rusqlite::params![pages.len() as i64, doc_id],
-    )?;
-    tx.commit()?;
-    Ok(())
-}
-
-/// Resolve a doc identifier to a `documents.id`. The user-facing form is
-/// either an integer (the documents.id directly) or a string that
-/// matches `documents.source_path` by basename. Used by the `page`
-/// subcommand so the LLM can request pages from a specific book by its
-/// printed filename without knowing the integer id.
+/// Resolve a user-facing doc identifier to `(documents.id, source_path,
+/// total_pages)`. Accepts either an integer id (parsed as `documents.id`
+/// directly) or a basename string matched against `documents.source_path` so
+/// the LLM can request pages from a specific book by its printed filename.
+/// `total_pages` is derived via `MAX(page_no) FROM pages` since the schema
+/// keeps it on the pages table rather than denormalizing onto `documents`.
 pub fn resolve_doc_id(
     conn: &Connection,
     identifier: &str,
 ) -> Result<Option<(i64, String, Option<i64>)>, rusqlite::Error> {
     use rusqlite::OptionalExtension;
-    // Case 1: numeric id.
-    if let Ok(id) = identifier.parse::<i64>() {
-        let row: Option<(String, Option<i64>)> = conn
-            .query_row(
-                "SELECT source_path, total_pages FROM documents WHERE id = ?1",
-                rusqlite::params![id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?;
-        return Ok(row.map(|(p, t)| (id, p, t)));
-    }
-    // Case 2: basename match against source_path. Multiple docs with the
-    // same basename → return the most-recently-ingested one.
-    let mut stmt = conn.prepare(
-        "SELECT id, source_path, total_pages FROM documents \
-         WHERE source_path = ?1 OR source_path LIKE ?2 \
-         ORDER BY ingested_at DESC LIMIT 1",
-    )?;
-    let row: Option<(i64, String, Option<i64>)> = stmt
-        .query_row(
-            rusqlite::params![identifier, format!("%/{identifier}")],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    let row: Option<(i64, String)> = if let Ok(id) = identifier.parse::<i64>() {
+        conn.query_row(
+            "SELECT id, source_path FROM documents WHERE id = ?1",
+            rusqlite::params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
-        .optional()?;
-    Ok(row)
+        .optional()?
+    } else {
+        conn.query_row(
+            "SELECT id, source_path FROM documents \
+             WHERE source_path = ?1 OR source_path LIKE ?2 \
+             ORDER BY ingested_at DESC LIMIT 1",
+            rusqlite::params![identifier, format!("%/{identifier}")],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+    };
+    if let Some((doc_id, source_path)) = row {
+        let total: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(page_no) FROM pages WHERE doc_id = ?1",
+                rusqlite::params![doc_id],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(Some((doc_id, source_path, total)))
+    } else {
+        Ok(None)
+    }
 }
 
-/// Fetch one page's raw text. Returns `None` when the document exists
-/// but the page number is out of the [1..total_pages] range, OR when
-/// the pages table has not yet been populated for the document
-/// (`reindex-pages` not run yet).
-pub fn fetch_page(
-    conn: &Connection,
-    doc_id: i64,
-    page_num: i64,
-) -> Result<Option<String>, rusqlite::Error> {
-    use rusqlite::OptionalExtension;
-    conn.query_row(
-        "SELECT text FROM pages WHERE doc_id = ?1 AND page_num = ?2",
-        rusqlite::params![doc_id, page_num],
-        |r| r.get::<_, String>(0),
-    )
-    .optional()
-}
-
-/// Fetch a page range `[lo..=hi]` (1-indexed, inclusive) joined into one
-/// blob with `\n\n--- page break ---\n\n` between pages. Used by
-/// `claudeknows page <doc> <page> --range N` so the LLM can pull a
-/// neighborhood of pages around a specific page in a single call.
+/// Fetch a page range `[lo..=hi]` (1-indexed, inclusive). Empty result means
+/// no page in that range has been populated for the document (either the
+/// range is out of bounds OR the document has no `pages` rows yet — caller
+/// disambiguates via `resolve_doc_id`'s `total_pages`).
 pub fn fetch_page_range(
     conn: &Connection,
     doc_id: i64,
@@ -590,13 +722,13 @@ pub fn fetch_page_range(
     hi: i64,
 ) -> Result<Vec<PageRow>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT page_num, text FROM pages \
-         WHERE doc_id = ?1 AND page_num BETWEEN ?2 AND ?3 \
-         ORDER BY page_num",
+        "SELECT page_no, text FROM pages \
+         WHERE doc_id = ?1 AND page_no BETWEEN ?2 AND ?3 \
+         ORDER BY page_no",
     )?;
     let rows = stmt.query_map(rusqlite::params![doc_id, lo, hi], |r| {
         Ok(PageRow {
-            page_num: r.get(0)?,
+            page_no: r.get(0)?,
             text: r.get(1)?,
         })
     })?;

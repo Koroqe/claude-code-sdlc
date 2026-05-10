@@ -150,8 +150,11 @@ claudeknows search "<query>" --top-k 5 --json
 Citations land in your stdout `## Facts → ### External contracts` block (you emit `## Facts` to stdout per cognitive-self-check rule). Format:
 
 ```
-knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes
+knowledge-base: <source-filename>:p<page>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes   # PDF hit (page_start present in JSON)
+knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes           # non-PDF source OR pre-v2 legacy chunk (page_start absent)
 ```
+
+Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudeknows page --by-id <doc_id> --page <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
 
 The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
 

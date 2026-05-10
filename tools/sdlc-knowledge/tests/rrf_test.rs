@@ -11,10 +11,13 @@ use sdlc_knowledge::search::{rrf_fuse, SearchHit, RRF_K};
 fn synth_hit(chunk_id: i64, score: f64, mode: &str) -> SearchHit {
     SearchHit {
         chunk_id,
+        doc_id: 1,
         source: format!("/tmp/doc.{chunk_id}.md"),
         ord: 0,
         score,
         snippet: String::new(),
+        page_start: None,
+        page_end: None,
         context: None,
         mode_used: Some(mode.to_string()),
         bm25_score: if mode == "lexical" { Some(score) } else { None },

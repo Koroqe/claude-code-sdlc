@@ -168,7 +168,7 @@ pub struct PageArgs {
     pub range: i64,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
-    /// Emit JSON `{doc, total_pages, pages: [{page_num, text}, …]}` instead
+    /// Emit JSON `{doc, total_pages, pages: [{page_no, text}, …]}` instead
     /// of the human-readable concatenated form.
     #[arg(long)]
     pub json: bool,
