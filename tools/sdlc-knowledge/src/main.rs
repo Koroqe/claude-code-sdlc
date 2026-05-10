@@ -26,6 +26,7 @@ fn main() -> std::process::ExitCode {
         // resolve_project_root still runs (to keep the path-canonicalization
         // gate uniform for all subcommands) but the resolved root is unused.
         Command::Warmup(_) => None,
+        Command::Compare(a) => a.project_root.as_deref(),
     };
 
     let root = match cli::resolve_project_root(project_root_arg) {
@@ -45,7 +46,173 @@ fn main() -> std::process::ExitCode {
         Command::Status(args) => run_status(&root, &args),
         Command::Delete(args) => run_delete(&root, &args),
         Command::Warmup(args) => run_warmup(&args),
+        Command::Compare(args) => run_compare(&root, &args),
     }
+}
+
+/// `compare <query> [--top-k N] [--max-chars N] [--json]` — A/B test all
+/// three search modes side-by-side with FULL chunk text. Surfaces exactly
+/// what an LLM would receive as RAG context-augmentation input.
+fn run_compare(root: &std::path::Path, args: &cli::CompareArgs) -> std::process::ExitCode {
+    let (conn, _db_path) = match open_and_validate(root) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    let top_k = args.top_k as u32;
+
+    // Run all three modes. Encoder failures fall back to empty results
+    // for that specific mode (NOT to lexical) — the whole point of
+    // `compare` is to see what each mode actually produces.
+    let lex_hits = match search::search(&conn, &args.query, top_k, 0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("warning: lexical search failed: {e}");
+            Vec::new()
+        }
+    };
+    let (dense_hits, hybrid_hits) = match encoder::encode_query(&args.query) {
+        Ok(emb) => {
+            let d = search::dense_search(&conn, &emb, top_k).unwrap_or_else(|e| {
+                eprintln!("warning: dense search failed: {e}");
+                Vec::new()
+            });
+            let h = search::hybrid_search(&conn, &args.query, &emb, top_k).unwrap_or_else(|e| {
+                eprintln!("warning: hybrid search failed: {e}");
+                Vec::new()
+            });
+            (d, h)
+        }
+        Err(e) => {
+            eprintln!(
+                "warning: encoder unavailable ({e}); dense + hybrid columns will be empty. \
+                 Run `bash install.sh --yes` to install the e5-multilingual-small model."
+            );
+            (Vec::new(), Vec::new())
+        }
+    };
+
+    if args.json {
+        let value = serde_json::json!({
+            "query": &args.query,
+            "top_k": args.top_k,
+            "modes": {
+                "lexical": expand_full_text(&conn, &lex_hits, args.max_chars),
+                "dense": expand_full_text(&conn, &dense_hits, args.max_chars),
+                "hybrid": expand_full_text(&conn, &hybrid_hits, args.max_chars),
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&value).unwrap_or_default());
+        return std::process::ExitCode::SUCCESS;
+    }
+
+    // Human-readable side-by-side: vertical sections per mode with FULL text.
+    println!("============================================================");
+    println!("QUERY: {}", &args.query);
+    println!("TOP-K: {}", args.top_k);
+    println!("============================================================");
+    print_compare_section(&conn, "LEXICAL (BM25)", &lex_hits, args.max_chars);
+    print_compare_section(&conn, "DENSE (sqlite-vec)", &dense_hits, args.max_chars);
+    print_compare_section(&conn, "HYBRID (RRF k=60)", &hybrid_hits, args.max_chars);
+    std::process::ExitCode::SUCCESS
+}
+
+/// Pretty-print one mode's hits with full chunk text fetched from the DB.
+fn print_compare_section(
+    conn: &rusqlite::Connection,
+    label: &str,
+    hits: &[search::SearchHit],
+    max_chars: usize,
+) {
+    println!();
+    println!("──── MODE: {label} ────");
+    if hits.is_empty() {
+        println!("(no results)");
+        return;
+    }
+    for (idx, hit) in hits.iter().enumerate() {
+        let basename = std::path::Path::new(&hit.source)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| hit.source.clone());
+        println!();
+        println!(
+            "[{}] chunk_id={} ord={} score={:.4} source={}",
+            idx + 1,
+            hit.chunk_id,
+            hit.ord,
+            hit.score,
+            basename
+        );
+        // Optional component scores when present (hybrid + dense modes).
+        if let (Some(b), Some(d), Some(r)) =
+            (hit.bm25_score, hit.dense_score, hit.rrf_score)
+        {
+            println!(
+                "    bm25={:.4}  dense={:.4}  rrf={:.4}",
+                b, d, r
+            );
+        }
+        let full_text = fetch_chunk_text(conn, hit.chunk_id).unwrap_or_else(|_| {
+            // Fallback to the FTS5 snippet if the lookup fails (should be rare).
+            hit.snippet.clone()
+        });
+        let preview = if max_chars > 0 && full_text.chars().count() > max_chars {
+            let mut s: String = full_text.chars().take(max_chars).collect();
+            s.push_str("…");
+            s
+        } else {
+            full_text
+        };
+        // Indent each line of chunk text for readability.
+        for line in preview.lines() {
+            println!("    {}", line);
+        }
+    }
+}
+
+/// Look up the full `chunks.text` for a chunk_id. Used by `compare` to show
+/// exactly what an LLM would see as RAG input rather than the FTS5 snippet.
+fn fetch_chunk_text(conn: &rusqlite::Connection, chunk_id: i64) -> Result<String, rusqlite::Error> {
+    conn.query_row(
+        "SELECT text FROM chunks WHERE id = ?1",
+        rusqlite::params![chunk_id],
+        |r| r.get::<_, String>(0),
+    )
+}
+
+/// JSON-output helper: hydrate hits with full chunk text + truncate per
+/// max_chars. Returns serde_json::Value array.
+fn expand_full_text(
+    conn: &rusqlite::Connection,
+    hits: &[search::SearchHit],
+    max_chars: usize,
+) -> Vec<serde_json::Value> {
+    hits.iter()
+        .map(|h| {
+            let basename = std::path::Path::new(&h.source)
+                .file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| h.source.clone());
+            let full = fetch_chunk_text(conn, h.chunk_id).unwrap_or_else(|_| h.snippet.clone());
+            let truncated = if max_chars > 0 && full.chars().count() > max_chars {
+                let mut s: String = full.chars().take(max_chars).collect();
+                s.push_str("…");
+                s
+            } else {
+                full
+            };
+            serde_json::json!({
+                "chunk_id": h.chunk_id,
+                "ord": h.ord,
+                "score": h.score,
+                "bm25_score": h.bm25_score,
+                "dense_score": h.dense_score,
+                "rrf_score": h.rrf_score,
+                "source": basename,
+                "text": truncated,
+            })
+        })
+        .collect()
 }
 
 /// `warmup [--quiet]` — Slice 11 install-time encoder pre-load.

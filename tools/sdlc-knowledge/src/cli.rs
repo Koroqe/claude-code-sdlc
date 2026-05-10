@@ -146,6 +146,29 @@ pub struct WarmupArgs {
     pub quiet: bool,
 }
 
+/// `claudeknows compare <query>` — A/B-test all 3 search modes side-by-side.
+/// Runs the same query through lexical / dense / hybrid and prints the
+/// FULL chunk text (not the FTS5 snippet) for each hit so the operator
+/// can judge retrieval quality + see exactly what would be sent to an
+/// LLM as context-augmentation input.
+#[derive(Args, Debug)]
+pub struct CompareArgs {
+    /// Query string to A/B test across modes.
+    pub query: String,
+    /// Top-K hits per mode (default 5).
+    #[arg(long, default_value_t = 5)]
+    pub top_k: usize,
+    /// Truncate each chunk's full text to this many chars (0 = no truncation).
+    /// Useful when chunks are large and you only want a preview.
+    #[arg(long, default_value_t = 0)]
+    pub max_chars: usize,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON instead of human-readable side-by-side blocks.
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[derive(Args, Debug)]
 pub struct DeleteArgs {
     /// Source path (legacy positional form; mutually exclusive with `--by-id`).
@@ -178,6 +201,11 @@ pub enum Command {
     /// failures (offline install, HF rate limit) are warnings, not errors —
     /// fastembed falls back to lazy download on first real use.
     Warmup(WarmupArgs),
+    /// A/B-test all three search modes (lexical / dense / hybrid) for the
+    /// same query, side-by-side, with FULL chunk text so the operator can
+    /// judge retrieval quality + preview exactly what an LLM would receive
+    /// as context-augmentation input.
+    Compare(CompareArgs),
 }
 
 #[derive(clap::Parser, Debug)]
