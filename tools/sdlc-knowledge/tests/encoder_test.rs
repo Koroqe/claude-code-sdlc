@@ -152,3 +152,44 @@ fn real_encode_passage_returns_384_dim_vector() {
         "e5 output should be L2-normalized; got norm={norm}"
     );
 }
+
+/// Tech-debt #2 — runtime regression test for prefix discipline.
+///
+/// Verifies that `encode_passages("X")` and `encode_query("X")` produce
+/// DIFFERENT embeddings for the same input "X". The two output vectors are
+/// only different if the wrapper's `"passage: "` and `"query: "` prefixes
+/// are reaching the encoder — if a future fastembed version started
+/// auto-prepending OR if our wrapper stopped adding prefixes, both calls
+/// would receive the same bare input "X" and produce identical embeddings.
+/// Cosine similarity threshold of 0.99 lets us catch the regression without
+/// false-positive on noise (real e5 produces near-identical-but-not-equal
+/// embeddings for the same input across calls due to ONNX nondeterminism).
+///
+/// This is a runtime defensive test (architect AI-4 deferred ONNX-boundary
+/// mock); the wrapper-level `prefix_passage` / `prefix_query` exactly-once
+/// tests above remain the primary correctness gate.
+#[test]
+fn real_encode_passage_and_query_produce_distinct_embeddings_proving_prefix_works() {
+    if std::env::var("RUN_REAL_ENCODER").as_deref() != Ok("1") {
+        eprintln!(
+            "real_encode_passage_and_query_produce_distinct_embeddings: skipped (set RUN_REAL_ENCODER=1 to run)"
+        );
+        return;
+    }
+    let bare = "authentication architecture";
+    let p_vec =
+        encode_passages(&[bare]).expect("encode_passages should succeed when model is present");
+    let q_vec = encode_query(bare).expect("encode_query should succeed when model is present");
+
+    assert_eq!(p_vec.len(), 1);
+    assert_eq!(q_vec.len(), 384);
+    let p = &p_vec[0];
+
+    // Cosine similarity: dot product (vectors are L2-normalized so |a|=|b|=1).
+    let cos: f32 = p.iter().zip(q_vec.iter()).map(|(a, b)| a * b).sum();
+    assert!(
+        cos < 0.99,
+        "passage and query embeddings for the same input MUST differ when prefixes are operative; got cos={cos}. \
+         Either fastembed started auto-prepending (double-prefix) OR the wrapper dropped its prefix logic — both are silent quality regressions."
+    );
+}
