@@ -191,9 +191,87 @@ pub fn ingest_path(
     store::replace_chunks(&tx, doc_id, &chunk_refs)?;
     tx.commit()?;
 
+    // Tech-debt #4: best-effort embedding population for chunks_vec (Slice 5
+    // encoder + Slice 2 sqlite-vec virtual table). Runs OUTSIDE the chunks
+    // transaction so encoder latency (model load + inference) does NOT hold
+    // the write lock. Silent no-op when:
+    //   - chunks_vec table is absent (v1 schema)
+    //   - encoder model files are missing (degraded mode)
+    //   - encoder inference fails (transient error)
+    // Orphan vectors from prior re-ingests of the same doc remain in
+    // chunks_vec until next vacuum; they don't cause query bugs because the
+    // dense_search JOIN with chunks filters non-existent ids out.
+    let _ = try_populate_chunks_vec(conn, doc_id, &chunks);
+
     Ok(IngestOutcome::Wrote {
         chunks: chunks.len(),
     })
+}
+
+/// Best-effort embedding write into chunks_vec. Returns Ok on success and
+/// Err on any condition that prevents a clean write — no error info leaks
+/// to the user since this is a degraded-mode optimization, not a correctness
+/// path. Callers ignore the result.
+fn try_populate_chunks_vec(
+    conn: &mut Connection,
+    doc_id: i64,
+    chunks: &[Chunk],
+) -> Result<(), ()> {
+    if chunks.is_empty() {
+        return Ok(());
+    }
+    // Schema gate: chunks_vec only exists on v2 DBs.
+    let has_vec: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='chunks_vec'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+    if !has_vec {
+        return Err(());
+    }
+
+    // Encode all chunks via the e5 singleton. Encoder failure (model missing
+    // / runtime error) drops us into degraded mode silently.
+    let texts: Vec<&str> = chunks.iter().map(|c| c.text.as_str()).collect();
+    let embeddings = match crate::encoder::encode_passages(&texts) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+
+    // Fetch the chunk ids assigned by replace_chunks (ord-ordered). The
+    // count must match `chunks.len()`; if not, a concurrent writer modified
+    // chunks between our commit and this query — bail.
+    let ids: Vec<i64> = {
+        let mut stmt = conn
+            .prepare("SELECT id FROM chunks WHERE doc_id = ?1 ORDER BY ord")
+            .map_err(|_| ())?;
+        let rows = stmt
+            .query_map(rusqlite::params![doc_id], |r| r.get::<_, i64>(0))
+            .map_err(|_| ())?;
+        rows.filter_map(Result::ok).collect()
+    };
+    if ids.len() != embeddings.len() {
+        return Err(());
+    }
+
+    // Wrap inserts in a small transaction so we don't half-write on a sqlite
+    // error mid-batch.
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|_| ())?;
+    {
+        let mut stmt = tx
+            .prepare("INSERT OR REPLACE INTO chunks_vec(rowid, embedding) VALUES (?1, ?2)")
+            .map_err(|_| ())?;
+        for (id, emb) in ids.iter().zip(embeddings.iter()) {
+            let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+            stmt.execute(rusqlite::params![id, bytes]).map_err(|_| ())?;
+        }
+    }
+    tx.commit().map_err(|_| ())?;
+    Ok(())
 }
 
 /// Walk `target` (file or dir), ingest every supported file. Per-file errors are

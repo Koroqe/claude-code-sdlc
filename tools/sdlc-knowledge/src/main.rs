@@ -56,11 +56,17 @@ fn open_and_validate(
     root: &std::path::Path,
 ) -> Result<(rusqlite::Connection, std::path::PathBuf), std::process::ExitCode> {
     let db_path = root.join(".claude").join("knowledge").join("index.db");
-    let mut conn = match store::open_or_init(&db_path) {
+    // Tech-debt #4 wiring: use the v2 entry point so fresh DBs are stamped
+    // with schema_version=2 and the chunks_vec virtual table is created.
+    // Existing v1 DBs are left at v1 (open_or_init_v2 does NOT auto-migrate
+    // — that is migrate_v1_to_v2's destructive-confirmation contract). This
+    // means new ingests on fresh DBs populate chunks_vec; pre-existing v1
+    // ingests continue to work as before until the user opts into migration.
+    let mut conn = match store::open_or_init_v2(&db_path) {
         Ok(c) => c,
         Err(_) => {
-            // open_or_init also creates parent dirs; a failure here means the
-            // file exists but isn't a valid SQLite database. Map to AC-7.
+            // open_or_init_v2 also creates parent dirs; a failure here means
+            // the file exists but isn't a valid SQLite database. Map to AC-7.
             eprintln!("error: index database invalid; re-ingest required");
             return Err(std::process::ExitCode::from(1));
         }
@@ -87,7 +93,11 @@ fn run_ingest(root: &std::path::Path, args: &cli::IngestArgs) -> std::process::E
 
     let db_path = root.join(".claude").join("knowledge").join("index.db");
 
-    let mut conn = match store::open_or_init(&db_path) {
+    // Tech-debt #4 wiring: ingest opens with v2 entry point so fresh DBs get
+    // chunks_vec + type/image_bytes columns. Pre-existing v1 DBs continue to
+    // work but skip the chunks_vec hook silently (architect-resolved
+    // migration UX is destructive opt-in via migrate_v1_to_v2).
+    let mut conn = match store::open_or_init_v2(&db_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: failed to open index database: {e}");

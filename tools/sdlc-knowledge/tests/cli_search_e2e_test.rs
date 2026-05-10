@@ -99,9 +99,14 @@ fn e2e_a_search_json_returns_positive_descending_scores() {
 fn e2e_b_search_empty_result_exits_zero_with_empty_array() {
     let tmp = project_with_ingested_sample();
 
+    // --mode lexical pins the test to BM25-only semantics. The default mode
+    // (hybrid) returns dense K-NN neighbors regardless of how dissimilar —
+    // there is no similarity threshold, so a nonsense query still returns
+    // the 5 least-dissimilar chunks. Lexical mode preserves the original
+    // "empty result for term not in corpus" contract this test asserts.
     let assert = bin()
         .current_dir(tmp.path())
-        .args(["search", "xyznonexistentterm", "--json"])
+        .args(["search", "xyznonexistentterm", "--mode", "lexical", "--json"])
         .assert()
         .success();
 
@@ -161,7 +166,9 @@ fn e2e_d_status_json_returns_full_summary() {
     let chunk_count = v.get("chunk_count").and_then(|s| s.as_i64()).expect("i64");
     let db_path = v.get("db_path").and_then(|s| s.as_str()).expect("str");
 
-    assert_eq!(schema_version, 1);
+    // tech-debt #4: open_or_init_v2 stamps schema_version=2 on fresh DBs so
+    // ingest pipelines populate chunks_vec embeddings alongside chunks_fts.
+    assert_eq!(schema_version, 2);
     assert_eq!(doc_count, 1);
     assert_eq!(chunk_count, 8);
     // Absolute path
