@@ -25,6 +25,54 @@ authenticate users" → finds the FastAPI auth chapter), and concept-level
 queries ("RAG retrieval architecture") that BM25 cannot resolve via
 keyword matching.
 
+## Similarity metric — L2 distance with cosine-equivalent ranking
+
+We use **sqlite-vec's default L2 (Euclidean) distance** rather than explicit
+`distance_metric=cosine`. This is a deliberate choice that exploits a
+mathematical equivalence on L2-normalized vectors:
+
+For unit-norm vectors a and b:
+
+```
+‖a − b‖² = ‖a‖² + ‖b‖² − 2·(a·b) = 2 − 2·cos(θ)
+```
+
+So `L2 = √(2 − 2·cos θ)` — a strictly monotonic function of cosine
+similarity. **The ranking order produced by L2-K-NN over unit-norm vectors
+is identical to the ranking order produced by cosine-similarity-K-NN.**
+Only the numeric distance values differ:
+
+| cos θ | L2 distance | Meaning |
+|------:|------------:|---------|
+| 1.00  | 0.00        | identical direction |
+| 0.91  | 0.42        | very similar (typical hit) |
+| 0.50  | 1.00        | weak similarity |
+| 0.00  | 1.41 (√2)   | orthogonal |
+| −1.00 | 2.00        | opposite |
+
+`fastembed-rs` returns L2-normalized embeddings for the e5 family by
+default (verified at runtime: every encoder output has `‖v‖ ≈ 1.0` within
+0.05). The encoder integration test
+`real_encode_passage_returns_384_dim_vector` asserts the L2-normalization
+contract so a future fastembed version that drops normalization breaks
+the build, not the production ranking quality.
+
+**Why not `distance_metric=cosine` explicitly?** Switching the chunks_vec
+declaration to `embedding float[384] distance_metric=cosine` would make
+the `dense_score` field show cosine similarity (0..1) directly instead
+of −L2 (typically −0.4 to −0.6 on real hits). It would NOT change which
+chunks are returned in what order. The trade-off is a destructive
+re-create of the chunks_vec virtual table + re-embed of all 75 K chunks
+(~30 min CPU on M-series). We chose to preserve the existing index and
+document the equivalence rather than pay the migration cost for a purely
+cosmetic score-shape change.
+
+**For the Medium-article-author reading this**: dense ranking via L2 over
+unit-normalized embeddings IS cosine-similarity ranking, despite the
+name "L2" in the SQL. The numbers in `dense_score` decode to cosine via
+`cos = 1 − L2² / 2`. A `dense_score = −0.43` corresponds to a cosine
+similarity of `1 − 0.43² / 2 ≈ 0.91` — a strong semantic match.
+
 ## Methodology
 
 ### Corpus

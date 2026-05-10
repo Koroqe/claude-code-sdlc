@@ -158,9 +158,21 @@ pub struct CompareArgs {
     /// Top-K hits per mode (default 5).
     #[arg(long, default_value_t = 5)]
     pub top_k: usize,
-    /// Truncate each chunk's full text to this many chars (0 = no truncation).
-    /// Useful when chunks are large and you only want a preview.
-    #[arg(long, default_value_t = 0)]
+    /// Expand each hit with ±N neighbor chunks from the same document so the
+    /// preview shows about a page of context around the matched text.
+    /// Chunks are ~500 chars (sliding-window fallback) or up to 1500 chars
+    /// (heading-aware structural). At `--context 2` each hit returns 5
+    /// chunks ≈ 2500 chars ≈ one printed page. Default 2 ("page-ish");
+    /// pass `--context 0` for the bare matched chunk only. Capped at 10
+    /// (search.rs MAX_CONTEXT_RADIUS).
+    #[arg(long, default_value_t = 2)]
+    pub context: usize,
+    /// Truncate the assembled text (chunk + neighbors when --context > 0)
+    /// to this many chars (0 = no truncation). Default 1500 ≈ one printed
+    /// page — readable in a terminal AND fits comfortably in an LLM context
+    /// window without overwhelming it. Pass `--max-chars 0` for the full
+    /// assembled blob (when `--context 2` that's ~2500 chars).
+    #[arg(long, default_value_t = 1500)]
     pub max_chars: usize,
     #[arg(long)]
     pub project_root: Option<PathBuf>,

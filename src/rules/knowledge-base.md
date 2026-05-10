@@ -62,6 +62,8 @@ Hybrid is the recommended default — it captures both exact-keyword and semanti
 
 **Mode fallback contract.** When the e5 encoder model is unavailable OR the schema is at v1 (no `chunks_vec` virtual table), `--mode hybrid` and `--mode dense` automatically fall back to lexical retrieval with a stderr warning. The fallback is silent on stdout — the `mode_used` JSON field reflects the actual mode that produced each hit so agents can detect degraded-mode runs.
 
+**Distance metric.** `chunks_vec` uses sqlite-vec's default L2 (Euclidean) distance. Because the e5-multilingual-small encoder produces L2-normalized vectors, L2 ranking is mathematically identical to cosine-similarity ranking — the formula is `cos = 1 − L2² / 2`. The `dense_score` field shows `−L2_distance` (negated so larger=better, matching the BM25 convention); a `dense_score = −0.43` corresponds to cosine similarity ≈ 0.91. Agents reading this field do NOT need to convert; ranking order is what matters and is preserved across the L2/cosine equivalence.
+
 The JSON output for non-lexical modes carries auxiliary score fields (`bm25_score`, `dense_score`, `rrf_score`, `mode_used`) alongside the canonical `score`. Lexical mode emits `score` (negated BM25, larger=better) and omits the dense/RRF fields.
 
 ## Citation format

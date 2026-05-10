@@ -95,10 +95,11 @@ fn run_compare(root: &std::path::Path, args: &cli::CompareArgs) -> std::process:
         let value = serde_json::json!({
             "query": &args.query,
             "top_k": args.top_k,
+            "context_radius": args.context,
             "modes": {
-                "lexical": expand_full_text(&conn, &lex_hits, args.max_chars),
-                "dense": expand_full_text(&conn, &dense_hits, args.max_chars),
-                "hybrid": expand_full_text(&conn, &hybrid_hits, args.max_chars),
+                "lexical": expand_full_text(&conn, &lex_hits, args.context, args.max_chars),
+                "dense": expand_full_text(&conn, &dense_hits, args.context, args.max_chars),
+                "hybrid": expand_full_text(&conn, &hybrid_hits, args.context, args.max_chars),
             }
         });
         println!("{}", serde_json::to_string_pretty(&value).unwrap_or_default());
@@ -108,19 +109,22 @@ fn run_compare(root: &std::path::Path, args: &cli::CompareArgs) -> std::process:
     // Human-readable side-by-side: vertical sections per mode with FULL text.
     println!("============================================================");
     println!("QUERY: {}", &args.query);
-    println!("TOP-K: {}", args.top_k);
+    println!("TOP-K: {}  CONTEXT: ±{} chunks per hit", args.top_k, args.context);
     println!("============================================================");
-    print_compare_section(&conn, "LEXICAL (BM25)", &lex_hits, args.max_chars);
-    print_compare_section(&conn, "DENSE (sqlite-vec)", &dense_hits, args.max_chars);
-    print_compare_section(&conn, "HYBRID (RRF k=60)", &hybrid_hits, args.max_chars);
+    print_compare_section(&conn, "LEXICAL (BM25)", &lex_hits, args.context, args.max_chars);
+    print_compare_section(&conn, "DENSE (sqlite-vec)", &dense_hits, args.context, args.max_chars);
+    print_compare_section(&conn, "HYBRID (RRF k=60)", &hybrid_hits, args.context, args.max_chars);
     std::process::ExitCode::SUCCESS
 }
 
-/// Pretty-print one mode's hits with full chunk text fetched from the DB.
+/// Pretty-print one mode's hits with full chunk text + ±context neighbors
+/// fetched from the DB. When `context_radius` > 0, each hit shows ~one
+/// page of text instead of just the matched chunk.
 fn print_compare_section(
     conn: &rusqlite::Connection,
     label: &str,
     hits: &[search::SearchHit],
+    context_radius: usize,
     max_chars: usize,
 ) {
     println!();
@@ -152,11 +156,13 @@ fn print_compare_section(
                 b, d, r
             );
         }
-        let full_text = fetch_chunk_text(conn, hit.chunk_id).unwrap_or_else(|_| {
-            // Fallback to the FTS5 snippet if the lookup fails (should be rare).
-            hit.snippet.clone()
-        });
-        let preview = if max_chars > 0 && full_text.chars().count() > max_chars {
+        let full_text = fetch_chunk_with_context(conn, hit.chunk_id, context_radius)
+            .unwrap_or_else(|_| {
+                // Fallback to the FTS5 snippet if the lookup fails.
+                hit.snippet.clone()
+            });
+        let char_count = full_text.chars().count();
+        let preview = if max_chars > 0 && char_count > max_chars {
             let mut s: String = full_text.chars().take(max_chars).collect();
             s.push_str("…");
             s
@@ -180,11 +186,61 @@ fn fetch_chunk_text(conn: &rusqlite::Connection, chunk_id: i64) -> Result<String
     )
 }
 
-/// JSON-output helper: hydrate hits with full chunk text + truncate per
-/// max_chars. Returns serde_json::Value array.
+/// Fetch the matched chunk PLUS ±`radius` neighbor chunks from the same
+/// document, joined into one ~page-sized blob. When radius=0, this is
+/// equivalent to `fetch_chunk_text`. Neighbors are joined with a literal
+/// `\n\n--- chunk break ---\n\n` separator so the LLM (and human reader)
+/// can see chunk boundaries.
+///
+/// Boundary clipping: requested ord values that fall outside the
+/// document's actual ord range simply don't return rows — the SQL
+/// `BETWEEN` is silently bounded by what exists. So a hit at ord=0 with
+/// radius=2 returns chunks at ord ∈ {0,1,2} (3 chunks instead of 5).
+fn fetch_chunk_with_context(
+    conn: &rusqlite::Connection,
+    chunk_id: i64,
+    radius: usize,
+) -> Result<String, rusqlite::Error> {
+    if radius == 0 {
+        return fetch_chunk_text(conn, chunk_id);
+    }
+    // 1. Look up the (doc_id, ord) of the matched chunk.
+    let (doc_id, ord): (i64, i64) = conn.query_row(
+        "SELECT doc_id, ord FROM chunks WHERE id = ?1",
+        rusqlite::params![chunk_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    // 2. Cap radius at search::MAX_CONTEXT_RADIUS (10) for safety.
+    let r = (radius as u32).min(search::MAX_CONTEXT_RADIUS) as i64;
+    let lo = ord - r;
+    let hi = ord + r;
+    // 3. Fetch the window in ascending ord order.
+    let mut stmt = conn.prepare(
+        "SELECT text FROM chunks \
+         WHERE doc_id = ?1 AND ord BETWEEN ?2 AND ?3 \
+         ORDER BY ord",
+    )?;
+    let texts: Vec<String> = stmt
+        .query_map(rusqlite::params![doc_id, lo, hi], |r| {
+            r.get::<_, String>(0)
+        })?
+        .filter_map(Result::ok)
+        .collect();
+    if texts.is_empty() {
+        // Fallback: matched chunk vanished between ranking and context fetch
+        // (concurrent delete?). Return just the matched chunk's snippet via
+        // the simple lookup.
+        return fetch_chunk_text(conn, chunk_id);
+    }
+    Ok(texts.join("\n\n--- chunk break ---\n\n"))
+}
+
+/// JSON-output helper: hydrate hits with full chunk text + ±context
+/// neighbors + truncate per max_chars. Returns serde_json::Value array.
 fn expand_full_text(
     conn: &rusqlite::Connection,
     hits: &[search::SearchHit],
+    context_radius: usize,
     max_chars: usize,
 ) -> Vec<serde_json::Value> {
     hits.iter()
@@ -193,7 +249,8 @@ fn expand_full_text(
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_else(|| h.source.clone());
-            let full = fetch_chunk_text(conn, h.chunk_id).unwrap_or_else(|_| h.snippet.clone());
+            let full = fetch_chunk_with_context(conn, h.chunk_id, context_radius)
+                .unwrap_or_else(|_| h.snippet.clone());
             let truncated = if max_chars > 0 && full.chars().count() > max_chars {
                 let mut s: String = full.chars().take(max_chars).collect();
                 s.push_str("…");
