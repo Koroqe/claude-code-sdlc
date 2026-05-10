@@ -22,6 +22,10 @@ fn main() -> std::process::ExitCode {
         Command::List(a) => a.project_root.as_deref(),
         Command::Status(a) => a.project_root.as_deref(),
         Command::Delete(a) => a.project_root.as_deref(),
+        // Warmup does not touch project filesystem — encoder cache is in $HOME.
+        // resolve_project_root still runs (to keep the path-canonicalization
+        // gate uniform for all subcommands) but the resolved root is unused.
+        Command::Warmup(_) => None,
     };
 
     let root = match cli::resolve_project_root(project_root_arg) {
@@ -40,6 +44,40 @@ fn main() -> std::process::ExitCode {
         Command::List(args) => run_list(&root, &args),
         Command::Status(args) => run_status(&root, &args),
         Command::Delete(args) => run_delete(&root, &args),
+        Command::Warmup(args) => run_warmup(&args),
+    }
+}
+
+/// `warmup [--quiet]` — Slice 11 install-time encoder pre-load.
+///
+/// Triggers fastembed to download + cache the e5-multilingual-small ONNX
+/// model into `~/.claude/tools/sdlc-knowledge/models/` so the FIRST
+/// `claudeknows ingest` or `claudeknows search --mode hybrid` doesn't pay
+/// a 30-second cold-start stall. Idempotent — fastembed checks the cache
+/// before redownloading; subsequent calls are <1 s. Network failures
+/// (offline install, HF rate limit) are warnings, NOT errors — the
+/// fallback path is fastembed's lazy download on first real use.
+fn run_warmup(args: &cli::WarmupArgs) -> std::process::ExitCode {
+    if !args.quiet {
+        eprintln!(
+            "warmup: pre-loading e5-multilingual-small encoder into ~/.claude/tools/sdlc-knowledge/models/ ..."
+        );
+    }
+    match encoder::encode_query("warmup") {
+        Ok(v) => {
+            if !args.quiet {
+                eprintln!("warmup: ok — encoder ready ({} dims)", v.len());
+            }
+            std::process::ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!(
+                "warmup: WARN — encoder pre-load failed ({e}); fastembed will retry on first real use"
+            );
+            // Exit 0 even on failure — warmup is best-effort. install.sh
+            // proceeds; fastembed lazy-downloads on first ingest.
+            std::process::ExitCode::SUCCESS
+        }
     }
 }
 

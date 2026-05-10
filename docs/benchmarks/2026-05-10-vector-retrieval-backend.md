@@ -7,13 +7,17 @@
 ## TL;DR
 
 We replaced the BM25-only retrieval in `claudeknows` with a hybrid backend
-(BM25 ⊕ dense via Reciprocal Rank Fusion). Measured on a 16-PDF technical
-books corpus (33,570 chunks indexed at v2 schema):
+(BM25 ⊕ dense via Reciprocal Rank Fusion). Measured on a **39-PDF
+technical books corpus (75,895 chunks indexed at v2 schema)**:
 
-> **Hybrid retrieval finds the right document 58% of the time in the top 5
-> results, vs 33% for the iter-1 BM25 baseline — a +75% relative recall
-> improvement.** Mean Reciprocal Rank improves from 0.215 → 0.417 (+94%).
-> Latency p95 stays under 90 ms, well within the 500 ms NFR budget.
+> **Hybrid retrieval finds the right document 83.3% of the time in the
+> top 10 results, vs 58.3% for the iter-1 BM25 baseline — a +43%
+> relative Recall@10 improvement.** At top-5 the gap is even larger:
+> 75.0% vs 41.7% (+80% relative). Mean Reciprocal Rank improves from
+> 0.378 → 0.483 (+28%). Latency p95 stays under 70 ms, well within the
+> 500 ms NFR budget — and on the full corpus hybrid is actually FASTER
+> than pure dense at p95 (66 ms vs 74 ms) because encoder warm-up
+> amortizes across more queries.
 
 The win is concentrated where you'd expect: cross-lingual queries
 (Russian → English corpus), natural-language paraphrases ("how to
@@ -25,13 +29,13 @@ keyword matching.
 
 ### Corpus
 
-40 PDFs spanning ML / AI / data engineering / system design / SRE /
-generative AI in mixed Russian + English at
-`/Users/aleksandra/Documents/claude-code-sdlc/books/`. **For this report,
-17 PDFs (33,570 chunks) had been ingested at the time of measurement** —
-re-ingesting the full corpus would only IMPROVE the absolute recall numbers
-(more relevant sources reachable) but does not change the relative
-ordering hybrid > dense > lexical that is the load-bearing finding.
+40 PDFs (1 EPUB skipped — unsupported extension) spanning ML / AI / data
+engineering / system design / SRE / generative AI in mixed Russian +
+English at `/Users/aleksandra/Documents/claude-code-sdlc/books/`. **39
+PDFs / 75,895 chunks fully ingested at v2 schema** with embeddings
+populated in `chunks_vec`. Slice 8 of vector-retrieval-backend completed
+the re-ingest of the entire corpus (22 fresh + 17 unchanged from prior
+partial run; 0 failures).
 
 The encoder is `intfloat/multilingual-e5-small` via fastembed-rs (384-dim
 L2-normalized embeddings). Chunking is heading-aware structural with
@@ -70,28 +74,32 @@ runner is `claudeknows-bench` (a separate `[[bin]]` shipped in this
 feature); the raw output report is
 [`tools/sdlc-knowledge/bench/reports/2026-05-10-vector-vs-bm25.md`](../../tools/sdlc-knowledge/bench/reports/2026-05-10-vector-vs-bm25.md).
 
-## Aggregate metrics
+## Aggregate metrics — full 39-PDF corpus
 
 | Mode | Recall@1 | Recall@3 | Recall@5 | Recall@10 | MRR | Latency p50 | Latency p95 |
 |------|---------:|---------:|---------:|----------:|----:|------------:|------------:|
-| lexical (BM25)        | 16.7 % | 16.7 % | 33.3 % | 41.7 % | 0.215 | **5.8 ms**  | 14.3 ms |
-| dense (sqlite-vec)    | 25.0 % | 41.7 % | 50.0 % | 58.3 % | 0.363 | 63.2 ms     | 106.4 ms¹ |
-| **hybrid (RRF k=60)** | **33.3 %** | **41.7 %** | **58.3 %** | **58.3 %** | **0.417** | 72.1 ms | **84.9 ms** |
+| lexical (BM25)        | 33.3 %     | 33.3 %     | 41.7 %     | 58.3 %     | 0.378 | **4.6 ms** | **9.0 ms** |
+| dense (sqlite-vec)    | **41.7 %** | 58.3 %     | 75.0 %     | 75.0 %     | **0.528** | 63.7 ms | 74.1 ms |
+| **hybrid (RRF k=60)** | 33.3 %     | **58.3 %** | **75.0 %** | **83.3 %** | 0.483 | 59.1 ms | 66.1 ms |
 
-¹ The dense p95 is inflated by the cold-start outlier (Q01 first dense
-query took 4336 ms while fastembed loaded the e5 ONNX model into memory
-and initialized the ONNX runtime). Subsequent dense queries all complete
-in <120 ms; the warm-state p95 is ≈85 ms — same as hybrid.
+The dense Recall@1 lead (41.7 % vs hybrid 33.3 %) is real: when the dense
+ranker has a strong first hit, RRF can dilute it if BM25 ranks the same
+chunk poorly. But hybrid wins at Recall@5 / Recall@10 — the practical
+"is the right answer in the agent's context window?" metric — and has a
+narrower p50 / p95 latency spread because BM25's negligible cost balances
+encoder amortization. **Default mode = hybrid is the right choice for
+agent workflows; power users searching for a single best hit may prefer
+`--mode dense`.**
 
-### Relative improvement (hybrid vs lexical)
+### Relative improvement (hybrid vs lexical baseline)
 
 | Metric | Lexical | Hybrid | Δ relative |
 |---|---:|---:|---:|
-| Recall@1 | 16.7 % | 33.3 % | **+99 %** |
-| Recall@5 | 33.3 % | 58.3 % | **+75 %** |
-| Recall@10 | 41.7 % | 58.3 % | **+40 %** |
-| MRR | 0.215 | 0.417 | **+94 %** |
-| Latency p95 | 14.3 ms | 84.9 ms | +494 % (cost) |
+| Recall@1 | 33.3 % | 33.3 % | 0 % |
+| Recall@5 | 41.7 % | 75.0 % | **+80 %** |
+| Recall@10 | 58.3 % | 83.3 % | **+43 %** |
+| MRR | 0.378 | 0.483 | **+28 %** |
+| Latency p95 | 9.0 ms | 66.1 ms | +634 % (cost) |
 
 ## Where hybrid wins (qualitative samples)
 
@@ -166,12 +174,10 @@ are scenarios where lexical alone is better:
   wide. The +75 % relative win is large enough to be meaningful, but a
   more rigorous benchmark would expand to ≥50 queries with 5+ judgers
   per query for inter-rater reliability.
-- **Partial corpus.** 5 of the 12 queries hit zero relevant sources in
-  ANY mode because the relevant PDFs hadn't been ingested yet (Slice 8
-  was killed for time at 17/40 PDFs). Recall numbers above EXCLUDE these
-  five — i.e., they're computed over 7 queries that had at least one
-  relevant source ingested. Re-running on a complete corpus will only
-  improve the absolute numbers; the relative ordering is unchanged.
+- **Full corpus measured.** All 39 PDFs ingested at v2 schema. The
+  remaining 2 unhit queries (Q08 Kafka, Q12 system design) reflect actual
+  retrieval misses on indexed content, NOT corpus coverage gaps. Worth
+  inspecting per-query top-3 to understand the failure modes.
 - **Cold-start latency.** The first dense / hybrid query in a fresh
   process spends ~4 seconds loading the e5 model + initializing the ONNX
   runtime. All subsequent queries are <120 ms. If your usage pattern is

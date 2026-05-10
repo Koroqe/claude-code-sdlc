@@ -140,6 +140,13 @@ pub struct StatusArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct WarmupArgs {
+    /// Suppress success output; only stderr warnings on failure.
+    #[arg(long)]
+    pub quiet: bool,
+}
+
+#[derive(Args, Debug)]
 pub struct DeleteArgs {
     /// Source path (legacy positional form; mutually exclusive with `--by-id`).
     pub source_path: Option<String>,
@@ -164,6 +171,13 @@ pub enum Command {
     Status(StatusArgs),
     /// Delete a source by ID.
     Delete(DeleteArgs),
+    /// Pre-download the e5-multilingual-small encoder model so the first
+    /// `ingest` / `search --mode hybrid` doesn't pay a 30-second cold-start
+    /// model-download stall. Idempotent: re-runs are no-ops once the
+    /// model is cached at `~/.claude/tools/sdlc-knowledge/models/`. Network
+    /// failures (offline install, HF rate limit) are warnings, not errors —
+    /// fastembed falls back to lazy download on first real use.
+    Warmup(WarmupArgs),
 }
 
 #[derive(clap::Parser, Debug)]
