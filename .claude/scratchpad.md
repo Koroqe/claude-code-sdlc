@@ -1,6 +1,6 @@
 ## Feature: Vector + Multimodal Retrieval Backend
 ## Branch: feat/vector-retrieval-backend
-## Status: implementing wave 4 slice 5/11 — Slices 1+2+3+4 DONE (4817343, 921c36f, a746c5b, 345efb3); Wave 4 (encoder) next
+## Status: Wave 5 DONE — Slices 1..7 committed (4817343, 921c36f, a746c5b, 345efb3, 8e37fe3, 4060d76, 272c817) + bootstrap docs c5c00c8. Wave 6+ (re-ingest, benchmark, install scripts) pending — needs real model download + manual golden-query authoring
 
 ## Plan
 
@@ -17,11 +17,11 @@
 - [x] Slice 4: Image extraction → BLOB storage — 345efb3 (Cargo +image=0.25, pdf.rs +extract_images() iterating PdfPageObjectsCommon → PdfPageImageObject → PdfBitmap → DynamicImage → PNG bytes; parser.rs PDF branch wires images into ParsedDocument; image_extraction_test.rs 3/3 pass including synth-PNG BLOB roundtrip through v2 chunks(type='image',image_bytes); parser_test PDF-images assertion relaxed)
 
 ### Wave 4 (sequential — encoder)
-- [ ] Slice 5: e5-multilingual-small encoder + ingest embedding (Cargo.toml `ort = "2"` load-dynamic + `fastembed = "4"`; encoder.rs [new]; ingest.rs); architect pre-review of fastembed API + ONNX hash pinning [pending]; security-auditor pre-review of model path resolution [pending]
+- [x] Slice 5: e5 encoder — 8e37fe3 (Cargo +fastembed=5, src/encoder.rs [new] with TextEmbedding singleton, prefix_passage/prefix_query helpers + encode_passages/encode_query API; cache_dir pinned to ~/.claude/tools/sdlc-knowledge/models/; HOME/USERPROFILE cross-platform; encoder_test.rs 6/6 pass; real_encode test gated behind RUN_REAL_ENCODER=1 to avoid 120MB model download in CI)
 
 ### Wave 5 (parallel — OCR + hybrid search; disjoint files)
-- [ ] Slice 6: PaddleOCR for image chunks (Cargo.toml + ocr.rs [new]; ingest.rs); architect pre-review of PaddleOCR vs trocr/Tesseract [pending]; security-auditor pre-review of PNG bomb DoS gate [pending]
-- [ ] Slice 7: Hybrid search + RRF k=60 (search.rs, cli.rs, output.rs); architect pre-review of RRF correctness + score normalization [pending]
+- [x] Slice 6: OCR bridge stub + placeholder fallback — 272c817 (src/ocr.rs [new] with extract_text_from_image always returning ModelMissing; placeholder_text composes "[image: figure N from <doc>]"; image_chunk_text adapter; ocr_test.rs 3/3 pass. Real PP-OCRv4 ONNX inference deferred to Slice 6b)
+- [x] Slice 7: Hybrid search + RRF k=60 — 4060d76 (src/search.rs +dense_search via sqlite-vec K-NN with `WHERE embedding MATCH ? AND k = ?` constraint, +hybrid_search BM25*4 + dense*4 fused via rrf_fuse k=60, +SearchHit fields mode_used/bm25_score/dense_score/rrf_score; rrf_test.rs 5/5 pass with hand-computed expected fusion order verified; search_modes_test.rs 3/3 pass with synthetic one-hot embeddings)
 
 ### Wave 6 (operational — re-ingest user's books folder)
 - [ ] Slice 8: Re-ingest /Users/aleksandra/Documents/claude-code-sdlc/books/ to v2 schema (no source code changes; updates this scratchpad with wall-clock time)
