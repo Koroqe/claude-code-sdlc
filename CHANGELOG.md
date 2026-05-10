@@ -17,6 +17,7 @@ and documentation cleanups do NOT belong here (per
 ### Added
 
 - Native Windows installer — `install.bat` (cmd.exe wrapper) and `install.ps1` (PowerShell) install the SDLC config to `%USERPROFILE%\.claude\`, download `sdlc-knowledge.exe` and `pdfium.dll` from GitHub releases, register a `claudeknows.cmd` wrapper, and add it to your User PATH. No Git Bash / MSYS2 / Cygwin required.
+- The knowledge-base search tool now understands your queries semantically — matching concepts and cross-lingual paraphrases rather than exact keywords — and can also find text embedded in figures and diagrams extracted from PDFs.
 
 ## [0.3.1] - 2026-05-02
 

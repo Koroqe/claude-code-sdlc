@@ -1,6 +1,6 @@
 ## Feature: Vector + Multimodal Retrieval Backend
 ## Branch: feat/vector-retrieval-backend
-## Status: implementing wave 3 slice 4/11 — Slices 1+2+3 DONE (4817343, 921c36f, a746c5b); Wave 3 next session
+## Status: implementing wave 4 slice 5/11 — Slices 1+2+3+4 DONE (4817343, 921c36f, a746c5b, 345efb3); Wave 4 (encoder) next
 
 ## Plan
 
@@ -14,7 +14,7 @@
 - [x] Slice 3: Parser bridge — a746c5b (src/parser.rs [new] with `parse(p: &Path) -> Result<ParsedDocument, IngestError>` dispatch by extension; ParsedDocument shape with `images: Vec<ExtractedImage>` always-empty per Slice 3 contract — Slice 4 wires pdf::extract_images. parser_test.rs 5/5 pass. Production ingest NOT yet rewired — happens in Slice 5+ when chunks_vec needs populating.)
 
 ### Wave 3 (sequential — image extraction depends on parser)
-- [ ] Slice 4: Image extraction → BLOB storage (parser.rs extend, ingest.rs)
+- [x] Slice 4: Image extraction → BLOB storage — 345efb3 (Cargo +image=0.25, pdf.rs +extract_images() iterating PdfPageObjectsCommon → PdfPageImageObject → PdfBitmap → DynamicImage → PNG bytes; parser.rs PDF branch wires images into ParsedDocument; image_extraction_test.rs 3/3 pass including synth-PNG BLOB roundtrip through v2 chunks(type='image',image_bytes); parser_test PDF-images assertion relaxed)
 
 ### Wave 4 (sequential — encoder)
 - [ ] Slice 5: e5-multilingual-small encoder + ingest embedding (Cargo.toml `ort = "2"` load-dynamic + `fastembed = "4"`; encoder.rs [new]; ingest.rs); architect pre-review of fastembed API + ONNX hash pinning [pending]; security-auditor pre-review of model path resolution [pending]
