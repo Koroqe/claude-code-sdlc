@@ -40,6 +40,14 @@ sha2 = "0.10"
 # from our code without relying on the renamed `image_025` package alias.
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Embedding model runtime (Slice 5 of vector-retrieval-backend). fastembed-rs
+# ships e5-multilingual-small + many other embedding models with a simple
+# `TextEmbedding::try_new(InitOptions { model_name: ... })` API. ONNX runtime
+# is loaded transitively via `ort` — per architect AI-3 we use load-dynamic
+# (the runtime dylib is downloaded by install.sh, mirroring pdfium pattern)
+# to keep the binary <10 MB.
+fastembed = "5"
+
 # Error plumbing
 anyhow = "1"
 thiserror = "1"

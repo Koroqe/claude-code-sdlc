@@ -7,6 +7,7 @@
 
 pub mod chunker;
 pub mod cli;
+pub mod encoder;
 pub mod ingest;
 pub mod migrations;
 pub mod output;
