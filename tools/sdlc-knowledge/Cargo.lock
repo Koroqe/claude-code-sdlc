@@ -820,6 +820,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sqlite-vec",
  "tempfile",
  "thiserror",
 ]
@@ -901,6 +902,15 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "sqlite-vec"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0ba424237a9a5db2f6071f193319e2b6a32f7f3961debb2fbbfe67067abce3f"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "strsim"

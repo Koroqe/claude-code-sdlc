@@ -12,9 +12,31 @@
 //! `validate_schema` confirms the four-table shape and `schema_version=1`.
 
 use std::path::Path;
+use std::sync::Once;
 
 use rusqlite::Connection;
 use thiserror::Error;
+
+/// Process-wide once-flag for sqlite-vec extension registration. The crate
+/// exposes a C entrypoint `sqlite3_vec_init` and we register it as a SQLite
+/// auto-extension via rusqlite's FFI. After registration EVERY new Connection
+/// opened in this process automatically loads the vec0 virtual table builtin.
+/// This must run BEFORE the first Connection::open in the process.
+static SQLITE_VEC_INIT: Once = Once::new();
+
+fn ensure_sqlite_vec_registered() {
+    SQLITE_VEC_INIT.call_once(|| {
+        // SAFETY: sqlite_vec::sqlite3_vec_init is the C entrypoint exported
+        // by libsqlite_vec0. Transmuting to the auto-extension function
+        // pointer signature is the documented usage pattern from the
+        // sqlite-vec crate's own integration tests (sqlite-vec 0.1.9).
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+    });
+}
 
 use crate::output::{DocumentSummary, StatusInfo};
 
@@ -86,6 +108,75 @@ pub fn open_or_init(db_path: &Path) -> Result<Connection, StoreError> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA_V1)?;
+    Ok(conn)
+}
+
+/// V2 schema delta (Slice 2 of vector-retrieval-backend). Applied on top of
+/// `SCHEMA_V1` for fresh DBs. Existing v1 DBs go through
+/// `migrations::migrate_v1_to_v2` which is destructive (drop+recreate) per
+/// architect OQ-2 resolution.
+///
+/// Adds two columns to `chunks`:
+///   - `type` — 'text' | 'table' | 'image'; defaults to 'text' for legacy rows
+///   - `image_bytes` — PNG bytes BLOB for figure chunks (NULL for text)
+///
+/// Adds `chunks_vec` virtual table backed by sqlite-vec — vec0 with
+/// `embedding float[384]` for e5-multilingual-small (Slice 5 populates it).
+///
+/// SQL discipline: static `&str` literal, no user data interpolation.
+const SCHEMA_V2_DELTA: &str = r#"
+ALTER TABLE chunks ADD COLUMN type TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE chunks ADD COLUMN image_bytes BLOB;
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);
+"#;
+
+/// Open (or create) the SQLite database at `db_path` with v2 schema enabled.
+/// Loads the sqlite-vec extension at connection-open time (architect OQ-2
+/// resolution: `sqlite_vec::load(&conn)` registers vec0 without enabling
+/// rusqlite's `load_extension` feature, preserving the security posture).
+///
+/// Migration semantics for existing DBs:
+///   - Fresh DB (schema_version absent): apply SCHEMA_V1 + SCHEMA_V2_DELTA, stamp version=2
+///   - schema_version=1: caller MUST run `migrations::migrate_v1_to_v2` (destructive re-ingest)
+///   - schema_version=2: idempotent no-op (CREATE ... IF NOT EXISTS clauses)
+///
+/// Returns the connection on success. Caller is responsible for invoking
+/// migration if the DB is at v1 and needs upgrading.
+pub fn open_or_init_v2(db_path: &Path) -> Result<Connection, StoreError> {
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    // Register sqlite-vec auto-extension once per process BEFORE Connection::open
+    // so the new connection picks up vec0 virtual table builtin + vec_distance_cosine
+    // SQL function. Per architect OQ-2 this uses sqlite3_auto_extension (NOT
+    // rusqlite's `load_extension` feature, which stays OFF — security posture).
+    ensure_sqlite_vec_registered();
+    let conn = Connection::open(db_path)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.execute_batch(SCHEMA_V1)?;
+    // Apply v2 delta only on fresh DBs (no schema_version row) OR when
+    // schema_version=2 (idempotent CREATE IF NOT EXISTS for chunks_vec; the
+    // ALTER TABLE statements would error on re-run for v2-already DBs, so we
+    // gate them via current_version).
+    let v: i64 = conn
+        .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
+        .unwrap_or(0);
+    if v == 0 {
+        // Fresh DB — apply delta and stamp version=2.
+        conn.execute_batch(SCHEMA_V2_DELTA)?;
+        conn.execute(
+            "INSERT INTO schema_version(version) VALUES (?1)",
+            rusqlite::params![2i64],
+        )?;
+    } else if v == 2 {
+        // Already at v2 — only ensure chunks_vec exists (CREATE IF NOT EXISTS).
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);",
+        )?;
+    }
+    // v == 1: caller runs migrate_v1_to_v2 explicitly. We don't auto-migrate
+    // here because migration is destructive (architect-resolved).
     Ok(conn)
 }
 

@@ -12,6 +12,12 @@ clap = { version = "4.5", features = ["derive"] }
 # Storage / FTS5 (bundled SQLite avoids platform divergence; vtab enables FTS5)
 rusqlite = { version = "0.31", features = ["bundled", "vtab"] }
 
+# sqlite-vec extension (Slice 2 of vector-retrieval-backend) — adds the
+# `vec0` virtual table for cosine-similarity K-NN search alongside FTS5 in
+# the same `index.db`. Per architect OQ-2: load via `sqlite_vec::load(&conn)`
+# helper (NOT bundled into rusqlite, NOT runtime `load_extension`).
+sqlite-vec = "0.1"
+
 # PDF text extraction (iter-2). Replaces `pdf-extract = "0.7"` per PRD §12 FR-2.1.
 # Caret semver `"0.9"` allows 0.9.x patch updates but fences the major-bump
 # (architect MINOR action item #3). Library binding uses the explicit-path
