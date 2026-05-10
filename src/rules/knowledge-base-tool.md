@@ -4,12 +4,12 @@ Companion to `~/.claude/rules/knowledge-base.md` (which documents the CLI contra
 
 ## What this tool is
 
-A local Rust CLI binary `sdlc-knowledge` installed at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`, ALSO invokable as the short alias `claudeknows` from any directory on PATH (the alias is a symlink registered by `bash install.sh --yes` in the first writable PATH directory among `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`). **Throughout this rule the agent uses `claudeknows`** as the canonical short form; the absolute path is the backward-compat fallback for environments where the alias was not registered. The binary:
+A local Rust CLI binary `claudebase` installed at `~/.claude/tools/claudebase/claudebase`, ALSO invokable as the short alias `claudebase` from any directory on PATH (the alias is a symlink registered by `bash install.sh --yes` in the first writable PATH directory among `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`). **Throughout this rule the agent uses `claudebase`** as the canonical short form; the absolute path is the backward-compat fallback for environments where the alias was not registered. The binary:
 
 - Reads PDF / Markdown / plain-text documents from `<project>/.claude/knowledge/sources/` (or any path under the project root)
 - Splits each document into ~500-character overlapping chunks (UTF-8 boundary safe). For PDFs the chunker is **per-page**: each chunk is tagged with the 1-indexed source page so search hits cite the exact page they came from.
 - Stores chunks in a SQLite FTS5 virtual table at `<project>/.claude/knowledge/index.db` (one file per project). Schema v2 also stores per-page extracted PDF text in a `pages(doc_id, page_no, text)` table so the `page` subcommand can return the full text of any cited page in O(1) without re-running PDFium.
-- Serves BM25-ranked full-text queries via `claudeknows search "<query>"` — search hits expose `doc_id`, `page_start`, `page_end` so agents can pivot to `claudeknows page --by-id <doc_id> --page <page_start>` to read the surrounding paragraph.
+- Serves BM25-ranked full-text queries via `claudebase search "<query>"` — search hits expose `doc_id`, `page_start`, `page_end` so agents can pivot to `claudebase page --by-id <doc_id> --page <page_start>` to read the surrounding paragraph.
 - Per-document transactional ingest with sha256 + mtime idempotency — re-running is a no-op when sources are unchanged
 
 No vector embeddings — pure lexical retrieval via SQLite's FTS5 `bm25()` function. Deterministic output, ~5-10 ms per query over 17 000-chunk indexes on a 2024 laptop.
@@ -24,13 +24,13 @@ The base is the `### External contracts` evidence layer that the cognitive-self-
 
 When `<project>/.claude/knowledge/index.db` exists, every in-scope thinking agent (the 12 listed below) MUST follow this protocol on every authoring task:
 
-0. **Corpus scope relevance check (FIRST step, before any topical query).** Inspect the indexed source titles via `claudeknows list --json` and judge whether the task domain plausibly overlaps with the corpus content. See `## Corpus scope relevance protocol` below — this protocol exists to prevent the wasteful pattern of agents running 10+ multilingual queries on a corpus that simply does not cover the task's domain (e.g., a CI/CD release-engineering task against a corpus of ML/AI books) and then filling `### Open questions` with null-result noise that pretends to be corpus gaps when in reality the corpus is correctly scoped to a different domain.
-1. **At the start** of the task, run `claudeknows status --json` AND `claudeknows list --json` to know how many docs and chunks are available, AND to detect which languages appear in the corpus (see `## Multilingual corpus protocol` below). This is an explicit acknowledgement that the base exists, not an optional check.
-2. **For every domain-bearing concept** in the task, run AT LEAST ONE `claudeknows search "<terms>" --top-k 5 --json` BEFORE writing the first paragraph of output for that concept. **When the corpus contains documents in multiple languages, the agent MUST run the same conceptual query in EACH detected language** (see `## Multilingual corpus protocol`) — FTS5 lexical matching does not bridge translations, so an English-only query silently misses Russian / German / CJK / Arabic / etc. content even when it covers the same concept.
+0. **Corpus scope relevance check (FIRST step, before any topical query).** Inspect the indexed source titles via `claudebase list --json` and judge whether the task domain plausibly overlaps with the corpus content. See `## Corpus scope relevance protocol` below — this protocol exists to prevent the wasteful pattern of agents running 10+ multilingual queries on a corpus that simply does not cover the task's domain (e.g., a CI/CD release-engineering task against a corpus of ML/AI books) and then filling `### Open questions` with null-result noise that pretends to be corpus gaps when in reality the corpus is correctly scoped to a different domain.
+1. **At the start** of the task, run `claudebase status --json` AND `claudebase list --json` to know how many docs and chunks are available, AND to detect which languages appear in the corpus (see `## Multilingual corpus protocol` below). This is an explicit acknowledgement that the base exists, not an optional check.
+2. **For every domain-bearing concept** in the task, run AT LEAST ONE `claudebase search "<terms>" --top-k 5 --json` BEFORE writing the first paragraph of output for that concept. **When the corpus contains documents in multiple languages, the agent MUST run the same conceptual query in EACH detected language** (see `## Multilingual corpus protocol`) — FTS5 lexical matching does not bridge translations, so an English-only query silently misses Russian / German / CJK / Arabic / etc. content even when it covers the same concept.
 3. **If results are returned and load-bearing**, integrate them into the output AND cite them under `## Facts → ### External contracts` using the literal citation format from `~/.claude/rules/knowledge-base.md`. **When the JSON hit contains a `page_start` field, agents MUST use citation form (a) — `<source>:p<page>:<chunk-id>` — rather than the legacy chunk-only form.** Page citations are load-bearing: they let a human reviewer open the cited PDF and verify the quote in seconds.
 4. **If a search returns zero results** for a concept that should plausibly be in the base, document the negative search under `### Open questions` (e.g., `knowledge-base: searched "<query>" → 0 hits; consider adding domain reference for <topic>`). Do NOT silently skip — surfacing gaps is how the user knows what to add to the corpus. **Before logging a zero-result, the agent MUST have tried the same concept in every detected language** — a query that returns 0 in English but ≥1 in Russian is NOT a corpus gap, it is a translation gap in the agent's query phrasing.
-5. **NEVER fabricate citations.** Only cite hits that `claudeknows search` actually returned in this session. The cognitive-self-check rule treats fabricated citations as the load-bearing failure mode it was designed to prevent.
-6. **Quoting prose? Pull the full page first.** When the agent intends to quote, paraphrase, or analyse more than one sentence from a PDF hit, follow up the search with `claudeknows page --by-id <doc_id> --page <page_start> --json` to fetch the full extracted page. The 500-char snippet returned by `search` is for ranking, not for quotation — quoting from the snippet alone risks clipping mid-sentence or misattributing surrounding context. The `page` call is cheap (single SQLite indexed lookup, no PDFium re-run) so the latency cost is negligible.
+5. **NEVER fabricate citations.** Only cite hits that `claudebase search` actually returned in this session. The cognitive-self-check rule treats fabricated citations as the load-bearing failure mode it was designed to prevent.
+6. **Quoting prose? Pull the full page first.** When the agent intends to quote, paraphrase, or analyse more than one sentence from a PDF hit, follow up the search with `claudebase page --by-id <doc_id> --page <page_start> --json` to fetch the full extracted page. The 500-char snippet returned by `search` is for ranking, not for quotation — quoting from the snippet alone risks clipping mid-sentence or misattributing surrounding context. The `page` call is cheap (single SQLite indexed lookup, no PDFium re-run) so the latency cost is negligible.
 
 ## Concrete triggers — when you MUST query
 
@@ -49,7 +49,7 @@ The corpus is curated by the user and reflects the user's chosen domain. It is n
 
 ### Step 0a — Inspect indexed titles before querying
 
-After `claudeknows list --json`, the agent reads every `source_path` basename returned. Filenames carry topic information; the agent uses them to form its own picture of what the corpus contains. The agent decides — no list of expected topics is hardcoded into this rule.
+After `claudebase list --json`, the agent reads every `source_path` basename returned. Filenames carry topic information; the agent uses them to form its own picture of what the corpus contains. The agent decides — no list of expected topics is hardcoded into this rule.
 
 ### Step 0b — Three-way scope verdict
 
@@ -95,7 +95,7 @@ The retrieval engine (SQLite FTS5 with the `unicode61` tokenizer) matches **lexi
 
 ### Step 1 — Detect languages at task start
 
-After running `claudeknows status --json`, the agent runs `claudeknows list --json` and inspects the `source_path` basenames AND a small text sample from each language candidate. Detection cues the agent applies:
+After running `claudebase status --json`, the agent runs `claudebase list --json` and inspects the `source_path` basenames AND a small text sample from each language candidate. Detection cues the agent applies:
 
 - Cyrillic characters in basenames or chunk text ⇒ Russian present.
 - CJK ideographs ⇒ Chinese / Japanese / Korean present.
@@ -137,7 +137,7 @@ agents MUST use when working with PDF sources:
 
 ### Step 1 — Search produces a page-tagged hit
 
-`claudeknows search "<query>" --top-k 5 --json` returns hits whose JSON
+`claudebase search "<query>" --top-k 5 --json` returns hits whose JSON
 includes `doc_id`, `page_start`, `page_end` for every PDF chunk. Example:
 
 ```json
@@ -166,7 +166,7 @@ When the agent quotes, paraphrases, or analyses more than one sentence
 from the hit, it MUST follow up with:
 
 ```
-claudeknows page --by-id 3 --page 88 --json
+claudebase page --by-id 3 --page 88 --json
 ```
 
 returning:
@@ -191,14 +191,14 @@ A hit without `page_start` came from either:
   citation form (b) and quote from the `snippet` directly), OR
 - a pre-v2 legacy chunk on a PDF source (the source was ingested before
   the page-tracking migration). In this case the agent SHOULD note in
-  `### Open questions` that re-ingesting the document with `claudeknows
+  `### Open questions` that re-ingesting the document with `claudebase
   ingest <path>` would upgrade it to schema v2 and restore page citations
   on subsequent searches. Do NOT block the artifact on this — citation
   form (b) is still valid for legacy chunks.
 
 ### When `--page <N>` is out of range
 
-`claudeknows page` returns exit 1 with `error: page <N> out of range
+`claudebase page` returns exit 1 with `error: page <N> out of range
 (document has <total> page(s)): <source>`. The agent treats this as a
 sign the search hit's `page_start` is stale (e.g., the corpus was
 re-ingested with a different version of the document) and re-runs the
@@ -232,22 +232,22 @@ This list matches the cognitive-self-check rule's in-scope set verbatim.
 User-driven (agents NEVER mutate the index):
 
 - **Drop documents** into `<project>/.claude/knowledge/sources/` — accepts `.pdf`, `.md`, `.txt`. Sub-directories are recursively walked; symlinks are skipped for security.
-- **Run `/knowledge-ingest <path>`** (slash command) or `claudeknows ingest <path>` from the shell to (re-)index. Idempotent — re-running on unchanged sources logs `unchanged: <path>` and returns exit 0.
+- **Run `/knowledge-ingest <path>`** (slash command) or `claudebase ingest <path>` from the shell to (re-)index. Idempotent — re-running on unchanged sources logs `unchanged: <path>` and returns exit 0.
 - **Re-ingest** after editing or replacing a source. The sha256 fingerprint detects changes.
-- **`claudeknows list --json`** — audit what is currently indexed.
-- **`claudeknows delete <source-id>`** — remove a stale source. The FTS5 trigger cascades chunk deletion (and the `pages` rows cascade-delete via the foreign-key constraint).
-- **`claudeknows status --json`** — return `{schema_version, doc_count, chunk_count, db_path}` for quick health check. `schema_version` should be `2` after iter-2 page-tracking; older indexes report `1` and silently skip page citations.
-- **`claudeknows page --by-id <ID> --page <N> --json`** (or positional `<source-path> --page <N>`) — fetch the full extracted text of one PDF page. Used as the second step of the search → page pivot described above.
+- **`claudebase list --json`** — audit what is currently indexed.
+- **`claudebase delete <source-id>`** — remove a stale source. The FTS5 trigger cascades chunk deletion (and the `pages` rows cascade-delete via the foreign-key constraint).
+- **`claudebase status --json`** — return `{schema_version, doc_count, chunk_count, db_path}` for quick health check. `schema_version` should be `2` after iter-2 page-tracking; older indexes report `1` and silently skip page citations.
+- **`claudebase page --by-id <ID> --page <N> --json`** (or positional `<source-path> --page <N>`) — fetch the full extracted text of one PDF page. Used as the second step of the search → page pivot described above.
 
 ## PDF extraction backend
 
 PDF text extraction uses the `pdfium-render` v0.9 Rust crate (a binding to Chrome's PDFium engine). Unlike the iter-1 `pdf-extract` backend, `pdfium-render` correctly handles CID fonts, calibre-converted PDFs, multi-column layouts, and scanned PDFs with an embedded text layer — these are no longer best-effort failure modes.
 
-The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` / `libpdfium.dll`) is loaded at runtime; it is NOT statically linked. The library is installed by `bash install.sh --yes` at `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`. If the library is absent at PDF ingest time, the per-document load fails gracefully with a clear error and the ingest continues with the remaining sources — markdown and plain-text ingest are unaffected. Encrypted/password-protected PDFs return clear errors and are skipped.
+The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` / `libpdfium.dll`) is loaded at runtime; it is NOT statically linked. The library is installed by `bash install.sh --yes` at `~/.claude/tools/claudebase/pdfium/lib/libpdfium.{dylib,so}`. If the library is absent at PDF ingest time, the per-document load fails gracefully with a clear error and the ingest continues with the remaining sources — markdown and plain-text ingest are unaffected. Encrypted/password-protected PDFs return clear errors and are skipped.
 
 ## What this tool is NOT
 
-- **Hybrid retrieval — BOTH lexical (BM25) AND dense (sqlite-vec) AND fused via RRF.** Iter-2 (vector-retrieval-backend, schema v2) added a `chunks_vec` virtual table populated with 384-dim e5-multilingual-small embeddings alongside the existing FTS5 `chunks_fts`. The default `claudeknows search` mode is `hybrid` (BM25 ⊕ dense via RRF k=60); `--mode lexical` preserves iter-1 BM25-only behavior; `--mode dense` runs pure semantic K-NN. Cross-lingual recall (RU↔EN), paraphrase robustness, and concept-level retrieval all work in `hybrid` / `dense` modes; `lexical` mode remains the regression-safe baseline for exact-keyword queries. **Fallback contract:** when the e5 model is missing OR the schema is at v1 (no chunks_vec), `hybrid`/`dense` automatically degrade to `lexical` with a stderr warning.
+- **Hybrid retrieval — BOTH lexical (BM25) AND dense (sqlite-vec) AND fused via RRF.** Iter-2 (vector-retrieval-backend, schema v2) added a `chunks_vec` virtual table populated with 384-dim e5-multilingual-small embeddings alongside the existing FTS5 `chunks_fts`. The default `claudebase search` mode is `hybrid` (BM25 ⊕ dense via RRF k=60); `--mode lexical` preserves iter-1 BM25-only behavior; `--mode dense` runs pure semantic K-NN. Cross-lingual recall (RU↔EN), paraphrase robustness, and concept-level retrieval all work in `hybrid` / `dense` modes; `lexical` mode remains the regression-safe baseline for exact-keyword queries. **Fallback contract:** when the e5 model is missing OR the schema is at v1 (no chunks_vec), `hybrid`/`dense` automatically degrade to `lexical` with a stderr warning.
 - **NOT shared across projects.** Every project has its own isolated `<project>/.claude/knowledge/` directory, source folder, and index. There is no global corpus.
 - **NOT a replacement for reading the codebase.** Agents MUST still ground claims about THIS codebase by reading files via the Read tool. The knowledge base supplements with EXTERNAL domain knowledge.
 - **NOT a validation oracle.** Citation hits are evidence of what the source says, not proof the source is correct. The corpus quality is the user's responsibility — agents cite what is there, the user curates what gets indexed.
@@ -258,7 +258,7 @@ The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` / `libpdfium.dll`
 
 When `<project>/.claude/knowledge/index.db` does NOT exist, the mandate above is fully bypassed and agent behavior is byte-identical to a project that never adopted the knowledge base. The activation sentinel is the index-file existence; absence equals opt-out.
 
-When neither `claudeknows` (alias) nor `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (absolute path) is invokable — detected via `command -v claudeknows` empty AND the absolute path not executable — agents log `knowledge-base: tool not installed; skipping` once and proceed without citations. The mandate is suspended. The user's remediation path is `bash install.sh --yes` from the SDLC repo checkout. When the alias is absent but the binary is present (older install before the `register_claudeknows_alias` step), agents silently fall back to the absolute path; no log line, no warning.
+When neither `claudebase` (alias) nor `~/.claude/tools/claudebase/claudebase` (absolute path) is invokable — detected via `command -v claudebase` empty AND the absolute path not executable — agents log `knowledge-base: tool not installed; skipping` once and proceed without citations. The mandate is suspended. The user's remediation path is `bash install.sh --yes` from the SDLC repo checkout. When the alias is absent but the binary is present (older install before the `register_claudebase_alias` step), agents silently fall back to the absolute path; no log line, no warning.
 
 ## See also
 
@@ -270,19 +270,19 @@ When neither `claudeknows` (alias) nor `~/.claude/tools/sdlc-knowledge/sdlc-know
 
 ### Verified facts
 
-- The `sdlc-knowledge` binary lives at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` after `bash install.sh --yes` — verified by direct `--version` invocation in this session (returned `sdlc-knowledge 0.2.0`). Also invokable as `claudeknows` via the global alias registered by install.sh — verified by `claudeknows --version` returning the same `sdlc-knowledge 0.2.0` literal.
-- The activation sentinel is the existence of the file `<project>/.claude/knowledge/index.db` — verified against `tools/sdlc-knowledge/src/main.rs` opening `root.join(".claude/knowledge/index.db")` and against the existing `~/.claude/rules/knowledge-base.md` `## Activation sentinel` section.
+- The `claudebase` binary lives at `~/.claude/tools/claudebase/claudebase` after `bash install.sh --yes` — verified by direct `--version` invocation in this session (returned `claudebase 0.2.0`). Also invokable as `claudebase` via the global alias registered by install.sh — verified by `claudebase --version` returning the same `claudebase 0.2.0` literal.
+- The activation sentinel is the existence of the file `<project>/.claude/knowledge/index.db` — verified against `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/main.rs` opening `root.join(".claude/knowledge/index.db")` and against the existing `~/.claude/rules/knowledge-base.md` `## Activation sentinel` section.
 - The 12 in-scope thinking agents and 5 exempt executors enumerated above match the `~/.claude/rules/cognitive-self-check.md` `## Application Scope` list verbatim — these two rules MUST stay in sync.
-- BM25 ranking via SQLite FTS5 `-bm25(chunks_fts) AS score ... ORDER BY score DESC` — positive score, larger = better match — verified against `tools/sdlc-knowledge/src/search.rs` and against a 17 030-chunk live test in this session that returned positive descending scores in 6-7 ms.
-- Schema v2 (page-tracking) adds nullable `chunks.page_start` / `chunks.page_end` columns and a `pages(doc_id, page_no, text)` table — verified against `tools/sdlc-knowledge/src/store.rs` (`SCHEMA_V2_PAGES_TABLE`, `replace_pages`, `get_page_by_id`) and `tools/sdlc-knowledge/src/migrations.rs` (`apply_v2`). Live tested via `tools/sdlc-knowledge/tests/page_test.rs` (10/10 pass in this session).
-- The `page` subcommand returns `{doc_id, source_path, page_no, text}` JSON with exit 0 on hit, exit 1 on document-not-found / page-out-of-range / non-PDF source, exit 2 on malformed CLI — verified against `tools/sdlc-knowledge/src/main.rs::run_page` and the `tests/page_test.rs::page_*_exits_*` test family.
-- Search hits include `doc_id` (always) and `page_start`/`page_end` (only when present) — verified against `tools/sdlc-knowledge/src/search.rs::SearchHit` with `#[serde(skip_serializing_if = "Option::is_none")]` on the page fields, plus `tests/page_test.rs::replace_chunks_persists_page_columns` and `replace_chunks_with_null_pages_for_markdown` round-trip tests.
+- BM25 ranking via SQLite FTS5 `-bm25(chunks_fts) AS score ... ORDER BY score DESC` — positive score, larger = better match — verified against `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs` and against a 17 030-chunk live test in this session that returned positive descending scores in 6-7 ms.
+- Schema v2 (page-tracking) adds nullable `chunks.page_start` / `chunks.page_end` columns and a `pages(doc_id, page_no, text)` table — verified against `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/store.rs` (`SCHEMA_V2_PAGES_TABLE`, `replace_pages`, `get_page_by_id`) and `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/migrations.rs` (`apply_v2`). Live tested via `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/tests/page_test.rs` (10/10 pass in this session).
+- The `page` subcommand returns `{doc_id, source_path, page_no, text}` JSON with exit 0 on hit, exit 1 on document-not-found / page-out-of-range / non-PDF source, exit 2 on malformed CLI — verified against `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/main.rs::run_page` and the `tests/page_test.rs::page_*_exits_*` test family.
+- Search hits include `doc_id` (always) and `page_start`/`page_end` (only when present) — verified against `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs::SearchHit` with `#[serde(skip_serializing_if = "Option::is_none")]` on the page fields, plus `tests/page_test.rs::replace_chunks_persists_page_columns` and `replace_chunks_with_null_pages_for_markdown` round-trip tests.
 
 ### External contracts
 
-- **`sdlc-knowledge` binary v0.1.0** — symbol: subcommands `ingest / search / list / status / delete`; CLI flags `--project-root <PATH>`, `--top-k <N>`, `--json`; security backbone `cli::resolve_project_root` rejects path-traversal with exit 2 and literal stderr — verified: yes (live-tested in this session over the books corpus).
+- **`claudebase` binary v0.1.0** — symbol: subcommands `ingest / search / list / status / delete`; CLI flags `--project-root <PATH>`, `--top-k <N>`, `--json`; security backbone `cli::resolve_project_root` rejects path-traversal with exit 2 and literal stderr — verified: yes (live-tested in this session over the books corpus).
 - **SQLite FTS5 + `bm25()` function** — symbol: `CREATE VIRTUAL TABLE chunks_fts USING fts5(text, content='chunks', content_rowid='id')`; ranking via `bm25(chunks_fts)` (returns negative-better, code negates to positive-better) — verified: yes (live queries returned positive descending scores).
-- **`pdfium-render` crate v0.9** — symbol: `Pdfium::bind_to_library` plus `load_pdf_from_byte_slice`, `pages()`, `text()` — verified: yes (Slice 1 of pdfium-pdf-extraction wires the binding via explicit-path load against `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`; CID fonts, calibre-converted PDFs, multi-column layouts, and scanned PDFs with embedded text layer all extract correctly per TC-AAI-5 reverification).
+- **`pdfium-render` crate v0.9** — symbol: `Pdfium::bind_to_library` plus `load_pdf_from_byte_slice`, `pages()`, `text()` — verified: yes (Slice 1 of pdfium-pdf-extraction wires the binding via explicit-path load against `~/.claude/tools/claudebase/pdfium/lib/libpdfium.{dylib,so}`; CID fonts, calibre-converted PDFs, multi-column layouts, and scanned PDFs with embedded text layer all extract correctly per TC-AAI-5 reverification).
 
 ### Assumptions
 

@@ -72,7 +72,7 @@ The block contains 4 subsections in this exact order: `### Verified facts`, `###
 If the file `<project>/.claude/knowledge/index.db` exists, BEFORE authoring your output, query the per-project knowledge base via:
 
 ```
-claudeknows search "<query>" --top-k 5 --json
+claudebase search "<query>" --top-k 5 --json
 ```
 
 **Trigger for this agent:** Query before consolidating patterns when domain semantics inform the right abstraction (e.g., domain-driven design boundaries cited in the knowledge base).
@@ -84,7 +84,7 @@ knowledge-base: <source-filename>:p<page>:<chunk-id> — query: "<query>" — BM
 knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes           # non-PDF source OR pre-v2 legacy chunk (page_start absent)
 ```
 
-Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudeknows page --by-id <doc_id> --page <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
+Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudebase page --by-id <doc_id> --page <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
 
 The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
 

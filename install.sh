@@ -20,8 +20,8 @@ set -euo pipefail
 # ============================================================================
 
 VERSION="3.0.0"
-KNOWLEDGE_VERSION="0.4.0"
-KNOWLEDGE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
+CLAUDEBASE_VERSION="0.4.0"
+CLAUDEBASE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
 REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
@@ -58,7 +58,7 @@ OPTIONS:
   --init-project              Scaffold .claude/ template + docs/ in current directory
   --yes                       Skip confirmation prompts
   --local                     Use local checkout instead of cloning from GitHub
-  --bootstrap-release X.Y.Z   (Maintainer-only) Push the FIRST sdlc-knowledge-vX.Y.Z
+  --bootstrap-release X.Y.Z   (Maintainer-only) Push the FIRST claudebase-vX.Y.Z
                               tag to origin to trigger the binary-release workflow.
                               Runs a 7-part pre-condition gate, prompts default-deny,
                               and never uses --force. Set AUTO_RELEASE=1 to skip
@@ -70,10 +70,10 @@ WHAT GETS INSTALLED (~/.claude/):
   agents/          17 specialized agent prompts
   commands/        5 SDLC pipeline commands
   rules/           4 process rules
-  tools/sdlc-knowledge/sdlc-knowledge   Knowledge-base CLI binary
+  tools/claudebase/claudebase   Knowledge-base CLI binary
 
 GLOBAL ALIAS (auto-installed if a writable PATH dir exists):
-  claudeknows      Short-name symlink to sdlc-knowledge — invokes the tool
+  claudebase      Short-name symlink to claudebase — invokes the tool
                    without the absolute path. Probed in order:
                    /usr/local/bin → /opt/homebrew/bin → ~/.local/bin
 
@@ -371,15 +371,22 @@ EOF
 }
 
 # ============================================================================
-# Install sdlc-knowledge binary (Slice 5 — local-knowledge-base)
+# Install claudebase binary (downloads from github.com/codefather-labs/claudebase)
 # ============================================================================
 install_knowledge_binary() {
-  # install.sh ordering option (B): re-acquire source dir if cleanup ran already.
-  if [ ! -d "$SCRIPT_DIR/tools/sdlc-knowledge" ]; then
-    get_source_dir
+  # Migration cleanup: remove the pre-2026-05-10 sdlc-knowledge install + old
+  # claudeknows symlink. Idempotent — silently no-ops on a fresh install.
+  if [ -d "$CLAUDE_DIR/tools/sdlc-knowledge" ]; then
+    log_info "migrating from claudeknows to claudebase: removing old install"
+    rm -rf "$CLAUDE_DIR/tools/sdlc-knowledge"
   fi
+  for dir in /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin"; do
+    if [ -L "$dir/claudeknows" ]; then
+      rm -f "$dir/claudeknows" && log_ok "removed legacy claudeknows alias from $dir"
+    fi
+  done
 
-  local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
+  local target_dir="$CLAUDE_DIR/tools/claudebase"
   mkdir -p "$target_dir"
 
   # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
@@ -408,22 +415,23 @@ install_knowledge_binary() {
       ;;
   esac
 
-  local target_bin="$target_dir/sdlc-knowledge${exe_ext}"
+  local target_bin="$target_dir/claudebase${exe_ext}"
 
   # Idempotency: skip if already at expected version.
   if [ -x "$target_bin" ]; then
     local existing_ver
     existing_ver="$("$target_bin" --version 2>/dev/null | awk '{print $2}' || true)"
-    if [ "$existing_ver" = "$KNOWLEDGE_VERSION" ]; then
-      log_ok "sdlc-knowledge already at expected version $KNOWLEDGE_VERSION"
+    if [ "$existing_ver" = "$CLAUDEBASE_VERSION" ]; then
+      log_ok "claudebase already at expected version $CLAUDEBASE_VERSION"
       return 0
     fi
   fi
 
-  # Compute owner/repo from REPO_URL (hard-coded source — no env override).
-  local owner_repo
-  owner_repo="$(echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||')"
-  local url="https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}${exe_ext}"
+  # claudebase lives in its own GitHub repo (extracted from this monorepo on
+  # 2026-05-10). The download URL is hard-coded to that repo — NOT derived from
+  # REPO_URL, which still points at the SDLC monorepo for the rest of the
+  # install (agents/commands/rules).
+  local url="https://github.com/codefather-labs/claudebase/releases/download/claudebase-v${CLAUDEBASE_VERSION}/claudebase-${platform}${exe_ext}"
 
   local tmp
   tmp="$(mktemp)"
@@ -433,7 +441,7 @@ install_knowledge_binary() {
   # --max-redirect=5 / --timeout=120 / --secure-protocol=TLSv1_2 (wget) for parity
   # with the pdfium download path (install_pdfium_binary lines 545/550). Mitigates
   # redirect-loop DoS and infinite-stall scenarios on attacker-controlled URLs.
-  # TODO(iter-2): add sdlc-knowledge-<platform>.sha256 sidecar download + shasum -a 256 -c verification
+  # TODO(iter-2): add claudebase-<platform>.sha256 sidecar download + shasum -a 256 -c verification
   if command -v curl >/dev/null 2>&1; then
     if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp"; then
       rm -f "$tmp"
@@ -464,13 +472,13 @@ install_knowledge_binary() {
 
   mv "$tmp" "$target_bin"
   chmod +x "$target_bin"
-  log_ok "tools/sdlc-knowledge/sdlc-knowledge ($platform)"
+  log_ok "tools/claudebase/claudebase ($platform)"
 }
 
 # ============================================================================
-# Register `claudeknows` global alias — symlink the installed binary into a
+# Register `claudebase` global alias — symlink the installed binary into a
 # writable PATH directory so the tool can be invoked by short name without
-# the absolute `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` path.
+# the absolute `~/.claude/tools/claudebase/claudebase` path.
 #
 # Probe order (first writable, on-PATH directory wins):
 #   1. /usr/local/bin       — classic Unix system bin (Intel macOS, many Linuxes)
@@ -481,16 +489,16 @@ install_knowledge_binary() {
 # changes. If a stale file exists at the alias path, it is replaced (symlink
 # only; never overwrite a regular file).
 # ============================================================================
-register_claudeknows_alias() {
+register_claudebase_alias() {
   # Re-derive the binary path (matches install_knowledge_binary's exe_ext logic).
   local exe_ext=""
   case "$(uname -ms)" in
     MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
   esac
-  local target_bin="$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge${exe_ext}"
+  local target_bin="$CLAUDE_DIR/tools/claudebase/claudebase${exe_ext}"
 
   if [ ! -x "$target_bin" ]; then
-    log_warn "claudeknows alias: target binary not found at $target_bin; skipping"
+    log_warn "claudebase alias: target binary not found at $target_bin; skipping"
     return 0
   fi
 
@@ -510,30 +518,30 @@ register_claudeknows_alias() {
   fi
 
   if [ -z "$link_dir" ]; then
-    log_warn "claudeknows alias: no writable PATH directory found"
-    log_warn "  manual setup: ln -sf $target_bin /usr/local/bin/claudeknows"
+    log_warn "claudebase alias: no writable PATH directory found"
+    log_warn "  manual setup: ln -sf $target_bin /usr/local/bin/claudebase"
     return 0
   fi
 
-  local link_path="$link_dir/claudeknows"
+  local link_path="$link_dir/claudebase"
 
   # Refuse to overwrite a regular file (could be a user-installed tool with
   # the same name). Replace existing symlinks freely.
   if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
-    log_warn "claudeknows alias: $link_path exists as a regular file; refusing to overwrite"
+    log_warn "claudebase alias: $link_path exists as a regular file; refusing to overwrite"
     log_warn "  remove or rename it, then re-run install.sh"
     return 0
   fi
 
   # Idempotency: if the symlink already points where we want, nothing to do.
   if [ -L "$link_path" ] && [ "$(readlink "$link_path")" = "$target_bin" ]; then
-    log_ok "claudeknows alias already in place ($link_path)"
+    log_ok "claudebase alias already in place ($link_path)"
     return 0
   fi
 
   rm -f "$link_path"
   ln -s "$target_bin" "$link_path"
-  log_ok "claudeknows alias: $link_path -> $target_bin"
+  log_ok "claudebase alias: $link_path -> $target_bin"
 
   # Warn if the chosen directory is not currently on PATH (rare — we picked
   # from a writable list, but ~/.local/bin can be off-PATH on bare macOS).
@@ -548,46 +556,16 @@ register_claudeknows_alias() {
 }
 
 # ============================================================================
-# Cargo source-build fallback (Slice 5)
+# Cargo source-build fallback (deprecated — claudebase source no longer in this
+# monorepo; use github.com/codefather-labs/claudebase if you need to build from
+# source). Retained as a stub so call-sites in install_knowledge_binary still
+# compile cleanly during the deprecation window.
 # ============================================================================
 cargo_source_build_fallback() {
-  # install.sh ordering option (B): re-acquire source dir if cleanup ran already.
-  if [ ! -d "$SCRIPT_DIR/tools/sdlc-knowledge" ]; then
-    get_source_dir
-  fi
-
-  if ! command -v cargo >/dev/null 2>&1; then
-    log_warn "binary unavailable; install cargo or wait for first release"
-    return 0
-  fi
-  if [ ! -f "$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml" ]; then
-    log_warn "binary unavailable; install cargo or wait for first release"
-    return 0
-  fi
-
-  log_info "Building sdlc-knowledge from source via cargo (fallback)..."
-  if ! cargo build --release -p sdlc-knowledge --manifest-path "$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml" 2>&1 | tail -5; then
-    log_warn "cargo build failed; binary unavailable"
-    return 0
-  fi
-
-  # Cargo names the artifact sdlc-knowledge.exe on Windows; preserve the
-  # extension when copying to the install location.
-  local exe_ext=""
-  case "$(uname -ms)" in
-    MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
-  esac
-
-  local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge"
-  local built_bin="$SCRIPT_DIR/tools/sdlc-knowledge/target/release/sdlc-knowledge${exe_ext}"
-  mkdir -p "$target_dir"
-  if [ ! -x "$built_bin" ]; then
-    log_warn "cargo build did not produce expected binary at $built_bin"
-    return 0
-  fi
-  cp "$built_bin" "$target_dir/sdlc-knowledge${exe_ext}"
-  chmod +x "$target_dir/sdlc-knowledge${exe_ext}"
-  log_ok "tools/sdlc-knowledge/sdlc-knowledge${exe_ext} (built from source)"
+  log_warn "claudebase binary unavailable for this platform; the source moved to"
+  log_warn "github.com/codefather-labs/claudebase on 2026-05-10. To build from"
+  log_warn "source: git clone github.com/codefather-labs/claudebase && cd claudebase && cargo build --release"
+  return 0
 }
 
 # ============================================================================
@@ -602,7 +580,7 @@ cargo_source_build_fallback() {
 # Returns 0 on successful atomic merge; 1 if jq merge or validation failed.
 # Caller is responsible for log_ok / log_warn — this helper is silent so the
 # two register_*_bash_allowlist functions retain their distinct user-facing
-# success messages ("created with sdlc-knowledge allowlist" /
+# success messages ("created with claudebase allowlist" /
 # "release-engineer §7 allowlist merged — 11 entries").
 # ============================================================================
 _jq_merge_allow_entries() {
@@ -625,33 +603,33 @@ _jq_merge_allow_entries() {
 }
 
 # ============================================================================
-# Register Bash allowlist for sdlc-knowledge in ~/.claude/settings.json (Slice 5)
+# Register Bash allowlist for claudebase in ~/.claude/settings.json (Slice 5)
 # ============================================================================
 register_bash_allowlist() {
   local settings="$CLAUDE_DIR/settings.json"
-  local entry='~/.claude/tools/sdlc-knowledge/sdlc-knowledge *'
+  local entry='~/.claude/tools/claudebase/claudebase *'
 
   # Missing-file create case: write minimal literal JSON.
   if [ ! -f "$settings" ]; then
     mkdir -p "$CLAUDE_DIR"
     cat > "$settings" <<'EOF'
-{"permissions":{"allow":["~/.claude/tools/sdlc-knowledge/sdlc-knowledge *"]}}
+{"permissions":{"allow":["~/.claude/tools/claudebase/claudebase *"]}}
 EOF
     chmod 0644 "$settings"
-    log_ok "settings.json (created with sdlc-knowledge allowlist)"
+    log_ok "settings.json (created with claudebase allowlist)"
     return 0
   fi
 
   # File exists: prefer atomic jq-based merge; fail-closed if jq absent.
   if command -v jq >/dev/null 2>&1; then
     if _jq_merge_allow_entries "$entry"; then
-      log_ok "settings.json (sdlc-knowledge allowlist merged)"
+      log_ok "settings.json (claudebase allowlist merged)"
     else
       log_warn "settings.json merge failed; please add manually: $entry"
     fi
   else
     if grep -Fq "$entry" "$settings"; then
-      log_ok "settings.json already contains sdlc-knowledge allowlist"
+      log_ok "settings.json already contains claudebase allowlist"
     else
       log_warn "jq required for safe settings.json merge — install jq or merge manually: $entry"
     fi
@@ -677,11 +655,11 @@ register_release_bash_allowlist() {
     "git diff --name-only *"
     "git ls-remote --tags origin *"
     "git tag -a v* -F *"
-    "git tag -a sdlc-knowledge-v* -F *"
+    "git tag -a claudebase-v* -F *"
     "git tag -d v*"
-    "git tag -d sdlc-knowledge-v*"
+    "git tag -d claudebase-v*"
     "git push origin v*"
-    "git push origin sdlc-knowledge-v*"
+    "git push origin claudebase-v*"
   )
 
   if [ ! -f "$settings" ]; then
@@ -706,8 +684,8 @@ register_release_bash_allowlist() {
 }
 
 # ============================================================================
-# Bootstrap a sdlc-knowledge release tag (Slice 6 — auto-release).
-# Maintainer-only one-shot: pushes the FIRST sdlc-knowledge-v<X.Y.Z> tag
+# Bootstrap a claudebase release tag (Slice 6 — auto-release).
+# Maintainer-only one-shot: pushes the FIRST claudebase-v<X.Y.Z> tag
 # to origin so the binary-release workflow has a tag to publish against.
 #
 # 10 security MUSTs (Phase 1.5 security pre-review):
@@ -733,7 +711,7 @@ bootstrap_release() {
     exit 2
   fi
 
-  local tag="sdlc-knowledge-v${version}"
+  local tag="claudebase-v${version}"
   local notes_file=".claude/release-notes-${version}.md"
 
   log_info "[BOOTSTRAP] target tag: $tag"
@@ -774,9 +752,9 @@ bootstrap_release() {
   log_ok "[BOOTSTRAP] precond 3/7 — origin URL matches"
 
   # Pre-condition 4/7: Cargo.toml version matches the argument.
-  local cargo_toml="$SCRIPT_DIR/tools/sdlc-knowledge/Cargo.toml"
+  local cargo_toml="$SCRIPT_DIR/tools/claudebase/Cargo.toml"
   if [ ! -f "$cargo_toml" ]; then
-    log_error "pre-condition failed: tools/sdlc-knowledge/Cargo.toml not found"
+    log_error "pre-condition failed: tools/claudebase/Cargo.toml not found"
     exit 2
   fi
   local cargo_version
@@ -890,7 +868,7 @@ install_pdfium_binary() {
     # M16: deterministic mode bits
     umask 0022
 
-    local target_dir="$CLAUDE_DIR/tools/sdlc-knowledge/pdfium"
+    local target_dir="$CLAUDE_DIR/tools/claudebase/pdfium"
     local lib_dir="$target_dir/lib"
     local sentinel="$target_dir/.version"
 
@@ -898,8 +876,8 @@ install_pdfium_binary() {
     if [ -f "$sentinel" ]; then
       local existing
       existing=$(cat "$sentinel" 2>/dev/null)
-      if [ "$existing" = "$KNOWLEDGE_PDFIUM_VERSION" ]; then
-        log_ok "pdfium binary already at version $KNOWLEDGE_PDFIUM_VERSION"
+      if [ "$existing" = "$CLAUDEBASE_PDFIUM_VERSION" ]; then
+        log_ok "pdfium binary already at version $CLAUDEBASE_PDFIUM_VERSION"
         return 0
       fi
     fi
@@ -918,7 +896,7 @@ install_pdfium_binary() {
     esac
 
     # M1: URL hardcoded from constants
-    local url="https://github.com/bblanchon/pdfium-binaries/releases/download/${KNOWLEDGE_PDFIUM_VERSION}/${asset}"
+    local url="https://github.com/bblanchon/pdfium-binaries/releases/download/${CLAUDEBASE_PDFIUM_VERSION}/${asset}"
 
     # M3: download to mktemp
     local tmp_archive
@@ -985,7 +963,7 @@ install_pdfium_binary() {
     chmod 0755 "$lib_dir"/libpdfium*
 
     # Write version sentinel
-    echo "$KNOWLEDGE_PDFIUM_VERSION" > "$sentinel"
+    echo "$CLAUDEBASE_PDFIUM_VERSION" > "$sentinel"
     chmod 0644 "$sentinel"
 
     # M17: post-install integrity check
@@ -995,7 +973,7 @@ install_pdfium_binary() {
       return 0
     fi
 
-    log_ok "pdfium binary installed: ${platform} (version ${KNOWLEDGE_PDFIUM_VERSION})"
+    log_ok "pdfium binary installed: ${platform} (version ${CLAUDEBASE_PDFIUM_VERSION})"
     # M13: hash verification deferral
     # TODO(iter-3): add pdfium-<arch>.tgz.sha256 sidecar verification
     return 0
@@ -1007,31 +985,36 @@ install_pdfium_binary() {
 # Main
 # ============================================================================
 
-# Short-circuit: --bootstrap-release runs the maintainer-only one-shot path
-# and exits before any user-config install. This is intentional — bootstrap
-# is for cutting a release tag from a repo checkout, not for installing the
-# SDLC harness on a user's machine.
+# Short-circuit: --bootstrap-release was the maintainer-only one-shot path
+# for cutting the FIRST sdlc-knowledge-v<X.Y.Z> tag. After the 2026-05-10
+# extraction, claudebase has its own RELEASING.md + own release workflow at
+# github.com/codefather-labs/claudebase, so this flag is deprecated. Surface
+# the deprecation clearly and exit non-zero so any maintainer scripts pointing
+# at this flag fail loudly rather than silently no-op.
 if [ -n "$BOOTSTRAP_RELEASE_VERSION" ]; then
-  bootstrap_release "$BOOTSTRAP_RELEASE_VERSION"
-  exit 0
+  log_error "--bootstrap-release is deprecated."
+  log_error "claudebase moved to its own repo on 2026-05-10. To cut a release:"
+  log_error "  git clone github.com/codefather-labs/claudebase"
+  log_error "  cd claudebase && see RELEASING.md"
+  exit 2
 fi
 
 install_user_config
 install_knowledge_binary
-register_claudeknows_alias
+register_claudebase_alias
 register_bash_allowlist
 register_release_bash_allowlist
 install_pdfium_binary
 
 # Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
-# encoder so the first `claudeknows ingest` / `claudeknows search --mode hybrid`
+# encoder so the first `claudebase ingest` / `claudebase search --mode hybrid`
 # doesn't pay a 30 s cold-start model-download stall. Idempotent (no-op
 # when model is already cached). Network failure is a warning, not a
 # fatal error — fastembed will lazy-download on first real use.
-if [ -x "$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge" ]; then
+if [ -x "$CLAUDE_DIR/tools/claudebase/claudebase" ]; then
   log_info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
-  if "$CLAUDE_DIR/tools/sdlc-knowledge/sdlc-knowledge" warmup --quiet 2>&1; then
-    log_ok "encoder ready (cached at ~/.claude/tools/sdlc-knowledge/models/)"
+  if "$CLAUDE_DIR/tools/claudebase/claudebase" warmup --quiet 2>&1; then
+    log_ok "encoder ready (cached at ~/.claude/tools/claudebase/models/)"
   else
     log_warn "encoder pre-load failed; fastembed will retry on first ingest"
   fi
@@ -1067,13 +1050,13 @@ echo "    /release            User-invoked release packaging — semver bump + C
 echo "    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base"
 echo "    /context-refresh    Rebuild session context"
 echo ""
-echo "  Knowledge base CLI (also invokable as 'claudeknows' if alias was registered):"
-echo "    claudeknows ingest <path>           Ingest PDF/MD/TXT into <cwd>/.claude/knowledge/"
-echo "    claudeknows search '<query>' --json BM25-ranked search; PDF hits cite page numbers"
-echo "    claudeknows page --by-id <id> --page <N>   Fetch full text of a cited PDF page"
-echo "    claudeknows list  | status | delete Inspect / manage indexed sources"
+echo "  Knowledge base CLI (also invokable as 'claudebase' if alias was registered):"
+echo "    claudebase ingest <path>           Ingest PDF/MD/TXT into <cwd>/.claude/knowledge/"
+echo "    claudebase search '<query>' --json BM25-ranked search; PDF hits cite page numbers"
+echo "    claudebase page --by-id <id> --page <N>   Fetch full text of a cited PDF page"
+echo "    claudebase list  | status | delete Inspect / manage indexed sources"
 echo ""
-echo "  Tip: re-ingest existing PDFs (claudeknows ingest <path>) to upgrade pre-v2 indexes"
+echo "  Tip: re-ingest existing PDFs (claudebase ingest <path>) to upgrade pre-v2 indexes"
 echo "  to schema v2 — that's what unlocks per-page citations in search hits."
 echo ""
 

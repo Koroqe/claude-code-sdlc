@@ -68,7 +68,7 @@ install.bat -Yes             :: skip confirmation prompts
 install.bat -Help            :: show help
 ```
 
-The Windows installer downloads `sdlc-knowledge.exe` and `pdfium.dll` from GitHub releases, registers a `claudeknows.cmd` wrapper in `%USERPROFILE%\.claude\bin\`, and adds that directory to your User PATH. Open a new terminal after install for the PATH change to take effect.
+The Windows installer downloads `claudebase.exe` and `pdfium.dll` from GitHub releases, registers a `claudebase.cmd` wrapper in `%USERPROFILE%\.claude\bin\`, and adds that directory to your User PATH. Open a new terminal after install for the PATH change to take effect.
 
 ---
 
@@ -172,7 +172,7 @@ Claude automatically:
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
 | Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
-| Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `sdlc-knowledge` CLI; agents query before authoring; cite hits in `## Facts` |
+| Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `claudebase` CLI; agents query before authoring; cite hits in `## Facts` |
 | Lexical-only search misses paraphrases and cross-lingual concepts | Hybrid retrieval (iter-2): BM25 + dense (e5-multilingual-small embeddings via sqlite-vec) fused via Reciprocal Rank Fusion k=60; `--mode lexical\|dense\|hybrid`, default `hybrid` with auto-fallback to lexical on missing model or v1 schema |
 | PDF extraction | `pdfium-render` handles all PDFs (CID fonts, calibre conversions, scanned-with-text-layer, multi-column) |
 | Plan-mode plans lost to global cache | Auto-persist rule: Claude `Write`s the full plan body to `<project>/.claude/plan.md` before `ExitPlanMode`; `/bootstrap-feature` Step 0 aborts when the file is missing or empty |
@@ -314,17 +314,17 @@ The rule applies to **12 thinking agents** (prd-writer, ba-analyst, architect, q
 
 ## Local knowledge base
 
-Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 12 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (also invokable as `claudeknows` from any directory on PATH after `install.sh` registers the global alias); the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
+Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 12 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/claudebase/claudebase` (also invokable as `claudebase` from any directory on PATH after `install.sh` registers the global alias); the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
 
 The CLI exposes 5 subcommands — `ingest`, `search`, `list`, `status`, `delete`. **Iter-2 (vector-retrieval-backend) added a hybrid retrieval backend** alongside the existing FTS5 BM25 ranker: a `chunks_vec` virtual table (sqlite-vec extension) populated with 384-dim e5-multilingual-small embeddings during ingest, plus three search modes:
 
-- `claudeknows search "<query>" --mode lexical` — iter-1 BM25 baseline (FTS5 only); regression-safe for exact-keyword queries
-- `claudeknows search "<query>" --mode dense` — pure semantic K-NN via sqlite-vec
-- `claudeknows search "<query>" --mode hybrid` — BM25 ⊕ dense fused via Reciprocal Rank Fusion k=60 (Cormack et al. 2009); the **default mode**
+- `claudebase search "<query>" --mode lexical` — iter-1 BM25 baseline (FTS5 only); regression-safe for exact-keyword queries
+- `claudebase search "<query>" --mode dense` — pure semantic K-NN via sqlite-vec
+- `claudebase search "<query>" --mode hybrid` — BM25 ⊕ dense fused via Reciprocal Rank Fusion k=60 (Cormack et al. 2009); the **default mode**
 
 Hybrid captures both exact-keyword and semantic recall in a single ranking — cross-lingual queries (RU→EN, EN→RU), paraphrase robustness, and concept-level retrieval all work. Image content from PDFs is extracted at ingest time (figures stored as PNG BLOBs in the same `index.db`) and embedded via the canonical placeholder text `[image: figure N from <doc>]` so it remains searchable until Slice 6b lands a real OCR engine.
 
-Populate the base via `/knowledge-ingest <path>` (or `claudeknows ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 12 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+Populate the base via `/knowledge-ingest <path>` (or `claudebase ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 12 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
 
 Activation is opt-in: without `index.db`, every agent prompt behaves identically to current `main`. Without the e5 model OR on a v1 schema, hybrid/dense modes auto-fall-back to lexical with a stderr warning. Without the binary, install.sh degrades gracefully (cargo source-build fallback when cargo is on PATH). See `src/rules/knowledge-base.md` for the full CLI contract and citation discipline.
 

@@ -2339,19 +2339,19 @@ Define how this section treats artifacts created before its merge date.
 **Status:** [IN DEVELOPMENT]
 **Date:** 2026-04-25
 **Priority:** Medium
-**Related:** Section 1 (FR-3: Executable Plan Format — slice fields are unchanged; the new slash command and rule reuse the established format), Section 3 (FR-3: PRD Changelog Field — this section includes the field per that contract), Section 6 (Release Engineer — Gate 9 release-engineer behavior is UNCHANGED in iter-1; the first `sdlc-knowledge-v0.1.0` tag is cut manually by maintainer per `tools/sdlc-knowledge/RELEASING.md`), Section 9 (Cognitive Self-Check Protocol — `knowledge-base:` is an additive citation source convention that slots into `### External contracts`; `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED by this section)
+**Related:** Section 1 (FR-3: Executable Plan Format — slice fields are unchanged; the new slash command and rule reuse the established format), Section 3 (FR-3: PRD Changelog Field — this section includes the field per that contract), Section 6 (Release Engineer — Gate 9 release-engineer behavior is UNCHANGED in iter-1; the first `claudebase-v0.1.0` tag is cut manually by maintainer per `claudebase/RELEASING.md`), Section 9 (Cognitive Self-Check Protocol — `knowledge-base:` is an additive citation source convention that slots into `### External contracts`; `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED by this section)
 
 Changelog: Projects can point SDLC agents at a folder of domain books, articles, and PDFs; agents read the relevant material before writing PRDs, plans, and reviews so authored content reflects the project's actual domain instead of generic knowledge.
 
 ### 11.1 Description
 
-Add a per-project, file-based knowledge base that the twelve thinking SDLC agents consult before authoring domain-bearing content (PRD requirements, use-case scenarios, architectural decisions, security rationales, plan slices that depend on domain semantics). The retrieval tool — a Rust CLI binary named `sdlc-knowledge` — lives globally under `~/.claude/tools/sdlc-knowledge/` so it is shared across all projects on the developer's machine. The data — a `.claude/knowledge/sources/` folder of user-supplied documents and a single `.claude/knowledge/index.db` SQLite file — lives per-project so each project's domain is isolated and the database never leaves the project directory.
+Add a per-project, file-based knowledge base that the twelve thinking SDLC agents consult before authoring domain-bearing content (PRD requirements, use-case scenarios, architectural decisions, security rationales, plan slices that depend on domain semantics). The retrieval tool — a Rust CLI binary named `claudebase` — lives globally under `~/.claude/claudebase/` so it is shared across all projects on the developer's machine. The data — a `.claude/knowledge/sources/` folder of user-supplied documents and a single `.claude/knowledge/index.db` SQLite file — lives per-project so each project's domain is isolated and the database never leaves the project directory.
 
 Search uses SQLite FTS5 with BM25 ranking — pure lexical retrieval, NO vector embeddings in iter-1. The binary is invoked via Bash (no MCP server, no daemon) with exactly one allowlist entry registered in `~/.claude/settings.json` by `install.sh`. A new slash command `/knowledge-ingest <path>` raises the SDLC command count from 5 to 6 and gives the developer a one-line entry point for indexing a folder of domain documents.
 
 **Why:** Section 9 (Cognitive Self-Check Protocol) blocks agents from inventing facts, but does nothing to *give* them domain facts. Today the only way to inject domain knowledge is to paste it into chat, which is non-persistent and per-session. Each downstream project should be able to maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all twelve thinking agents consult before authoring — making cited domain knowledge as routine as cited code.
 
-**Outcome:** A user runs `bash install.sh` once and gets `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`. They scaffold a project, drop their domain PDFs/MD/TXT into `.claude/knowledge/sources/`, run `/knowledge-ingest .claude/knowledge/sources` once, and from that point every relevant agent in `/bootstrap-feature` and `/develop-feature` queries the knowledge base before writing and cites hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+**Outcome:** A user runs `bash install.sh` once and gets `~/.claude/tools/claudebase/claudebase`. They scaffold a project, drop their domain PDFs/MD/TXT into `.claude/knowledge/sources/`, run `/knowledge-ingest .claude/knowledge/sources` once, and from that point every relevant agent in `/bootstrap-feature` and `/develop-feature` queries the knowledge base before writing and cites hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
 
 **Design decisions (locked in this session):**
 1. Approach C: Rust binary + SQLite FTS5 (BM25 lexical search). No vector embeddings in iter-1.
@@ -2368,22 +2368,22 @@ Search uses SQLite FTS5 with BM25 ranking — pure lexical retrieval, NO vector 
 
 2. **As a maintainer of an SDLC-using project that has no domain library**, I want the pipeline to behave exactly as it does today when no `index.db` exists, so adopting the SDLC does not require setting up a knowledge base on day one.
 
-3. **As a developer working offline or on a fresh clone before the first binary release exists**, I want `install.sh` to fall back to a `cargo build --release` source build when a release binary is unavailable, so I can still get a working `sdlc-knowledge` binary without waiting for a release tag.
+3. **As a developer working offline or on a fresh clone before the first binary release exists**, I want `install.sh` to fall back to a `cargo build --release` source build when a release binary is unavailable, so I can still get a working `claudebase` binary without waiting for a release tag.
 
 ### 11.3 Functional Requirements
 
-#### FR-1: `sdlc-knowledge` CLI Surface
+#### FR-1: `claudebase` CLI Surface
 
 A single Rust binary that exposes ingestion, search, and management subcommands. The binary is the only runtime surface — there is no daemon and no MCP server.
 
-1. **FR-1.1:** A new Rust crate MUST exist at `tools/sdlc-knowledge/` (monorepo placement) with `Cargo.toml`, `src/main.rs`, and module files. The compiled artifact MUST be a single executable named `sdlc-knowledge` installed at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`.
+1. **FR-1.1:** A new Rust crate MUST exist at `claudebase/` (monorepo placement) with `Cargo.toml`, `src/main.rs`, and module files. The compiled artifact MUST be a single executable named `claudebase` installed at `~/.claude/tools/claudebase/claudebase`.
 2. **FR-1.2:** The CLI MUST expose exactly five subcommands plus `--version`:
-   - `sdlc-knowledge ingest <path> [--project-root <dir>] [--json]`
-   - `sdlc-knowledge search <query> [--top-k 5] [--project-root <dir>] [--json]`
-   - `sdlc-knowledge list [--project-root <dir>] [--json]`
-   - `sdlc-knowledge status [--project-root <dir>] [--json]`
-   - `sdlc-knowledge delete <source-id> [--project-root <dir>] [--json]`
-   - `sdlc-knowledge --version`
+   - `claudebase ingest <path> [--project-root <dir>] [--json]`
+   - `claudebase search <query> [--top-k 5] [--project-root <dir>] [--json]`
+   - `claudebase list [--project-root <dir>] [--json]`
+   - `claudebase status [--project-root <dir>] [--json]`
+   - `claudebase delete <source-id> [--project-root <dir>] [--json]`
+   - `claudebase --version`
 3. **FR-1.3:** `--project-root` MUST default to the process's current working directory. The binary MUST ALWAYS read and write under `<project-root>/.claude/knowledge/` and MUST NEVER touch global state outside that path. The binary MUST NOT mutate `~/.claude/` at runtime.
 4. **FR-1.4:** `--json` MUST produce machine-readable output for agent consumption. Default output (no `--json`) MUST be human-readable text suitable for terminal use.
 5. **FR-1.5:** `--project-root` MUST be canonicalized (symlinks resolved, `..` segments normalized). Paths that resolve OUTSIDE the process's current working directory MUST be rejected with exit code 2 and the literal error message `error: project-root must resolve under current working directory`.
@@ -2393,7 +2393,7 @@ A single Rust binary that exposes ingestion, search, and management subcommands.
 
 The `ingest` subcommand reads supported file formats, chunks the extracted text, and writes rows to the SQLite index.
 
-1. **FR-2.1:** `sdlc-knowledge ingest <path>` MUST accept either a single file or a directory. When given a directory, the binary MUST recursively process every supported file. Supported extensions in iter-1: `.md`, `.txt`, `.pdf`.
+1. **FR-2.1:** `claudebase ingest <path>` MUST accept either a single file or a directory. When given a directory, the binary MUST recursively process every supported file. Supported extensions in iter-1: `.md`, `.txt`, `.pdf`.
 2. **FR-2.2:** Text extraction MUST be format-aware: Markdown and plain text are read as UTF-8; PDF is extracted via the architect-selected PDF crate (default candidate `pdf-extract`; fallback `lopdf` — see Open Question #1 in `## Facts`).
 3. **FR-2.3:** Extracted text MUST be split into chunks using a sliding window of ~500 characters with ~100-character overlap. The chunker MUST be deterministic — the same input file MUST produce the same chunk boundaries on every run.
 4. **FR-2.4:** Each ingested file MUST produce one row in the `documents` table and one or more rows in the `chunks` table. The `documents` row MUST record `source_path`, `mtime`, `sha256`, and `ingested_at` so re-ingest is idempotent.
@@ -2405,7 +2405,7 @@ The `ingest` subcommand reads supported file formats, chunks the extracted text,
 
 The `search` subcommand returns the top-K chunks ranked by BM25 lexical similarity.
 
-1. **FR-3.1:** `sdlc-knowledge search <query>` MUST query the FTS5 virtual table `chunks_fts` using `MATCH` and rank results by `bm25(chunks_fts)` descending.
+1. **FR-3.1:** `claudebase search <query>` MUST query the FTS5 virtual table `chunks_fts` using `MATCH` and rank results by `bm25(chunks_fts)` descending.
 2. **FR-3.2:** `--top-k <N>` MUST default to 5 and MUST be clamped to a reasonable upper bound (≤100) to prevent runaway result sets.
 3. **FR-3.3:** `--json` MUST emit a JSON array where each element has the shape `{"source": "<source_path>", "chunk_id": <int>, "ord": <int>, "score": <float>, "snippet": "<string>"}`. The array length MUST be ≤ `--top-k`.
 4. **FR-3.4:** When no chunks match the query, the binary MUST exit 0 with an empty JSON array `[]` (or a human-readable "no results" message in default output mode). No-results is NOT an error condition.
@@ -2428,7 +2428,7 @@ The index uses a single SQLite file with a small, future-extensible schema.
 Each of the twelve thinking agents (the same in-scope set as Section 9) gains a small activation block referencing the knowledge-base CLI.
 
 1. **FR-5.1:** The following twelve agent prompt files MUST be UPDATED with a new `## Knowledge Base (when present)` section, appended at the end of the existing prompt body: `src/agents/prd-writer.md`, `src/agents/ba-analyst.md`, `src/agents/architect.md`, `src/agents/qa-planner.md`, `src/agents/planner.md`, `src/agents/security-auditor.md`, `src/agents/code-reviewer.md`, `src/agents/verifier.md`, `src/agents/refactor-cleaner.md`, `src/agents/resource-architect.md`, `src/agents/role-planner.md`, `src/agents/release-engineer.md`.
-2. **FR-5.2:** Each `## Knowledge Base (when present)` section MUST: (a) reference the rule file `~/.claude/rules/knowledge-base.md`, (b) state that the agent MUST query the index BEFORE authoring domain-bearing content WHEN the activation sentinel `<project>/.claude/knowledge/index.db` exists, (c) include the literal CLI invocation `~/.claude/tools/sdlc-knowledge/sdlc-knowledge search "<query>" --top-k 5 --json`, (d) specify that load-bearing hits MUST be cited in `## Facts → ### External contracts` using the `knowledge-base:` source prefix per FR-7.1.
+2. **FR-5.2:** Each `## Knowledge Base (when present)` section MUST: (a) reference the rule file `~/.claude/rules/knowledge-base.md`, (b) state that the agent MUST query the index BEFORE authoring domain-bearing content WHEN the activation sentinel `<project>/.claude/knowledge/index.db` exists, (c) include the literal CLI invocation `~/.claude/tools/claudebase/claudebase search "<query>" --top-k 5 --json`, (d) specify that load-bearing hits MUST be cited in `## Facts → ### External contracts` using the `knowledge-base:` source prefix per FR-7.1.
 3. **FR-5.3:** Each activation block MUST be ADDITIVE — it MUST NOT delete, replace, or reorder any existing prompt content (including the `## Cognitive Self-Check (MANDATORY)` section added by Section 9). The block MUST live at the end of the prompt file so its placement is unambiguous and easily diffable.
 4. **FR-5.4:** The five executor agents (`test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer`) MUST NOT be modified by this section. The exemption mirrors Section 9's executor exemption — these agents do not author domain content.
 5. **FR-5.5:** When the activation sentinel is ABSENT, the activation block MUST be a no-op — the agent MUST proceed with its existing authoring flow with no behavioral change. When the sentinel is present but the binary is absent, the agent MUST log the literal line `knowledge-base: tool not installed; skipping` and add a corresponding entry to its `### Open questions` subsection (per Section 9 `## Facts` schema).
@@ -2437,7 +2437,7 @@ Each of the twelve thinking agents (the same in-scope set as Section 9) gains a 
 
 A new SDLC slash command provides the user-facing entry point for ingestion.
 
-1. **FR-6.1:** A new file `src/commands/knowledge-ingest.md` MUST exist describing a slash command that takes one required argument `<path>` and runs `~/.claude/tools/sdlc-knowledge/sdlc-knowledge ingest <path> --json`.
+1. **FR-6.1:** A new file `src/commands/knowledge-ingest.md` MUST exist describing a slash command that takes one required argument `<path>` and runs `~/.claude/tools/claudebase/claudebase ingest <path> --json`.
 2. **FR-6.2:** The command MUST stream the binary's per-file JSON output to chat as ingestion progresses, then emit a final summary line with the chunk count and source count returned by the binary.
 3. **FR-6.3:** When the binary is absent, the command MUST report a clear actionable message including the literal text `bash install.sh --yes` and exit without error.
 4. **FR-6.4:** After this section ships, `ls src/commands/*.md | wc -l` MUST return 6 (was 5 — `bootstrap-feature`, `context-refresh`, `develop-feature`, `implement-slice`, `merge-ready` plus the new `knowledge-ingest`).
@@ -2455,9 +2455,9 @@ A new global rule file documents the CLI usage contract, citation format, and fa
 `install.sh` gains binary download, allowlist registration, project scaffold extension, and a cargo source-build fallback. Existing behavior is preserved.
 
 1. **FR-8.1:** `install.sh` MUST detect the host platform via `uname -ms` and download the matching binary release artifact from the project's GitHub Releases. Supported iter-1 platforms: darwin-arm64, darwin-x64, linux-x64, linux-arm64. Windows is OUT OF SCOPE for iter-1 (see 11.7).
-2. **FR-8.2:** After download, the binary MUST be placed at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` with executable mode (`chmod +x`). Re-running `install.sh` when the binary is already present at the expected version MUST be a no-op (idempotent install).
-3. **FR-8.3:** `install.sh` MUST register exactly ONE Bash allowlist entry in `~/.claude/settings.json` whose value is the literal `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *`. The merge MUST be idempotent — re-running install MUST NOT duplicate the entry. Where `jq` is available it SHOULD be used; otherwise a heredoc-merge that preserves existing keys MUST be used.
-4. **FR-8.4:** When a release binary is unavailable for the detected platform AND `cargo` is on `PATH`, `install.sh` MUST run `cargo build --release -p sdlc-knowledge` from the local checkout and copy the artifact to the global path. This is the cargo source-build fallback that handles the first-release chicken-and-egg per AC-13.
+2. **FR-8.2:** After download, the binary MUST be placed at `~/.claude/tools/claudebase/claudebase` with executable mode (`chmod +x`). Re-running `install.sh` when the binary is already present at the expected version MUST be a no-op (idempotent install).
+3. **FR-8.3:** `install.sh` MUST register exactly ONE Bash allowlist entry in `~/.claude/settings.json` whose value is the literal `~/.claude/tools/claudebase/claudebase *`. The merge MUST be idempotent — re-running install MUST NOT duplicate the entry. Where `jq` is available it SHOULD be used; otherwise a heredoc-merge that preserves existing keys MUST be used.
+4. **FR-8.4:** When a release binary is unavailable for the detected platform AND `cargo` is on `PATH`, `install.sh` MUST run `cargo build --release -p claudebase` from the local checkout and copy the artifact to the global path. This is the cargo source-build fallback that handles the first-release chicken-and-egg per AC-13.
 5. **FR-8.5:** When neither a release binary nor `cargo` is available, `install.sh` MUST log a clear warning of the form `binary unavailable; install cargo or wait for first release` and continue. install.sh MUST NOT abort the rest of the install on this condition (graceful degradation).
 6. **FR-8.6:** `install.sh --init-project` MUST extend the project scaffold by copying `templates/knowledge/.gitignore` to `<cwd>/.claude/knowledge/.gitignore` and creating `<cwd>/.claude/knowledge/sources/` with a `.gitkeep` placeholder so the directory exists in the scaffold.
 7. **FR-8.7:** The `install.sh` `VERSION` constant MUST remain unchanged in this section's commits. The pre-existing repo divergence between `install.sh` line 22 (`VERSION="2.1.0"`) and the README badge (`version-3.1.0-green.svg`) is independent of this feature; the release-engineer at Gate 9 reconciles version baselines separately.
@@ -2474,7 +2474,7 @@ A new template directory ships the per-project `.gitignore` for the knowledge fo
 Define how the activation surface degrades gracefully when the binary or the index is absent.
 
 1. **FR-10.1:** The activation sentinel for agent behavior is the existence of `<project>/.claude/knowledge/index.db`. When the sentinel is ABSENT, every in-scope agent MUST produce output that is BEHAVIORALLY identical to current main — no failed tool calls, no error traces in stdout, no missing-citation Plan Critic findings tied to knowledge-base absence. (The agent prompt files themselves grow by ~25 lines per FR-5.1; that is a prompt-text change, not a behavioral change in authored artifacts.)
-2. **FR-10.2:** When the binary at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is ABSENT (e.g., install.sh has not run, or the user removed the binary), agents that attempt to query MUST log the literal line `knowledge-base: tool not installed; skipping` exactly once and proceed with their existing authoring flow without citations.
+2. **FR-10.2:** When the binary at `~/.claude/tools/claudebase/claudebase` is ABSENT (e.g., install.sh has not run, or the user removed the binary), agents that attempt to query MUST log the literal line `knowledge-base: tool not installed; skipping` exactly once and proceed with their existing authoring flow without citations.
 3. **FR-10.3:** Section 9's Plan Critic checks for missing `### External contracts` citations MUST NOT fire on knowledge-base absence — the activation sentinel makes the citation conditional, not unconditional. The Plan Critic itself in `src/claude.md` is UNCHANGED by this section (no new bullet); the existing `### External contracts` heuristic continues to operate as Section 9 specified.
 4. **FR-10.4:** The cognitive-self-check rule file `src/rules/cognitive-self-check.md` MUST be BYTE-UNCHANGED — the new `knowledge-base:` source prefix is an additive citation convention, not a rule schema change.
 
@@ -2482,9 +2482,9 @@ Define how the activation surface degrades gracefully when the binary or the ind
 
 A GitHub Actions workflow builds release binaries for the four supported platforms.
 
-1. **FR-11.1:** A new file `.github/workflows/sdlc-knowledge-release.yml` MUST exist. The workflow MUST trigger on tags matching `sdlc-knowledge-v*` and run a build matrix covering: `macos-14` (darwin-arm64), `macos-13` (darwin-x64), `ubuntu-latest` (linux-x64), and `ubuntu-22.04-arm` (linux-arm64).
+1. **FR-11.1:** A new file `.github/workflows/claudebase-release.yml` MUST exist. The workflow MUST trigger on tags matching `claudebase-v*` and run a build matrix covering: `macos-14` (darwin-arm64), `macos-13` (darwin-x64), `ubuntu-latest` (linux-x64), and `ubuntu-22.04-arm` (linux-arm64).
 2. **FR-11.2:** Each matrix job MUST build with `cargo build --release` using release profile flags `strip = true`, `lto = true`, `codegen-units = 1` to meet the binary-size budget (NFR-1.1). Each job MUST upload its produced binary as a release artifact.
-3. **FR-11.3:** A new file `tools/sdlc-knowledge/RELEASING.md` MUST document the release process, including the maintainer-only one-time bootstrap that cuts the FIRST `sdlc-knowledge-v0.1.0` tag MANUALLY before the SDLC release that introduces this feature merges. Until that first tag exists, `install.sh` falls back to the cargo source-build path (FR-8.4).
+3. **FR-11.3:** A new file `claudebase/RELEASING.md` MUST document the release process, including the maintainer-only one-time bootstrap that cuts the FIRST `claudebase-v0.1.0` tag MANUALLY before the SDLC release that introduces this feature merges. Until that first tag exists, `install.sh` falls back to the cargo source-build path (FR-8.4).
 
 #### FR-12: Invariants — Counts, Taglines, Executor Files
 
@@ -2498,47 +2498,47 @@ Enumerate strings, counts, and files this section MUST NOT change.
 
 ### 11.4 Non-Functional Requirements
 
-1. **NFR-1.1: Binary size.** The compiled `sdlc-knowledge` binary MUST be < 10 MB after `strip = true` and `lto = true` on every supported platform. Estimated breakdown: rusqlite-bundled ~3 MB + chosen PDF crate ~2 MB + clap+serde+sha2 ~1 MB ≈ 6–8 MB total.
-2. **NFR-1.2: Search latency.** `sdlc-knowledge search "<query>" --top-k 5 --json` MUST complete in ≤ 500 ms over a 10 000-chunk seeded fixture database on a 2024-class laptop / CI runner. This is the latency budget agents experience at authoring time.
-3. **NFR-1.3: Ingest throughput.** `sdlc-knowledge ingest fixture.pdf` for a 5 MB PDF MUST complete in ≤ 60 s on a 2024-class laptop. Larger documents scale roughly linearly; throughput is bounded by the PDF crate's extraction speed.
+1. **NFR-1.1: Binary size.** The compiled `claudebase` binary MUST be < 10 MB after `strip = true` and `lto = true` on every supported platform. Estimated breakdown: rusqlite-bundled ~3 MB + chosen PDF crate ~2 MB + clap+serde+sha2 ~1 MB ≈ 6–8 MB total.
+2. **NFR-1.2: Search latency.** `claudebase search "<query>" --top-k 5 --json` MUST complete in ≤ 500 ms over a 10 000-chunk seeded fixture database on a 2024-class laptop / CI runner. This is the latency budget agents experience at authoring time.
+3. **NFR-1.3: Ingest throughput.** `claudebase ingest fixture.pdf` for a 5 MB PDF MUST complete in ≤ 60 s on a 2024-class laptop. Larger documents scale roughly linearly; throughput is bounded by the PDF crate's extraction speed.
 4. **NFR-1.4: Cross-platform support.** The binary MUST build and run on darwin-arm64, darwin-x64, linux-x64, and linux-arm64. Windows is OUT OF SCOPE for iter-1 (see 11.7).
 5. **NFR-1.5: Single-file database constraint.** The index MUST be a single SQLite file (`index.db`) plus the SQLite-managed WAL sidecars. Spreading state across multiple files (e.g., separate vector store, separate metadata file) is forbidden in iter-1 to keep the per-project data model trivial to back up, copy, or delete.
 6. **NFR-1.6: WAL mode.** SQLite WAL mode MUST be enabled at index initialization so reads can interleave with writes. This is load-bearing for parallel-wave execution where one slice may ingest while a sibling slice queries.
 7. **NFR-1.7: Idempotency on re-ingest.** Re-running `ingest` on unchanged inputs MUST be a no-op (mtime+sha256 check). Re-running on changed inputs MUST replace prior chunks atomically per-document via `BEGIN IMMEDIATE`.
-8. **NFR-1.8: No network at runtime.** The `sdlc-knowledge` binary MUST NOT make network calls during `ingest`, `search`, `list`, `status`, or `delete`. All inputs are local files. Network access is restricted to `install.sh`'s one-time release download.
-9. **NFR-1.9: Allowlist scope.** The Bash allowlist entry registered by `install.sh` MUST be exactly `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *` — no broader wildcards, no other tool paths added. Defense-in-depth: the binary itself enforces project-root canonicalization (FR-1.5) so even an attacker-controlled CLI argument cannot escape the project sandbox.
+8. **NFR-1.8: No network at runtime.** The `claudebase` binary MUST NOT make network calls during `ingest`, `search`, `list`, `status`, or `delete`. All inputs are local files. Network access is restricted to `install.sh`'s one-time release download.
+9. **NFR-1.9: Allowlist scope.** The Bash allowlist entry registered by `install.sh` MUST be exactly `~/.claude/tools/claudebase/claudebase *` — no broader wildcards, no other tool paths added. Defense-in-depth: the binary itself enforces project-root canonicalization (FR-1.5) so even an attacker-controlled CLI argument cannot escape the project sandbox.
 10. **NFR-1.10: Version bump.** This feature triggers a minor version bump (additive, no breaking changes). Pipeline behavior on projects that do not initialize a knowledge base is unchanged per FR-10.1.
 
 ### 11.5 Acceptance Criteria
 
-1. **AC-1: Install on four platforms.** `bash install.sh --yes` on darwin-arm64, darwin-x64, linux-x64, and linux-arm64 produces a working `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` exit 0 within 60 seconds (download + chmod).
-2. **AC-2: Bash allowlist registered.** After install, `~/.claude/settings.json` has exactly one allow entry matching `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *`. No other paths are added.
+1. **AC-1: Install on four platforms.** `bash install.sh --yes` on darwin-arm64, darwin-x64, linux-x64, and linux-arm64 produces a working `~/.claude/tools/claudebase/claudebase --version` exit 0 within 60 seconds (download + chmod).
+2. **AC-2: Bash allowlist registered.** After install, `~/.claude/settings.json` has exactly one allow entry matching `~/.claude/tools/claudebase/claudebase *`. No other paths are added.
 3. **AC-3: Project scaffold extension.** `bash install.sh --init-project` creates `<cwd>/.claude/knowledge/.gitignore` containing the literal lines `sources/`, `index.db`, `index.db-shm`, `index.db-wal` (one per line, byte-for-byte matching `templates/knowledge/.gitignore`).
-4. **AC-4: Ingest a 5 MB PDF.** `sdlc-knowledge ingest fixture.pdf` completes in ≤ 60 s on a 2024-class laptop, writes ≥ 1 row to `documents` and ≥ 100 rows to `chunks`. Re-running on the same file is a no-op (logs `unchanged: <path>`, exit 0).
-5. **AC-5: Search returns ranked results within latency budget.** `sdlc-knowledge search "<query>" --top-k 5 --json` returns a valid JSON array of ≤ 5 chunks ordered by BM25 score descending; latency ≤ 500 ms over a 10 000-chunk database.
-6. **AC-6: Path traversal rejected.** `sdlc-knowledge ingest ./books --project-root ../../../etc` exits 2 with the literal stderr message `error: project-root must resolve under current working directory`.
+4. **AC-4: Ingest a 5 MB PDF.** `claudebase ingest fixture.pdf` completes in ≤ 60 s on a 2024-class laptop, writes ≥ 1 row to `documents` and ≥ 100 rows to `chunks`. Re-running on the same file is a no-op (logs `unchanged: <path>`, exit 0).
+5. **AC-5: Search returns ranked results within latency budget.** `claudebase search "<query>" --top-k 5 --json` returns a valid JSON array of ≤ 5 chunks ordered by BM25 score descending; latency ≤ 500 ms over a 10 000-chunk database.
+6. **AC-6: Path traversal rejected.** `claudebase ingest ./books --project-root ../../../etc` exits 2 with the literal stderr message `error: project-root must resolve under current working directory`.
 7. **AC-7: Corrupt index handled.** Truncating `index.db` to 100 bytes and running `search` returns exit 1 with the literal stderr message `error: index database invalid; re-ingest required`. The binary MUST NOT panic — `panicked at` MUST NOT appear in stderr.
 8. **AC-8: Backward compat without index.** When `<project>/.claude/knowledge/index.db` is absent, all 12 thinking agents produce output behaviorally identical to current main (no failed tool calls, no error traces in stdout). Verifiable by running `/bootstrap-feature` on a synthetic feature with and without the index and diffing the produced PRD/use-case/plan files.
-9. **AC-9: Backward compat without binary.** When `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` is absent, agents that attempt to query log the literal line `knowledge-base: tool not installed; skipping` and proceed without citations. The pipeline does NOT abort on the missing binary.
+9. **AC-9: Backward compat without binary.** When `~/.claude/tools/claudebase/claudebase` is absent, agents that attempt to query log the literal line `knowledge-base: tool not installed; skipping` and proceed without citations. The pipeline does NOT abort on the missing binary.
 10. **AC-10: Citation format correctness.** When the index IS present, the 12 thinking agents MUST cite at least one `knowledge-base:` source in `### External contracts` for any task that exercises domain semantics. The literal citation shape is `knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes`.
 11. **AC-11: Invariants preserved.** `ls src/agents/*.md | wc -l` returns 17. README contains the literal line `17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.` at line 5 BYTE-UNCHANGED and the literal phrase `10 quality gates` at line 35 BYTE-UNCHANGED. The five executor agents have ZERO diff vs current main.
 12. **AC-12: Commands count.** `ls src/commands/*.md | wc -l` returns 6 (was 5).
-13. **AC-13: First-release bootstrap with cargo source-build fallback.** A maintainer-only one-shot bootstrap step documented in `tools/sdlc-knowledge/RELEASING.md` cuts the FIRST `sdlc-knowledge-v0.1.0` tag manually BEFORE the SDLC release that introduces this feature merges, so subsequent users of `install.sh` find a release to download. Until that first tag exists, `install.sh` falls back to `cargo build --release` from the local checkout when `cargo` is on `PATH`; otherwise it emits the literal warning `binary unavailable; install cargo or wait for first release` and continues.
+13. **AC-13: First-release bootstrap with cargo source-build fallback.** A maintainer-only one-shot bootstrap step documented in `claudebase/RELEASING.md` cuts the FIRST `claudebase-v0.1.0` tag manually BEFORE the SDLC release that introduces this feature merges, so subsequent users of `install.sh` find a release to download. Until that first tag exists, `install.sh` falls back to `cargo build --release` from the local checkout when `cargo` is on `PATH`; otherwise it emits the literal warning `binary unavailable; install cargo or wait for first release` and continues.
 
 ### 11.6 Risks and Dependencies
 
 1. **Risk: Cross-platform Rust build matrix drift.** GitHub Actions runner labels (`macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`) evolve over time; an ARM-Linux label rename could break Slice 4. Mitigation: pin labels at workflow authoring time; `actionlint` in the workflow's done-condition catches label typos. Windows DEFERRED to iter-2 (saves CI cost).
 2. **Risk: PDF extraction quality.** `pdf-extract` is the iter-1 default (pure Rust, ~2 MB binary contribution); fallback to `lopdf` if quality is poor on real-world fixtures. System `pdftotext` binding is DEFERRED to iter-2 (avoids external runtime dep). The architect picks one with cited rationale at architect Step 3 (BEFORE Slice 2 ships) per Open Question #1.
 3. **Risk: Binary size budget (NFR-1.1 < 10 MB).** rusqlite-bundled ~3 MB + pdf-extract ~2 MB + clap+serde ~1 MB ≈ 6–8 MB after `strip = true` and `lto = true`. Mitigation: verified at the cross-platform release dry-run; if exceeded, switch PDF crate or vendor a smaller SQLite distribution.
-4. **Risk: Bash allowlist scope.** Granting `~/.claude/tools/sdlc-knowledge/sdlc-knowledge *` allows arbitrary CLI args to the binary. Mitigation: the binary itself enforces project-root canonicalization (FR-1.5 + AC-6); `..` traversal, symlink escapes, and absolute paths outside cwd are rejected with exit 2. Security-auditor pre-reviews the install.sh slice.
+4. **Risk: Bash allowlist scope.** Granting `~/.claude/tools/claudebase/claudebase *` allows arbitrary CLI args to the binary. Mitigation: the binary itself enforces project-root canonicalization (FR-1.5 + AC-6); `..` traversal, symlink escapes, and absolute paths outside cwd are rejected with exit 2. Security-auditor pre-reviews the install.sh slice.
 5. **Risk: Agent prompt bloat.** The 12 in-scope agents already grew by ~30 lines each with cognitive-self-check (Section 9); +~25 more lines from this feature → ~55 lines of additive prompt per agent. Mitigation: the rule body lives in `src/rules/knowledge-base.md`; per-agent activation block is short and references the rule.
 6. **Risk: Plan Critic false positives.** Section 9's `### External contracts` heuristic could flag absent `knowledge-base:` citations when no index exists. Mitigation: FR-10.3 makes citations conditional on the activation sentinel; the Plan Critic in `src/claude.md` is UNCHANGED.
 7. **Risk: Version baseline divergence.** Pre-existing repo state — `install.sh` line 22 has `VERSION="2.1.0"` while README badge shows `version-3.1.0-green.svg`. Mitigation: FR-8.7 explicitly leaves `install.sh` `VERSION` unchanged in this section's commits; the release-engineer at Gate 9 reconciles version baselines independently.
-8. **Risk: First-run UX & first-release chicken-and-egg.** Without the binary, `/knowledge-ingest` fails with a clear actionable message including `bash install.sh --yes` (FR-6.3). Between merge of this feature and the maintainer cutting the FIRST `sdlc-knowledge-v0.1.0` tag, install.sh's binary download fails; the cargo source-build fallback (FR-8.4) handles this when `cargo` is on PATH; otherwise install.sh warns and skips silently (FR-8.5).
+8. **Risk: First-run UX & first-release chicken-and-egg.** Without the binary, `/knowledge-ingest` fails with a clear actionable message including `bash install.sh --yes` (FR-6.3). Between merge of this feature and the maintainer cutting the FIRST `claudebase-v0.1.0` tag, install.sh's binary download fails; the cargo source-build fallback (FR-8.4) handles this when `cargo` is on PATH; otherwise install.sh warns and skips silently (FR-8.5).
 9. **Risk: Idempotency drift on file rename.** Idempotency keys on `(source_path, mtime, sha256)`; renaming an unchanged file forces re-chunking. Acceptable cost in iter-1; iter-2 may switch to content-hash-only keying.
 10. **Risk: Concurrent index access in parallel waves.** SQLite WAL mode handles read concurrency; writes (ingest) are serialized via SQLite's lock. Mitigation: ingest holds a write lock per-document via `BEGIN IMMEDIATE`, not per-batch — typical 50-chunk doc < 50 ms allowing search interleaving on long full-corpus ingests.
 11. **Risk: Scope creep — vectors / hybrid search.** Adding sqlite-vec-based embeddings is straightforward later but explicitly OUT OF SCOPE in iter-1 (see 11.7). Mitigation: FR-4.3 reserves the `chunks.embedding BLOB` column for future addition without destructive migration.
-12. **Risk: First-release tag scheme & release-engineer invariant.** In iter-1, `release-engineer` Gate 9 itself is UNCHANGED. The maintainer manually cuts `sdlc-knowledge-v<X.Y.Z>` tags ad-hoc per `tools/sdlc-knowledge/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope (see 11.7).
+12. **Risk: First-release tag scheme & release-engineer invariant.** In iter-1, `release-engineer` Gate 9 itself is UNCHANGED. The maintainer manually cuts `claudebase-v<X.Y.Z>` tags ad-hoc per `claudebase/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope (see 11.7).
 13. **Risk: macOS case-insensitive filesystem path collisions.** Every path in this section uses lowercase basenames matching on-disk files; no case-collision risk in iter-1.
 14. **Dependency: Section 9 (Cognitive Self-Check Protocol).** This section's `### External contracts` citation convention attaches to the `## Facts` block schema introduced by Section 9. Section 9 is [IN DEVELOPMENT] concurrently — if Section 9 has not shipped at the time this section's implementation starts, the implementer MUST sequence Section 9 first.
 15. **Dependency: Section 1 FR-3 (Executable Plan Format).** Slice fields are unchanged; the new slash command and rule reuse the established format. Section 1 is [SHIPPED], dependency satisfied.
@@ -2553,7 +2553,7 @@ The following items are deferred to a future iter-2 PRD section ("Local Knowledg
 2. **MCP server interface.** iter-1 invokes the binary via Bash. An MCP server wrapper (if ever needed) is iter-2 scope.
 3. **`resource-architect` auto-recommendation.** iter-1 only adds the `## Knowledge Base (when present)` activation block to `resource-architect`. Auto-recommend behavior on detecting domain PDFs in `<project>/.claude/knowledge/sources/` is iter-2 PRD scope.
 4. **Windows binary builds.** iter-1 supports darwin-arm64, darwin-x64, linux-x64, linux-arm64. Windows is iter-2.
-5. **Changes to `release-engineer` Gate 9.** iter-1 keeps Gate 9 UNCHANGED. The first `sdlc-knowledge-v0.1.0` tag is cut manually by the maintainer per `tools/sdlc-knowledge/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope.
+5. **Changes to `release-engineer` Gate 9.** iter-1 keeps Gate 9 UNCHANGED. The first `claudebase-v0.1.0` tag is cut manually by the maintainer per `claudebase/RELEASING.md`. Automated coupling between the SDLC release-engineer and the binary release pipeline is iter-2 scope.
 6. **Plan Critic edits in `src/claude.md`.** The existing `### External contracts` Plan Critic check from Section 9 covers `knowledge-base:` citations as a valid source format. No new Plan Critic bullet is added in iter-1.
 7. **`src/rules/cognitive-self-check.md` edits.** The cognitive-self-check rule file is BYTE-UNCHANGED. The `knowledge-base:` source prefix is an additive citation convention only.
 8. **Auto-tuning chunk size.** iter-1 ships fixed ~500-char windows with ~100-char overlap. A configurable flag is iter-2 if real-world retrieval quality demands tuning.
@@ -2564,7 +2564,7 @@ These items are listed explicitly so the Plan Critic does not flag their absence
 
 #### Affected Endpoints
 
-Not applicable. This project has no HTTP API. The "endpoints" of this feature are the `sdlc-knowledge` CLI subcommands enumerated in FR-1.2 and the `/knowledge-ingest` slash command in FR-6.
+Not applicable. This project has no HTTP API. The "endpoints" of this feature are the `claudebase` CLI subcommands enumerated in FR-1.2 and the `/knowledge-ingest` slash command in FR-6.
 
 #### Schema Changes
 
@@ -2581,25 +2581,25 @@ The `chunks` table reserves room for a future `embedding BLOB` column without de
 
 #### UI Changes
 
-Not applicable. This project is a collection of markdown prompt files with no graphical user interface. The user-visible surface is the new `/knowledge-ingest` slash command (FR-6) and the `sdlc-knowledge` CLI's terminal output (FR-1.4).
+Not applicable. This project is a collection of markdown prompt files with no graphical user interface. The user-visible surface is the new `/knowledge-ingest` slash command (FR-6) and the `claudebase` CLI's terminal output (FR-1.4).
 
 #### New Files
 
 | File | Purpose | Related Requirements |
 |------|---------|---------------------|
-| `tools/sdlc-knowledge/Cargo.toml` | Rust crate manifest declaring all dependencies. | FR-1.1 |
-| `tools/sdlc-knowledge/src/main.rs` | clap-derive entry point wiring the five subcommands. | FR-1.2 |
-| `tools/sdlc-knowledge/src/cli.rs` | Subcommand structs and project-root canonicalization. | FR-1.3, FR-1.5 |
-| `tools/sdlc-knowledge/src/ingest.rs` | Chunker (~500/100 sliding window) and `SourceReader` trait. | FR-2.1 through FR-2.5 |
-| `tools/sdlc-knowledge/src/text.rs` | Markdown and plain-text readers. | FR-2.2 |
-| `tools/sdlc-knowledge/src/pdf.rs` | PDF reader using the architect-selected crate. | FR-2.2 |
-| `tools/sdlc-knowledge/src/store.rs` | Schema definition, FTS5 triggers, idempotency, `validate_schema()`. | FR-2.4 through FR-2.7, FR-4.1 through FR-4.4 |
-| `tools/sdlc-knowledge/src/migrations.rs` | v1 migration; future-extensible for v2 hybrid. | FR-4.4 |
-| `tools/sdlc-knowledge/src/search.rs` | FTS5 `MATCH` + `bm25()` ranking. | FR-3.1 through FR-3.4 |
-| `tools/sdlc-knowledge/src/output.rs` | Text and JSON serializers. | FR-1.4, FR-3.3 |
-| `tools/sdlc-knowledge/tests/...` | Unit and `assert_cmd`-based E2E test suite. | All FR / NFR / AC |
-| `tools/sdlc-knowledge/RELEASING.md` | Release process + first-tag bootstrap. | FR-11.3, AC-13 |
-| `.github/workflows/sdlc-knowledge-release.yml` | Cross-platform release pipeline. | FR-11.1, FR-11.2 |
+| `claudebase/Cargo.toml` | Rust crate manifest declaring all dependencies. | FR-1.1 |
+| `claudebase/src/main.rs` | clap-derive entry point wiring the five subcommands. | FR-1.2 |
+| `claudebase/src/cli.rs` | Subcommand structs and project-root canonicalization. | FR-1.3, FR-1.5 |
+| `claudebase/src/ingest.rs` | Chunker (~500/100 sliding window) and `SourceReader` trait. | FR-2.1 through FR-2.5 |
+| `claudebase/src/text.rs` | Markdown and plain-text readers. | FR-2.2 |
+| `claudebase/src/pdf.rs` | PDF reader using the architect-selected crate. | FR-2.2 |
+| `claudebase/src/store.rs` | Schema definition, FTS5 triggers, idempotency, `validate_schema()`. | FR-2.4 through FR-2.7, FR-4.1 through FR-4.4 |
+| `claudebase/src/migrations.rs` | v1 migration; future-extensible for v2 hybrid. | FR-4.4 |
+| `claudebase/src/search.rs` | FTS5 `MATCH` + `bm25()` ranking. | FR-3.1 through FR-3.4 |
+| `claudebase/src/output.rs` | Text and JSON serializers. | FR-1.4, FR-3.3 |
+| `claudebase/tests/...` | Unit and `assert_cmd`-based E2E test suite. | All FR / NFR / AC |
+| `claudebase/RELEASING.md` | Release process + first-tag bootstrap. | FR-11.3, AC-13 |
+| `.github/workflows/claudebase-release.yml` | Cross-platform release pipeline. | FR-11.1, FR-11.2 |
 | `templates/knowledge/.gitignore` | Per-project scaffold — ignores `sources/` and `index.db*`. | FR-9.1, AC-3 |
 | `templates/knowledge/.gitkeep` | Ensures `templates/knowledge/` is tracked. | FR-9.1 |
 | `src/rules/knowledge-base.md` | Global rule documenting CLI usage, citation format, fallback, scope. | FR-7.1, FR-7.2, FR-7.3 |
@@ -2676,7 +2676,7 @@ Not applicable. This project is a collection of markdown prompt files with no gr
 
 ### Assumptions
 
-- **Rust crate placement is monorepo (`tools/sdlc-knowledge/` inside the SDLC repo)** — risk: if architect prefers a separate repository, install.sh's release-download URL changes but the binary surface is identical; verification path: architect Step 3 reviews repo placement.
+- **Rust crate placement is monorepo (`claudebase/` inside the SDLC repo)** — risk: if architect prefers a separate repository, install.sh's release-download URL changes but the binary surface is identical; verification path: architect Step 3 reviews repo placement.
 - **Default chunk size of ~500 characters with ~100-character overlap is reasonable for BM25 retrieval over technical books** — risk: too-small chunks fragment phrasing; too-large chunks dilute BM25 scores; verification path: Slice 2 includes a fixture-based golden test (`sample.md` ~3 KB → exactly 8 chunks); a configurable flag is iter-2 (per 11.7 item 8).
 - **The `## Knowledge Base (when present)` activation block (~25 lines) appended at the END of each of the 12 in-scope agent prompt files fits without disturbing existing sections (including the `## Cognitive Self-Check (MANDATORY)` section from Section 9)** — risk: large-prompt agents (`resource-architect.md` ~585 LOC, `role-planner.md` ~467 LOC) hit attention-budget limits; verification path: read each agent file before edit; if rejected, the rule file `src/rules/knowledge-base.md` carries the verbose details and per-agent blocks shrink to a 5-line pointer.
 - **Idempotency keying on `(source_path, mtime, sha256)` is sufficient for re-ingest** — risk: files renamed but unchanged are re-chunked unnecessarily; verification path: Slice 2's idempotency test covers the unchanged-file case; renamed-file is acceptable cost in iter-1.
@@ -2687,7 +2687,7 @@ Not applicable. This project is a collection of markdown prompt files with no gr
 
 - **Open Question #1 — Which PDF crate?** `pdf-extract` (pure Rust, simpler, lower-fidelity) vs `lopdf` (lower-level, more code) vs system `pdftotext` binding (best fidelity, external runtime dep). RESOLUTION: architect Step 3 picks ONE with cited rationale; iter-1 default is `pdf-extract` per Risk #2. Decision must land BEFORE Slice 2 ships.
 - **Open Question #2 — rusqlite + FTS5 syntax verification.** Five of seven `### External contracts` are `verified: no — assumption`. RESOLUTION: architect Step 3 MUST verify rusqlite's FTS5 virtual-table syntax and `bm25()` argument ordering against current docs BEFORE Slice 3 ships (load-bearing for store + search). Pre-Slice-3 prerequisite.
-- **Open Question #3 — `release-engineer` Gate 9 coupling to binary releases.** RESOLVED — out of scope for iter-1 per 11.7 item 5. Iter-1 keeps Gate 9 unchanged; the maintainer manually cuts `sdlc-knowledge-v<X.Y.Z>` tags ad-hoc per `tools/sdlc-knowledge/RELEASING.md`.
+- **Open Question #3 — `release-engineer` Gate 9 coupling to binary releases.** RESOLVED — out of scope for iter-1 per 11.7 item 5. Iter-1 keeps Gate 9 unchanged; the maintainer manually cuts `claudebase-v<X.Y.Z>` tags ad-hoc per `claudebase/RELEASING.md`.
 - **Open Question #4 — `resource-architect` auto-recommendation behavior.** RESOLVED — out of scope for iter-1 per 11.7 item 3. Iter-1 only adds the `## Knowledge Base (when present)` activation block to `resource-architect`. Auto-recommend behavior on detecting domain PDFs is iter-2 PRD scope.
 - **Open Question #5 — Per-project `sources/` directory `.gitignored` by default?** RESOLVED for iter-1: `templates/knowledge/.gitignore` ships with `sources/`, `index.db`, `index.db-shm`, `index.db-wal` excluded by default per FR-9.1. Teams that want to track shared compliance docs in git opt in by removing entries from the per-project `.gitignore`.
 
@@ -2704,7 +2704,7 @@ Changelog: PDF documents that previously failed to index — including ebooks co
 
 ### 12.1 Overview
 
-Section 11 (iter-1) shipped a working `sdlc-knowledge` CLI with PDF extraction backed by the pure-Rust `pdf-extract = "0.7"` crate. Live testing on a 9-book ML/AI corpus surfaced two categorical extraction failures that the per-file panic boundary contained but could not repair:
+Section 11 (iter-1) shipped a working `claudebase` CLI with PDF extraction backed by the pure-Rust `pdf-extract = "0.7"` crate. Live testing on a 9-book ML/AI corpus surfaced two categorical extraction failures that the per-file panic boundary contained but could not repair:
 
 1. **CID-font failures.** Calibre-converted ebooks (calibre 3.32.0 emits PDFs with `/Type0` composite CID fonts and `/ToUnicode` CMaps) yield near-zero usable text from `pdf-extract`. A specific 484 KB / 308-page calibre-PDF produced **27 whitespace-only chunks** under iter-1; the same PDF re-converted to Markdown via `pypdf` produced **1212 well-formed chunks**, and a BM25 round-trip on the phrase `"LSTM 22 ms random forest"` returned chunk_id 17236 with score 30.62 — proving the data is recoverable, just not by `pdf-extract`.
 2. **Hard panics.** One book in the corpus triggered an internal panic in `pdf-extract` that was contained by the iter-1 `catch_unwind` boundary but produced zero indexed text from that file.
@@ -2735,7 +2735,7 @@ Section 11 (iter-1) shipped a working `sdlc-knowledge` CLI with PDF extraction b
 
 The PDF reader is replaced with a `pdfium-render`-backed implementation that loads PDFium dynamically, opens documents, iterates pages, and concatenates extracted text.
 
-1. **FR-1.1:** `tools/sdlc-knowledge/src/pdf.rs` MUST be rewritten to use `pdfium-render = "0.9"` (minor-version pinned). The public function signature `pub fn read(p: &Path) -> Result<String, IngestError>` MUST be byte-unchanged so callers in `ingest.rs` are not modified.
+1. **FR-1.1:** `claudebase/src/pdf.rs` MUST be rewritten to use `pdfium-render = "0.9"` (minor-version pinned). The public function signature `pub fn read(p: &Path) -> Result<String, IngestError>` MUST be byte-unchanged so callers in `ingest.rs` are not modified.
 2. **FR-1.2:** The new implementation MUST instantiate a single `Pdfium` engine handle per process via `Pdfium::bind_to_system_library()` (or the equivalent path-resolver entrypoint that searches platform-standard library locations). Engine bind failure MUST surface as `IngestError::PdfDecode` with a message of the form `pdfium dynamic library not found at <searched paths>; install via bash install.sh --yes`. The binding MUST NOT panic on missing-library errors.
 3. **FR-1.3:** Document open MUST use `Pdfium::load_pdf_from_byte_slice` reading the file via `std::fs::read` so the security boundary remains "the binary opens files passed by the canonicalized project-root gate, never via path strings handed directly to native code". Password-protected documents MUST attempt the empty-password path first; on failure, surface `IngestError::PdfDecode` with `password-protected; not supported in iter-2` and continue the batch.
 4. **FR-1.4:** Page iteration MUST use the documented `PdfDocument::pages().iter()` API, extracting text per page via the page-text accessor. Per-page text MUST be concatenated with a single `\n` separator into the document-level string.
@@ -2747,9 +2747,9 @@ The PDF reader is replaced with a `pdfium-render`-backed implementation that loa
 
 The `pdf-extract` dependency is removed entirely; no shim, no fallback path, no transitive include via `Cargo.lock`.
 
-1. **FR-2.1:** `tools/sdlc-knowledge/Cargo.toml` MUST replace the line `pdf-extract = "0.7"` with `pdfium-render = "0.9"` (minor-version pinned with no patch-version float across the `0.9.x` range). No other dependency lines change.
+1. **FR-2.1:** `claudebase/Cargo.toml` MUST replace the line `pdf-extract = "0.7"` with `pdfium-render = "0.9"` (minor-version pinned with no patch-version float across the `0.9.x` range). No other dependency lines change.
 2. **FR-2.2:** `cargo tree -p pdf-extract` MUST return exit code 1 (`error: package ID specification 'pdf-extract' did not match any packages`) after this section ships, confirming the dep is fully removed (not just unreferenced).
-3. **FR-2.3:** All comments, doc-strings, and module-level prose in `tools/sdlc-knowledge/src/pdf.rs` MUST be updated to reference `pdfium-render` and `pdfium`. Any string `pdf_extract` MUST NOT appear in the file. The comment block at lines 1-8 of iter-1 `pdf.rs` is rewritten verbatim to describe the pdfium-render integration.
+3. **FR-2.3:** All comments, doc-strings, and module-level prose in `claudebase/src/pdf.rs` MUST be updated to reference `pdfium-render` and `pdfium`. Any string `pdf_extract` MUST NOT appear in the file. The comment block at lines 1-8 of iter-1 `pdf.rs` is rewritten verbatim to describe the pdfium-render integration.
 4. **FR-2.4:** The `IngestError::PdfDecode` variant message format MAY change to include a pdfium-specific reason string, but the variant identity MUST be preserved so downstream `impl Display for IngestError` and per-file error printing in `ingest.rs` is byte-unchanged.
 
 #### FR-3: install.sh PDFium Binary Download
@@ -2757,9 +2757,9 @@ The `pdf-extract` dependency is removed entirely; no shim, no fallback path, no 
 `install.sh` gains a per-platform PDFium binary download step that places the shared library where `pdfium-render` can find it at runtime.
 
 1. **FR-3.1:** `install.sh` MUST detect the host platform via `uname -ms` and download the matching prebuilt PDFium archive from `bblanchon/pdfium-binaries` GitHub Releases. The four iter-2 platform-to-asset mappings are: darwin-arm64 → `pdfium-mac-arm64.tgz`, darwin-x64 → `pdfium-mac-x64.tgz`, linux-x64 → `pdfium-linux-x64.tgz`, linux-arm64 → `pdfium-linux-arm64.tgz`. Windows remains OUT OF SCOPE per 12.7.
-2. **FR-3.2:** The downloaded archive MUST be extracted to `~/.claude/tools/sdlc-knowledge/pdfium/` (sibling directory to the `sdlc-knowledge` binary) with the canonical layout `pdfium/lib/libpdfium.{dylib|so}` per platform. Re-running `install.sh` when the library is already present at the expected version MUST be a no-op (idempotent install).
+2. **FR-3.2:** The downloaded archive MUST be extracted to `~/.claude/claudebase/pdfium/` (sibling directory to the `claudebase` binary) with the canonical layout `pdfium/lib/libpdfium.{dylib|so}` per platform. Re-running `install.sh` when the library is already present at the expected version MUST be a no-op (idempotent install).
 3. **FR-3.3:** The PDFium release tag pinned by `install.sh` MUST be a single literal version string (e.g., `chromium/6996`) declared in one place at the top of `install.sh` and substituted into the download URL. Updating PDFium versions is a single-line edit.
-4. **FR-3.4:** `pdfium-render`'s library-path resolver MUST locate the extracted library. `install.sh` MUST set up the resolver path via the documented mechanism (typically `LD_LIBRARY_PATH` on Linux and `DYLD_LIBRARY_PATH` on macOS, or by extracting directly to the system library directory if the resolver searches there). The chosen mechanism MUST be one that is reversible by removing the `~/.claude/tools/sdlc-knowledge/pdfium/` directory.
+4. **FR-3.4:** `pdfium-render`'s library-path resolver MUST locate the extracted library. `install.sh` MUST set up the resolver path via the documented mechanism (typically `LD_LIBRARY_PATH` on Linux and `DYLD_LIBRARY_PATH` on macOS, or by extracting directly to the system library directory if the resolver searches there). The chosen mechanism MUST be one that is reversible by removing the `~/.claude/claudebase/pdfium/` directory.
 5. **FR-3.5:** When the PDFium download fails (network outage, GitHub Releases asset moved, sha256 mismatch in iter-3) `install.sh` MUST log a clear warning of the form `pdfium binary unavailable; PDF ingest will fail until pdfium is installed; markdown/text ingest unaffected` and continue. install.sh MUST NOT abort the rest of the install on this condition (graceful degradation, mirrors §11 FR-8.5).
 6. **FR-3.6:** The same `SCRIPT_DIR` cleanup ordering concern documented in §11 Slice 5 applies — `install.sh` MUST re-invoke `get_source_dir` after any `cd` that could shift `SCRIPT_DIR`, before resolving the PDFium archive path. Failure to do so was a source of breakage in §11 iter-1 commits.
 7. **FR-3.7:** Re-running `install.sh --yes` on a host where PDFium is already installed and the `chromium/<version>` tag matches MUST be a no-op (no re-download, no re-extract, idempotent).
@@ -2778,29 +2778,29 @@ A companion fix that adds a path-canonicalization-free deletion path keyed by in
 
 When the PDFium dynamic library cannot be loaded, PDF ingest fails per-file with a clear error while Markdown and plain-text ingest continue.
 
-1. **FR-5.1:** `sdlc-knowledge ingest <dir>` on a directory containing `.md`, `.txt`, and `.pdf` files when PDFium is absent MUST process the `.md` and `.txt` files normally and emit one `IngestError::PdfDecode("pdfium dynamic library not found ...")` per `.pdf` file. The batch exit code MUST be 0 if at least one file succeeded, mirroring §11 FR-2.6's per-file error boundary.
-2. **FR-5.2:** A single `.pdf` file passed directly to `sdlc-knowledge ingest <file>.pdf` when PDFium is absent MUST exit 1 with the same per-file error printed to stderr (no batch context to fall back on).
+1. **FR-5.1:** `claudebase ingest <dir>` on a directory containing `.md`, `.txt`, and `.pdf` files when PDFium is absent MUST process the `.md` and `.txt` files normally and emit one `IngestError::PdfDecode("pdfium dynamic library not found ...")` per `.pdf` file. The batch exit code MUST be 0 if at least one file succeeded, mirroring §11 FR-2.6's per-file error boundary.
+2. **FR-5.2:** A single `.pdf` file passed directly to `claudebase ingest <file>.pdf` when PDFium is absent MUST exit 1 with the same per-file error printed to stderr (no batch context to fall back on).
 3. **FR-5.3:** The CLI surface, the `index.db` schema, and the FTS5 + BM25 ranking remain unchanged when PDFium is absent — search and management subcommands work normally over previously-indexed content.
 
 #### FR-6: Test Fixture — Calibre-Sample PDF
 
 A small calibre-converted PDF is vendored into the repo to exercise the CID-font failure mode that broke iter-1.
 
-1. **FR-6.1:** A new fixture at `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` MUST be added. The fixture MUST be a calibre-converted ebook excerpt small enough to vendor in git (≤ 100 KB, target 30 KB), generated by running calibre 3.x or later on a public-domain text source so license compatibility is unambiguous.
-2. **FR-6.2:** A new integration test in `tools/sdlc-knowledge/tests/` MUST ingest the fixture and assert:
+1. **FR-6.1:** A new fixture at `claudebase/tests/fixtures/calibre-sample.pdf` MUST be added. The fixture MUST be a calibre-converted ebook excerpt small enough to vendor in git (≤ 100 KB, target 30 KB), generated by running calibre 3.x or later on a public-domain text source so license compatibility is unambiguous.
+2. **FR-6.2:** A new integration test in `claudebase/tests/` MUST ingest the fixture and assert:
    - The fixture produces ≥ `(file_size_kb / 2)` chunks (i.e., chunks/MB ratio ≥ 50, per NFR-4 below).
    - At least one chunk contains a non-whitespace alphabetic word ≥ 5 characters (proves CID decoding worked).
    - Re-ingest is a no-op (`unchanged: <path>` per §11 FR-2.5).
-3. **FR-6.3:** The fixture MUST be committed alongside a `tools/sdlc-knowledge/tests/fixtures/calibre-sample.README.md` documenting (a) the source text's public-domain provenance, (b) the calibre version used to convert, (c) the SHA-256 of the committed file. This is documentation, not enforcement — but it gives the next maintainer the recipe for regenerating the fixture.
+3. **FR-6.3:** The fixture MUST be committed alongside a `claudebase/tests/fixtures/calibre-sample.README.md` documenting (a) the source text's public-domain provenance, (b) the calibre version used to convert, (c) the SHA-256 of the committed file. This is documentation, not enforcement — but it gives the next maintainer the recipe for regenerating the fixture.
 
 #### FR-7: GitHub Actions Release Workflow Update
 
 The cross-platform release pipeline introduced in §11 FR-11 gains a PDFium presence smoke step.
 
-1. **FR-7.1:** `.github/workflows/sdlc-knowledge-release.yml` MUST add a step that runs `install.sh --yes`'s PDFium download path before `cargo build --release` so the matrix CI verifies the per-platform PDFium archive download succeeds. The smoke step's done-condition is that the extracted `libpdfium.{dylib|so}` exists and is non-zero size at the expected path.
-2. **FR-7.2:** A second smoke step MUST run `sdlc-knowledge ingest tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` after build and assert exit 0 and ≥ 1 chunk indexed. This catches dynamic-load regressions on the matrix runners.
-3. **FR-7.3:** The build matrix labels (`macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`) and the trigger pattern (`sdlc-knowledge-v*` tags) are UNCHANGED from §11 FR-11.1. Iter-2 only adds steps; it does not change the matrix shape.
-4. **FR-7.4:** The Gate 9 release-engineer agent's behavior remains UNCHANGED — the maintainer continues to cut tags manually per `tools/sdlc-knowledge/RELEASING.md`. Iter-2 does NOT couple Gate 9 to the binary release pipeline (consistent with §11 FR-12.4).
+1. **FR-7.1:** `.github/workflows/claudebase-release.yml` MUST add a step that runs `install.sh --yes`'s PDFium download path before `cargo build --release` so the matrix CI verifies the per-platform PDFium archive download succeeds. The smoke step's done-condition is that the extracted `libpdfium.{dylib|so}` exists and is non-zero size at the expected path.
+2. **FR-7.2:** A second smoke step MUST run `claudebase ingest claudebase/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` after build and assert exit 0 and ≥ 1 chunk indexed. This catches dynamic-load regressions on the matrix runners.
+3. **FR-7.3:** The build matrix labels (`macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`) and the trigger pattern (`claudebase-v*` tags) are UNCHANGED from §11 FR-11.1. Iter-2 only adds steps; it does not change the matrix shape.
+4. **FR-7.4:** The Gate 9 release-engineer agent's behavior remains UNCHANGED — the maintainer continues to cut tags manually per `claudebase/RELEASING.md`. Iter-2 does NOT couple Gate 9 to the binary release pipeline (consistent with §11 FR-12.4).
 
 #### FR-8: Documentation Updates
 
@@ -2808,14 +2808,14 @@ Four documentation surfaces gain pdfium-aware content.
 
 1. **FR-8.1:** `~/.claude/rules/knowledge-base-tool.md` MUST be UPDATED. The "Known limitations of pdf-extract" section is REPLACED with a "PDF extraction via PDFium" section noting (a) PDFium handles CID fonts, multi-column layouts, password-protected (empty password) PDFs natively; (b) scanned PDFs without a text layer still need OCR pre-processing — that limitation is intrinsic to image-only PDFs, not the extractor; (c) PDFium dynamic library availability is required and install.sh handles per-platform download.
 2. **FR-8.2:** `~/.claude/rules/knowledge-base.md` MUST be UPDATED to remove the "Known limitations of pdf-extract" section in favor of a "PDFium availability" section. The CLI invocation contract, citation format, activation sentinel, fallback behavior, and application scope sections remain BYTE-UNCHANGED.
-3. **FR-8.3:** `tools/sdlc-knowledge/RELEASING.md` MUST gain a new section "PDFium binary versioning" documenting the `chromium/<version>` tag pinning policy, how to bump the pinned version (single-line edit per FR-3.3), and the `bblanchon/pdfium-binaries` source.
+3. **FR-8.3:** `claudebase/RELEASING.md` MUST gain a new section "PDFium binary versioning" documenting the `chromium/<version>` tag pinning policy, how to bump the pinned version (single-line edit per FR-3.3), and the `bblanchon/pdfium-binaries` source.
 4. **FR-8.4:** `README.md` MUST gain ONE new row in the existing Hardening table referencing the iter-2 robust PDF extraction. The README taglines at lines 5 and 35 MUST be BYTE-UNCHANGED (consistent with §11 FR-12.1 / FR-12.2).
 
 #### FR-9: Invariants Enforced
 
 Iter-2 is a drop-in PDF reader replacement plus one CLI flag and one binary download. Everything else stays put.
 
-1. **FR-9.1:** The five `sdlc-knowledge` subcommands (`ingest`, `search`, `list`, `status`, `delete`) plus `--version` remain BYTE-UNCHANGED in their public surface. Iter-2's only addition is the `--by-id <int>` flag on `delete`; the existing positional-path form is preserved.
+1. **FR-9.1:** The five `claudebase` subcommands (`ingest`, `search`, `list`, `status`, `delete`) plus `--version` remain BYTE-UNCHANGED in their public surface. Iter-2's only addition is the `--by-id <int>` flag on `delete`; the existing positional-path form is preserved.
 2. **FR-9.2:** The `knowledge-base:` citation literal format `knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes` is BYTE-UNCHANGED.
 3. **FR-9.3:** The `## Knowledge Base (when present)` activation block in the 12 thinking agents is BYTE-UNCHANGED.
 4. **FR-9.4:** The 17-agent count and 10-gate count are BYTE-UNCHANGED. `ls src/agents/*.md | wc -l` returns 17. `grep -Fxc "10 quality gates" README.md` returns ≥ 1.
@@ -2825,7 +2825,7 @@ Iter-2 is a drop-in PDF reader replacement plus one CLI flag and one binary down
 
 ### 12.4 Non-Functional Requirements
 
-1. **NFR-1: Binary size budget.** The compiled `sdlc-knowledge` binary MUST remain ≤ 10 MB after `strip = true` and `lto = true` (UNCHANGED from §11 NFR-1.1). `pdfium-render` itself is small — the heavy bytes ship in the separate dynamic library, not the binary.
+1. **NFR-1: Binary size budget.** The compiled `claudebase` binary MUST remain ≤ 10 MB after `strip = true` and `lto = true` (UNCHANGED from §11 NFR-1.1). `pdfium-render` itself is small — the heavy bytes ship in the separate dynamic library, not the binary.
 2. **NFR-2: PDFium dylib budget.** The extracted `libpdfium.{dylib|so}` SHOULD add 10–15 MB sibling to the binary, bringing total per-platform install footprint to ≤ 25 MB across the four supported platforms. This is reported in the install summary.
 3. **NFR-3: Extraction latency.** A 5 MB PDF MUST be ingested in ≤ 60 s on a 2024-class laptop (UNCHANGED from §11 AC-4 / NFR-1.3). PDFium is significantly faster than `pdf-extract` on equivalent input, so the budget is conservative.
 4. **NFR-4: Chunks-per-MB ratio (empirical quality proxy).** For calibre-converted PDFs, `chunks_count / file_size_mb` MUST be ≥ 50 after iter-2. The same metric on iter-1 averaged ~2 chunks/MB on calibre PDFs (the failure mode); pypdf-as-Markdown achieves ~2500 chunks/MB on the same input. Iter-2 MUST close at least 95% of that gap.
@@ -2833,32 +2833,32 @@ Iter-2 is a drop-in PDF reader replacement plus one CLI flag and one binary down
 6. **NFR-6: Deterministic page-text concatenation.** Iterating pages and concatenating page-text with `\n` MUST produce byte-identical output across runs on the same input — `pdfium-render`'s page iteration is documented as deterministic. This is load-bearing for the `(source_path, mtime, sha256)` idempotency check from §11 FR-2.5: if extraction were non-deterministic, every re-ingest would re-chunk.
 7. **NFR-7: Cross-platform support unchanged.** The four iter-1 platforms (darwin-arm64, darwin-x64, linux-x64, linux-arm64) remain supported in iter-2. Windows remains OUT OF SCOPE.
 8. **NFR-8: License compatibility.** All new and modified dependencies MUST be license-compatible with this repo's MIT license. Specifically: `pdfium-render` is MIT OR Apache-2.0, PDFium upstream is BSD-3, `bblanchon/pdfium-binaries` is MIT. The AGPL-3.0 `mupdf` Rust binding is REJECTED on license-incompatibility grounds.
-9. **NFR-9: Version bump.** This feature triggers a minor version bump on the `sdlc-knowledge` crate (0.1.0 → 0.2.0) — replacement of a runtime dependency is additive in the SemVer sense (no breaking changes to the binary's CLI surface). The SDLC repo's tagline version bump is handled separately by the release-engineer at Gate 9.
+9. **NFR-9: Version bump.** This feature triggers a minor version bump on the `claudebase` crate (0.1.0 → 0.2.0) — replacement of a runtime dependency is additive in the SemVer sense (no breaking changes to the binary's CLI surface). The SDLC repo's tagline version bump is handled separately by the release-engineer at Gate 9.
 
 ### 12.5 Acceptance Criteria
 
 1. **AC-1: pdfium-render dependency swap clean.** `cargo tree -p pdfium-render` returns a single matched package at version `0.9.x`. `cargo tree -p pdf-extract` returns exit 1 (`did not match any packages`).
-2. **AC-2: Calibre PDF round-trips correctly.** `sdlc-knowledge ingest tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` produces ≥ 1 row in `documents` and ≥ `(file_size_kb / 20)` rows in `chunks` (chunks-per-MB ≥ 50 per NFR-4). At least one chunk MUST contain a non-whitespace alphabetic word ≥ 5 characters.
+2. **AC-2: Calibre PDF round-trips correctly.** `claudebase ingest claudebase/tests/fixtures/calibre-sample.pdf --project-root <tmpdir>` produces ≥ 1 row in `documents` and ≥ `(file_size_kb / 20)` rows in `chunks` (chunks-per-MB ≥ 50 per NFR-4). At least one chunk MUST contain a non-whitespace alphabetic word ≥ 5 characters.
 3. **AC-3: Re-ingest is a no-op.** Running the AC-2 invocation a second time logs `unchanged: <path>` and exits 0 with no new rows in `documents` or `chunks` (per §11 FR-2.5, unchanged in iter-2).
-4. **AC-4: Search round-trip on calibre fixture.** After AC-2 ingest, `sdlc-knowledge search "<phrase from the fixture>" --top-k 5 --json --project-root <tmpdir>` returns a non-empty JSON array whose first element's `source` field is the fixture path and whose `score` is positive (BM25 larger-is-better convention from §11).
-5. **AC-5: install.sh PDFium download per-platform.** `bash install.sh --yes` on each of the four supported platforms produces `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib|so}` of non-zero size within 90 s. Re-running `install.sh --yes` on a host where the library is already present at the pinned `chromium/<version>` tag is a no-op (no re-download, exit 0).
-6. **AC-6: PDFium absent — graceful degradation.** With PDFium removed (`rm -rf ~/.claude/tools/sdlc-knowledge/pdfium/`), `sdlc-knowledge ingest <dir-with-md-and-pdf>` processes `.md` files normally, prints one per-file `pdfium dynamic library not found` error per `.pdf` file, and exits 0 if at least one file succeeded. `panicked at` MUST NOT appear in stderr.
-7. **AC-7: `delete --by-id` works.** `sdlc-knowledge delete --by-id <existing-id> --json` returns `{"deleted_id": <int>, "source_path": "<string>", "chunks_removed": <int>}` with exit 0; the `documents` row, all dependent `chunks` rows, and FTS5 entries are removed. `sdlc-knowledge delete --by-id <nonexistent-id>` exits 1 with `error: no document with id <int>` and DOES NOT touch the database.
-8. **AC-8: `delete --by-id` and `<source-path>` mutual exclusion.** `sdlc-knowledge delete --by-id 5 some/path.pdf` exits 2 with `error: --by-id and <source-path> are mutually exclusive`.
-9. **AC-9: GitHub Actions matrix smoke passes.** The `.github/workflows/sdlc-knowledge-release.yml` matrix run on a `sdlc-knowledge-v*` tag completes the new PDFium download + calibre fixture ingest smoke steps with exit 0 on all four platform jobs.
+4. **AC-4: Search round-trip on calibre fixture.** After AC-2 ingest, `claudebase search "<phrase from the fixture>" --top-k 5 --json --project-root <tmpdir>` returns a non-empty JSON array whose first element's `source` field is the fixture path and whose `score` is positive (BM25 larger-is-better convention from §11).
+5. **AC-5: install.sh PDFium download per-platform.** `bash install.sh --yes` on each of the four supported platforms produces `~/.claude/claudebase/pdfium/lib/libpdfium.{dylib|so}` of non-zero size within 90 s. Re-running `install.sh --yes` on a host where the library is already present at the pinned `chromium/<version>` tag is a no-op (no re-download, exit 0).
+6. **AC-6: PDFium absent — graceful degradation.** With PDFium removed (`rm -rf ~/.claude/claudebase/pdfium/`), `claudebase ingest <dir-with-md-and-pdf>` processes `.md` files normally, prints one per-file `pdfium dynamic library not found` error per `.pdf` file, and exits 0 if at least one file succeeded. `panicked at` MUST NOT appear in stderr.
+7. **AC-7: `delete --by-id` works.** `claudebase delete --by-id <existing-id> --json` returns `{"deleted_id": <int>, "source_path": "<string>", "chunks_removed": <int>}` with exit 0; the `documents` row, all dependent `chunks` rows, and FTS5 entries are removed. `claudebase delete --by-id <nonexistent-id>` exits 1 with `error: no document with id <int>` and DOES NOT touch the database.
+8. **AC-8: `delete --by-id` and `<source-path>` mutual exclusion.** `claudebase delete --by-id 5 some/path.pdf` exits 2 with `error: --by-id and <source-path> are mutually exclusive`.
+9. **AC-9: GitHub Actions matrix smoke passes.** The `.github/workflows/claudebase-release.yml` matrix run on a `claudebase-v*` tag completes the new PDFium download + calibre fixture ingest smoke steps with exit 0 on all four platform jobs.
 
 ### 12.6 Risks and Dependencies
 
-1. **R-1: PDFium dynamic-library hijack via env var or symlink.** `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` are user-controllable, and a malicious shared library named `libpdfium.so` placed earlier on the resolver path could be loaded by `pdfium-render` instead of the install.sh-fetched binary. Mitigation: security-auditor pre-reviews Slice 1 (PDF reader rewrite) and Slice 3 (install.sh changes); the install.sh extraction path is constrained to `~/.claude/tools/sdlc-knowledge/pdfium/` and the resolver mechanism chosen MUST favor explicit-path APIs over environment-variable lookup where `pdfium-render` exposes both.
-2. **R-2: PDFium binary download URL stability.** `bblanchon/pdfium-binaries` is a community project. Asset filenames could change between PDFium upstream releases. Mitigation: pin a specific `chromium/<version>` tag in install.sh per FR-3.3; sha256 verification of the downloaded archive is DEFERRED to iter-3 — same posture as the iter-1 `sdlc-knowledge` binary download (which also lacks sha256 verification per §11 FR-8.1, deferred to a later iteration).
+1. **R-1: PDFium dynamic-library hijack via env var or symlink.** `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` are user-controllable, and a malicious shared library named `libpdfium.so` placed earlier on the resolver path could be loaded by `pdfium-render` instead of the install.sh-fetched binary. Mitigation: security-auditor pre-reviews Slice 1 (PDF reader rewrite) and Slice 3 (install.sh changes); the install.sh extraction path is constrained to `~/.claude/claudebase/pdfium/` and the resolver mechanism chosen MUST favor explicit-path APIs over environment-variable lookup where `pdfium-render` exposes both.
+2. **R-2: PDFium binary download URL stability.** `bblanchon/pdfium-binaries` is a community project. Asset filenames could change between PDFium upstream releases. Mitigation: pin a specific `chromium/<version>` tag in install.sh per FR-3.3; sha256 verification of the downloaded archive is DEFERRED to iter-3 — same posture as the iter-1 `claudebase` binary download (which also lacks sha256 verification per §11 FR-8.1, deferred to a later iteration).
 3. **R-3: Cross-platform .dylib/.so naming variance.** Darwin uses `libpdfium.dylib`; Linux uses `libpdfium.so`. `pdfium-render`'s path resolver handles both, but the install.sh extraction step MUST verify the correct filename per platform exists post-extract. Mitigation: FR-7.1 smoke step asserts the extracted file exists with the platform-specific name on each matrix runner.
 4. **R-4: bblanchon/pdfium-binaries release cadence / abandonment.** If the community project goes dormant, future PDFium upstream versions will not have prebuilt binaries. Fallback path: build PDFium from upstream source via `gn`/`ninja` (Google's build system) — multi-hour build, multi-GB toolchain. OUT OF SCOPE for iter-2; documented as a known fallback in `RELEASING.md` per FR-8.3.
 5. **R-5: Existing chunk-count regression.** Re-ingesting currently-working PDFs (the 7 of 9 books that succeeded under iter-1) with PDFium will produce DIFFERENT chunk counts because the extractor differs — page-text concatenation may include or exclude headers/footers, hyphenation handling differs, ligature decoding differs. Mitigation: NFR-4's chunks/MB ≥ 50 floor catches catastrophic regression while allowing normal extractor variance; the iter-2 corpus re-ingest is a one-time event documented in `RELEASING.md`.
-6. **R-6: install.sh ordering — SCRIPT_DIR cleanup pattern.** `install.sh` already exhibited a SCRIPT_DIR shift bug in §11 Slice 5 that required `get_source_dir` re-invocation after each `cd`. The PDFium download path adds another `cd` (into `~/.claude/tools/sdlc-knowledge/pdfium/`) and MUST follow the same re-invocation pattern. Mitigation: FR-3.6 documents the constraint; the Slice 3 done-condition includes a regression test that runs `install.sh --yes` from an arbitrary cwd and asserts no SCRIPT_DIR-related errors.
+6. **R-6: install.sh ordering — SCRIPT_DIR cleanup pattern.** `install.sh` already exhibited a SCRIPT_DIR shift bug in §11 Slice 5 that required `get_source_dir` re-invocation after each `cd`. The PDFium download path adds another `cd` (into `~/.claude/claudebase/pdfium/`) and MUST follow the same re-invocation pattern. Mitigation: FR-3.6 documents the constraint; the Slice 3 done-condition includes a regression test that runs `install.sh --yes` from an arbitrary cwd and asserts no SCRIPT_DIR-related errors.
 7. **R-7: pdfium-render API stability.** `pdfium-render` is at v0.9.x — pre-1.0, so SemVer guarantees are weaker than for stable crates. Mitigation: pin minor version (`0.9` in `Cargo.toml` per FR-2.1); a major-version bump (0.10, 1.0) requires a follow-up PRD section to vet API changes.
 8. **R-8: Dynamic loading on hardened CI runners.** Some CI runners (sandboxed Linux containers, restrictive macOS notarization paths) may refuse to load the PDFium dylib with no clear error. Mitigation: the FR-7.2 smoke step exercises load-on-CI; if a matrix runner fails, the workflow fails fast with a known signature rather than producing silent zero-chunk PDFs.
 9. **R-9: Calibre-fixture license provenance.** A vendored `calibre-sample.pdf` MUST be derived from a public-domain or permissively-licensed source. Mitigation: FR-6.3 documents provenance in a sibling README; Project Gutenberg or similar public-domain sources are the canonical pick.
-10. **Dependency: Section 11 (Local Knowledge Base for SDLC Agents — iter-1).** This section is iter-2 of §11 and depends on §11 having shipped (binary at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`, schema at `<project>/.claude/knowledge/index.db`, agent activation blocks in 12 thinking agents). If §11 has not shipped at iter-2 implementation time, iter-2 cannot start.
+10. **Dependency: Section 11 (Local Knowledge Base for SDLC Agents — iter-1).** This section is iter-2 of §11 and depends on §11 having shipped (binary at `~/.claude/tools/claudebase/claudebase`, schema at `<project>/.claude/knowledge/index.db`, agent activation blocks in 12 thinking agents). If §11 has not shipped at iter-2 implementation time, iter-2 cannot start.
 11. **Dependency: Section 9 (Cognitive Self-Check Protocol).** This PRD section's `## Facts` block schema, the `### External contracts` citation discipline for `pdfium-render` / `bblanchon/pdfium-binaries`, and the Plan Critic enforcement all depend on Section 9 being live. Section 9 shipped on or before 2026-04-25 per the merge commit history.
 12. **Dependency: Section 6 (Release Engineer).** Gate 9 release-packaging logic remains UNCHANGED in iter-2 per FR-7.4. The `release-engineer` agent's behavior is unaffected by this section.
 13. **Dependency: Section 3 (FR-3 PRD Changelog Field).** This PRD section includes a `Changelog:` field per the contract.
@@ -2867,12 +2867,12 @@ Iter-2 is a drop-in PDF reader replacement plus one CLI flag and one binary down
 
 The following items are explicitly deferred to a future iteration (e.g., iter-3 hybrid search PRD section or a dedicated PDFium-hardening section) and MUST NOT be implemented as part of iter-2:
 
-1. **sha256 verification of the downloaded PDFium archive.** Iter-2 trusts GitHub Releases TLS + the `bblanchon/pdfium-binaries` repository chain; explicit sha256 pinning of each platform asset is iter-3 scope (mirrors §11 iter-1's sdlc-knowledge binary sha256 deferral).
+1. **sha256 verification of the downloaded PDFium archive.** Iter-2 trusts GitHub Releases TLS + the `bblanchon/pdfium-binaries` repository chain; explicit sha256 pinning of each platform asset is iter-3 scope (mirrors §11 iter-1's claudebase binary sha256 deferral).
 2. **OCR for scanned PDFs.** Image-only PDFs without an embedded text layer still produce empty extraction under PDFium — that limitation is intrinsic to image-only input, not the extractor. OCR pre-processing (e.g., `ocrmypdf`) is a future scope item.
 3. **Windows binary support.** `bblanchon/pdfium-binaries` ships Windows assets, but `install.sh` is bash-only and Windows install is OUT OF SCOPE per §11 NFR-1.4.
 4. **PDFium build from upstream source.** When `bblanchon/pdfium-binaries` is unavailable for a platform, the fallback is to install PDFium via the host package manager or build from upstream — both are out of scope for iter-2 automation.
 5. **Hybrid lexical + semantic search via sqlite-vec.** The iter-1 `chunks.embedding BLOB` column reservation remains intact; vector search is iter-3 scope.
-6. **Coupling Gate 9 release-engineer to the binary release pipeline.** Iter-2 keeps Gate 9 unchanged. The maintainer continues to cut `sdlc-knowledge-v<X.Y.Z>` tags manually.
+6. **Coupling Gate 9 release-engineer to the binary release pipeline.** Iter-2 keeps Gate 9 unchanged. The maintainer continues to cut `claudebase-v<X.Y.Z>` tags manually.
 
 These items are listed explicitly so the Plan Critic does not flag their absence as an iter-2 gap.
 
@@ -2894,21 +2894,21 @@ Not applicable. This project is a collection of markdown prompt files and a CLI;
 
 | File | Purpose | Related Requirements |
 |------|---------|---------------------|
-| `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` | Calibre-converted ebook excerpt fixture (≤ 100 KB, ~30 KB target) exercising the iter-1 CID-font failure mode. | FR-6.1, FR-6.2, AC-2 |
-| `tools/sdlc-knowledge/tests/fixtures/calibre-sample.README.md` | Provenance documentation for the calibre fixture (source text, calibre version, sha256). | FR-6.3 |
+| `claudebase/tests/fixtures/calibre-sample.pdf` | Calibre-converted ebook excerpt fixture (≤ 100 KB, ~30 KB target) exercising the iter-1 CID-font failure mode. | FR-6.1, FR-6.2, AC-2 |
+| `claudebase/tests/fixtures/calibre-sample.README.md` | Provenance documentation for the calibre fixture (source text, calibre version, sha256). | FR-6.3 |
 
 #### Modified Files
 
 | File | Changes | Related Requirements |
 |------|---------|---------------------|
-| `tools/sdlc-knowledge/Cargo.toml` | Replace `pdf-extract = "0.7"` with `pdfium-render = "0.9"`. Bump crate version `0.1.0` → `0.2.0`. | FR-2.1, NFR-9 |
-| `tools/sdlc-knowledge/src/pdf.rs` | Rewrite the entire module to use `pdfium-render`; preserve `pub fn read` signature, `PDF_BUDGET_BYTES`, `check_byte_budget`, `extract_via_closure_for_test`, and the `catch_unwind` panic boundary. | FR-1.1 through FR-1.7, FR-2.3, FR-2.4 |
-| `tools/sdlc-knowledge/src/cli.rs` | Add the `--by-id <int>` flag on `delete`; enforce mutual exclusion with `<source-path>`. | FR-4.1, FR-4.2 |
-| `tools/sdlc-knowledge/src/main.rs` | Wire the new `--by-id` branch into the `delete` subcommand handler. | FR-4.1 through FR-4.5 |
-| `tools/sdlc-knowledge/src/store.rs` | Add `delete_by_id(conn, id) -> Result<DeleteByIdSummary, _>` invoked under `BEGIN IMMEDIATE`; existing `delete_by_path` is untouched. | FR-4.4, FR-4.5 |
-| `install.sh` | Add per-platform PDFium archive download, extraction to `~/.claude/tools/sdlc-knowledge/pdfium/lib/`, library-resolver path setup, idempotency check, and the `chromium/<version>` pinned tag. Honor the SCRIPT_DIR re-invocation pattern. | FR-3.1 through FR-3.7 |
-| `.github/workflows/sdlc-knowledge-release.yml` | Add PDFium download smoke step and calibre-fixture ingest smoke step in the matrix; trigger pattern and matrix labels UNCHANGED. | FR-7.1, FR-7.2, FR-7.3 |
-| `tools/sdlc-knowledge/RELEASING.md` | Document `chromium/<version>` tag pinning, PDFium binary versioning policy, and the build-from-source fallback as a known iter-3 path. | FR-8.3, R-4 |
+| `claudebase/Cargo.toml` | Replace `pdf-extract = "0.7"` with `pdfium-render = "0.9"`. Bump crate version `0.1.0` → `0.2.0`. | FR-2.1, NFR-9 |
+| `claudebase/src/pdf.rs` | Rewrite the entire module to use `pdfium-render`; preserve `pub fn read` signature, `PDF_BUDGET_BYTES`, `check_byte_budget`, `extract_via_closure_for_test`, and the `catch_unwind` panic boundary. | FR-1.1 through FR-1.7, FR-2.3, FR-2.4 |
+| `claudebase/src/cli.rs` | Add the `--by-id <int>` flag on `delete`; enforce mutual exclusion with `<source-path>`. | FR-4.1, FR-4.2 |
+| `claudebase/src/main.rs` | Wire the new `--by-id` branch into the `delete` subcommand handler. | FR-4.1 through FR-4.5 |
+| `claudebase/src/store.rs` | Add `delete_by_id(conn, id) -> Result<DeleteByIdSummary, _>` invoked under `BEGIN IMMEDIATE`; existing `delete_by_path` is untouched. | FR-4.4, FR-4.5 |
+| `install.sh` | Add per-platform PDFium archive download, extraction to `~/.claude/claudebase/pdfium/lib/`, library-resolver path setup, idempotency check, and the `chromium/<version>` pinned tag. Honor the SCRIPT_DIR re-invocation pattern. | FR-3.1 through FR-3.7 |
+| `.github/workflows/claudebase-release.yml` | Add PDFium download smoke step and calibre-fixture ingest smoke step in the matrix; trigger pattern and matrix labels UNCHANGED. | FR-7.1, FR-7.2, FR-7.3 |
+| `claudebase/RELEASING.md` | Document `chromium/<version>` tag pinning, PDFium binary versioning policy, and the build-from-source fallback as a known iter-3 path. | FR-8.3, R-4 |
 | `~/.claude/rules/knowledge-base-tool.md` | Replace the `## Known limitations of pdf-extract` section with `## PDF extraction via PDFium`. | FR-8.1 |
 | `~/.claude/rules/knowledge-base.md` | Replace the `## Known limitations of pdf-extract` section with `## PDFium availability`. CLI invocation contract, citation format, activation sentinel, fallback behavior, and application scope sections BYTE-UNCHANGED. | FR-8.2 |
 | `README.md` | Add ONE row to the existing Hardening table for iter-2 robust PDF extraction. README taglines at lines 5 and 35 BYTE-UNCHANGED. | FR-8.4, FR-9.4 |
@@ -2917,12 +2917,12 @@ Not applicable. This project is a collection of markdown prompt files and a CLI;
 
 | File | Reason |
 |------|--------|
-| `tools/sdlc-knowledge/src/ingest.rs` | The `pdf::read` signature is preserved (FR-1.1); the chunker, idempotency, and per-file error boundary are unchanged. |
-| `tools/sdlc-knowledge/src/text.rs` | Markdown and plain-text readers are unaffected by the PDF reader replacement. |
-| `tools/sdlc-knowledge/src/store.rs` schema | Tables and FTS5 triggers are byte-unchanged (FR-9.7). Only the new `delete_by_id` function is added. |
-| `tools/sdlc-knowledge/src/migrations.rs` | No new schema version. v1 migration unchanged. |
-| `tools/sdlc-knowledge/src/search.rs` | Search behavior is unaffected by the ingest-side reader replacement. |
-| `tools/sdlc-knowledge/src/output.rs` | Output formats unchanged except the new `delete --by-id` JSON shape; serialization helpers are reused. |
+| `claudebase/src/ingest.rs` | The `pdf::read` signature is preserved (FR-1.1); the chunker, idempotency, and per-file error boundary are unchanged. |
+| `claudebase/src/text.rs` | Markdown and plain-text readers are unaffected by the PDF reader replacement. |
+| `claudebase/src/store.rs` schema | Tables and FTS5 triggers are byte-unchanged (FR-9.7). Only the new `delete_by_id` function is added. |
+| `claudebase/src/migrations.rs` | No new schema version. v1 migration unchanged. |
+| `claudebase/src/search.rs` | Search behavior is unaffected by the ingest-side reader replacement. |
+| `claudebase/src/output.rs` | Output formats unchanged except the new `delete --by-id` JSON shape; serialization helpers are reused. |
 | All 12 thinking agent prompt files | Activation block is BYTE-UNCHANGED (FR-9.3). |
 | All 5 executor agent prompt files | UNCHANGED per FR-9.6. |
 | `src/rules/cognitive-self-check.md` | BYTE-UNCHANGED per FR-9.5. |
@@ -2937,37 +2937,37 @@ Not applicable. This project is a collection of markdown prompt files and a CLI;
 ### Verified facts
 
 - The PRD file `/Users/aleksandra/Documents/claude-code-sdlc/docs/PRD.md` ends at line 2692 immediately before Section 12 is appended; the last existing section before this addition is Section 11 ("Local Knowledge Base for SDLC Agents") — verified by `wc -l` and Read of the file's final lines in the current session.
-- The current `tools/sdlc-knowledge/src/pdf.rs` module is 70 lines, uses `pdf_extract::extract_text` at line 26, wraps it in `catch_unwind(AssertUnwindSafe(...))` at line 46, enforces a 50 MB byte budget via `PDF_BUDGET_BYTES = 50 * 1024 * 1024` at line 17, and exposes `extract_via_closure_for_test` for synthetic-panic test injection at lines 33-39 — verified by Read of the entire file in the current session.
-- The current `tools/sdlc-knowledge/Cargo.toml` declares `pdf-extract = "0.7"` at line 16 and `sdlc-knowledge` crate version `0.1.0` at line 3, with `[profile.release]` flags `strip = true`, `lto = true`, `codegen-units = 1`, `opt-level = 3` at lines 34-38 — verified by Read of the entire file in the current session.
+- The current `claudebase/src/pdf.rs` module is 70 lines, uses `pdf_extract::extract_text` at line 26, wraps it in `catch_unwind(AssertUnwindSafe(...))` at line 46, enforces a 50 MB byte budget via `PDF_BUDGET_BYTES = 50 * 1024 * 1024` at line 17, and exposes `extract_via_closure_for_test` for synthetic-panic test injection at lines 33-39 — verified by Read of the entire file in the current session.
+- The current `claudebase/Cargo.toml` declares `pdf-extract = "0.7"` at line 16 and `claudebase` crate version `0.1.0` at line 3, with `[profile.release]` flags `strip = true`, `lto = true`, `codegen-units = 1`, `opt-level = 3` at lines 34-38 — verified by Read of the entire file in the current session.
 - §11's CLI surface (five subcommands plus `--version`), citation format literal, agent activation block (12 thinking agents), and 17-agent / 10-gate invariants are documented at PRD lines 2380-2386, 2523, 2430-2434, and 2493-2494 respectively — verified by Read of those line ranges in the current session.
 - §11 Risk #2 (PDF extraction quality) at PRD line 2531 already flagged `pdf-extract` as the iter-1 default with `lopdf` as a deferred fallback and explicit architect Step 3 picks-one rationale — confirming this iter-2 PRD section's premise is the resolution of that pre-flagged risk; verified by Read of the line in the current session.
-- Knowledge-base status at task start: `doc_count: 8`, `chunk_count: 17030`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `sdlc-knowledge status --json` in the current session.
+- Knowledge-base status at task start: `doc_count: 8`, `chunk_count: 17030`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `claudebase status --json` in the current session.
 
 ### External contracts
 
 - **`pdfium-render` crate v0.9** — symbol: `pdfium_render::Pdfium::bind_to_system_library`, `pdfium_render::PdfDocument::pages`, page-level text accessor, `Pdfium::load_pdf_from_byte_slice` — license: MIT OR Apache-2.0 — repo: `ajrcarey/pdfium-render` — source: crates.io API response in this session (current latest in 0.9.x line; updated 2026-03-30; 234,919 recent downloads) — verified: yes (license + repo + version line confirmed via crates.io this session). Risk: pre-1.0 SemVer; minor-version pin in Cargo.toml mitigates.
-- **`pdf-extract` crate v0.7** — symbol: `pdf_extract::extract_text(path: &Path) -> Result<String, _>` — source: `tools/sdlc-knowledge/Cargo.toml:16` and `tools/sdlc-knowledge/src/pdf.rs:26` — verified: yes (currently in repo; being removed in iter-2 per FR-2.1 / FR-2.2). The two failure modes documented in 12.1 (CID font / `/Type0` decoding gaps; hard panic on one corpus book) are EMPIRICAL findings from the live 9-book test referenced in the user task, not assumptions about the crate.
+- **`pdf-extract` crate v0.7** — symbol: `pdf_extract::extract_text(path: &Path) -> Result<String, _>` — source: `claudebase/Cargo.toml:16` and `claudebase/src/pdf.rs:26` — verified: yes (currently in repo; being removed in iter-2 per FR-2.1 / FR-2.2). The two failure modes documented in 12.1 (CID font / `/Type0` decoding gaps; hard panic on one corpus book) are EMPIRICAL findings from the live 9-book test referenced in the user task, not assumptions about the crate.
 - **`bblanchon/pdfium-binaries` GitHub project** — symbol: GitHub Releases assets `pdfium-mac-arm64.tgz`, `pdfium-mac-x64.tgz`, `pdfium-linux-x64.tgz`, `pdfium-linux-arm64.tgz`; tag scheme `chromium/<int>` — license: MIT — source: architect's iter-2 recommendation per the user task — verified: **no — assumption**. Risk: asset filename or tag scheme could differ from the architect's recollection. Verification path: Slice 3 (install.sh integration) opens the actual GitHub Releases page during implementation and pins the exact asset URLs and tag value; any mismatch fails Slice 3's done-condition (the FR-3.1 platform mapping must be exact).
 - **PDFium upstream (Google)** — symbol: PDFium engine; the production renderer in Chromium — license: BSD-3 — source: well-known industry artifact, NOT opened in this session — verified: **no — assumption**. Risk: license claim in 12.1 is widely-cited industry fact but not reverified this session against PDFium's `LICENSE` file. Verification path: code-reviewer pass at the merge-ready gate confirms the LICENSE statement against an upstream copy when the iter-2 implementation slice lands.
 - **`pdfium-render` library-path resolver** — symbol: `Pdfium::bind_to_system_library`, `Pdfium::bind_to_library` (path-explicit variant), platform-specific search behavior on `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` / system library paths — source: `pdfium-render` README/docs (NOT opened in this session) — verified: **no — assumption**. Risk: the resolver mechanism the iter-2 install.sh integrates with could differ from this PRD's description (FR-3.4 mentions both env-var-based and direct-extract options precisely because the exact API has not been verified). Verification path: architect Step 3 (pre-Slice-1) opens `pdfium-render` docs and selects the explicit API; Slice 1 done-condition includes a working PDF round-trip on the dev laptop.
 - **GitHub Actions runner labels for the iter-2 release pipeline — `macos-14`, `macos-13`, `ubuntu-latest`, `ubuntu-22.04-arm`** — source: §11 FR-11.1 — verified: yes (inherited from §11 which shipped the workflow file). Iter-2 does not change the matrix shape per FR-7.3.
-- **knowledge-base CLI for §12 authoring** — symbol: `sdlc-knowledge status --json`, `sdlc-knowledge search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes (status returned 8 docs / 17030 chunks; three searches on "PDF parsing crate Rust pdfium", "CID font ToUnicode CMap composite encoding", "calibre ebook PDF text extraction" each returned `[]` — zero hits across all queries; corpus is ML/AI domain with no PDF-internals literature).
+- **knowledge-base CLI for §12 authoring** — symbol: `claudebase status --json`, `claudebase search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes (status returned 8 docs / 17030 chunks; three searches on "PDF parsing crate Rust pdfium", "CID font ToUnicode CMap composite encoding", "calibre ebook PDF text extraction" each returned `[]` — zero hits across all queries; corpus is ML/AI domain with no PDF-internals literature).
 
 ### Assumptions
 
 - **`pdfium-render = "0.9"` minor-version pin is the right granularity.** Risk: a 0.9.x → 0.10 bump could land mid-iter-2 with API breakage; if minor-pin is too loose, the build breaks on `cargo update`. How to verify: architect Step 3 selects the exact pin (`0.9` vs `=0.9.x`) before Slice 1 ships; CI catches build breakage early.
-- **PDFium dynamic library extracts cleanly to `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib|so}` with the right name per platform.** Risk: archive layout from `bblanchon/pdfium-binaries` may differ from this assumed structure. How to verify: Slice 3 done-condition asserts the post-extract path exists with the expected filename per FR-3.2 and FR-3.4.
+- **PDFium dynamic library extracts cleanly to `~/.claude/claudebase/pdfium/lib/libpdfium.{dylib|so}` with the right name per platform.** Risk: archive layout from `bblanchon/pdfium-binaries` may differ from this assumed structure. How to verify: Slice 3 done-condition asserts the post-extract path exists with the expected filename per FR-3.2 and FR-3.4.
 - **Calibre 3.x or later is available to a SDLC contributor for fixture regeneration.** Risk: the fixture is committed once and re-generated rarely, but if the fixture corrupts or upstream calibre changes its emission, regeneration requires the right calibre version. How to verify: FR-6.3 documents the calibre version used; the next maintainer can install that version on demand.
 - **The `mupdf` Rust binding's AGPL-3.0 license is incompatible with this repo's MIT and would force whole-repo AGPL.** Risk: low — AGPL incompatibility with MIT downstream redistribution is well-documented. How to verify: not load-bearing for iter-2 because the decision is to NOT use mupdf; the assertion only justifies the rejection.
 - **Iter-2 chunks/MB ≥ 50 floor (NFR-4) is achievable on calibre PDFs without further tuning.** Risk: the empirical baseline (~2 chunks/MB on iter-1 calibre PDFs) and the pypdf-Markdown reference (~2500 chunks/MB) are from a 9-book ML/AI corpus; the 50-floor may be too tight or too loose for other calibre-PDF families. How to verify: AC-2 exercises the floor on the vendored fixture; if real-world calibre PDFs cluster below 50, iter-3 tunes the floor.
-- **The `delete --by-id` JSON shape `{"deleted_id", "source_path", "chunks_removed"}` is consistent with §11's existing `delete <path>` JSON output.** Risk: if §11's `delete <path>` already emits a different shape, iter-2 should match it. How to verify: read `tools/sdlc-knowledge/src/output.rs` during Slice 4 (CLI surface) and align field names exactly. NOT verified in this session — Slice 4 must reconcile.
+- **The `delete --by-id` JSON shape `{"deleted_id", "source_path", "chunks_removed"}` is consistent with §11's existing `delete <path>` JSON output.** Risk: if §11's `delete <path>` already emits a different shape, iter-2 should match it. How to verify: read `claudebase/src/output.rs` during Slice 4 (CLI surface) and align field names exactly. NOT verified in this session — Slice 4 must reconcile.
 
 ### Open questions
 
 - **Knowledge-base searches on `"PDF parsing crate Rust pdfium"`, `"CID font ToUnicode CMap composite encoding"`, and `"calibre ebook PDF text extraction"` returned zero hits each (corpus is ML/AI literature, not PDF-internals or document-conversion).** Per the knowledge-base mandate this is a documented negative result, not a silent skip. Action: consider adding a PDFium / PDF-internals reference (e.g., the PDF 1.7 specification, the PDFium developer wiki) to the `<project>/.claude/knowledge/sources/` corpus if iter-3 work continues to depend on PDF-format reasoning. No action required for iter-2 — the source-of-truth for iter-2 contracts is `pdfium-render`'s own docs and `bblanchon/pdfium-binaries`'s GitHub Releases page, both of which are external-contracts items above.
 - **Open Question #1 — Exact `pdfium-render` library-path API.** `bind_to_system_library` vs `bind_to_library(path: &Path)` vs `bind_to_statically_linked_library` (feature-gated). RESOLUTION: architect Step 3 picks ONE with cited rationale before Slice 1 ships. Iter-2 default (per FR-1.2) is `bind_to_system_library` with install.sh placing `libpdfium.{dylib|so}` on the resolver path; if the architect prefers explicit-path binding, FR-1.2 and FR-3.4 are tightened accordingly during planning.
 - **Open Question #2 — Calibre fixture content.** The fixture must reproduce the iter-1 CID-font failure (calibre 3.32.0 emits `/Type0` composite CID fonts) on a small, public-domain text source. RESOLUTION: planner picks a Project Gutenberg excerpt during Slice 6 implementation; FR-6.3 documents the choice. NOT load-bearing for the PRD; load-bearing for the test asset.
-- **Open Question #3 — sha256 verification of the PDFium download.** RESOLVED — DEFERRED to iter-3 per 12.7 item 1 (mirrors §11 iter-1's sdlc-knowledge binary sha256 deferral).
+- **Open Question #3 — sha256 verification of the PDFium download.** RESOLVED — DEFERRED to iter-3 per 12.7 item 1 (mirrors §11 iter-1's claudebase binary sha256 deferral).
 - **Open Question #4 — Windows binary support.** RESOLVED — OUT OF SCOPE per 12.7 item 3 (consistent with §11 NFR-1.4).
 - **Open Question #5 — Coupling Gate 9 release-engineer to the PDFium binary version bump.** RESOLVED — OUT OF SCOPE per 12.7 item 6 (consistent with §11 FR-12.4).
 
@@ -2976,30 +2976,30 @@ Not applicable. This project is a collection of markdown prompt files and a CLI;
 **Status:** [IN DEVELOPMENT]
 **Date:** 2026-04-26
 **Priority:** High
-**Related:** Section 11 (Local Knowledge Base for SDLC Agents — iter-1 of `sdlc-knowledge`; this section bootstraps the FIRST `sdlc-knowledge-v0.2.0` release tag that `install.sh` line 368 has been pointing at since §11 shipped, finally closing the chicken-and-egg gap that has been forcing `cargo_source_build_fallback` on every fresh install). Section 12 (Robust PDF Extraction via pdfium-render — iter-2 of the same tool; this section adds Windows to the platform matrix that §12 left at four targets per §12 NFR-7 / 12.7 item 3, and the §12 PDFium binary download in `install.sh:489-613` is the precedent shape for the prebuilt-binary download path of FR-4 below). Section 6 (Changelog Release Packaging — iter-2 of Feature #3; release-engineer Gate 9 is currently SUGGEST-ONLY per the `## NEVER List` at `src/agents/release-engineer.md:67-84` and §6 FR-3.4 / FR-5.6 — this section flips Gate 9 to EXECUTING-MODE under tier-based authority gradation, mirroring resource-architect's iter-2 contract). Section 7 (Resource Manager-Architect — Iteration 2: Auto-Install — the four-tier authority model `Trivial | Moderate | Sensitive | Forbidden` defined at `src/agents/resource-architect.md:185-260` is the SOURCE PATTERN this section adapts for release publication; FR-1 below maps each release operation to one of these four tiers using the same anchored-regex whitelist + headless contract pattern from §7 FR-5). Section 9 (Cognitive Self-Check Protocol — `## Facts` discipline applies; this section's `### External contracts` cite all GitHub Actions identifiers and the `softprops/action-gh-release@v2` action). Section 3 (FR-3 PRD Changelog Field — this section includes the field; this section also dogfoods Section 3 by opting the SDLC core repo INTO the changelog feature it has shipped to downstream projects since iter-1).
+**Related:** Section 11 (Local Knowledge Base for SDLC Agents — iter-1 of `claudebase`; this section bootstraps the FIRST `claudebase-v0.2.0` release tag that `install.sh` line 368 has been pointing at since §11 shipped, finally closing the chicken-and-egg gap that has been forcing `cargo_source_build_fallback` on every fresh install). Section 12 (Robust PDF Extraction via pdfium-render — iter-2 of the same tool; this section adds Windows to the platform matrix that §12 left at four targets per §12 NFR-7 / 12.7 item 3, and the §12 PDFium binary download in `install.sh:489-613` is the precedent shape for the prebuilt-binary download path of FR-4 below). Section 6 (Changelog Release Packaging — iter-2 of Feature #3; release-engineer Gate 9 is currently SUGGEST-ONLY per the `## NEVER List` at `src/agents/release-engineer.md:67-84` and §6 FR-3.4 / FR-5.6 — this section flips Gate 9 to EXECUTING-MODE under tier-based authority gradation, mirroring resource-architect's iter-2 contract). Section 7 (Resource Manager-Architect — Iteration 2: Auto-Install — the four-tier authority model `Trivial | Moderate | Sensitive | Forbidden` defined at `src/agents/resource-architect.md:185-260` is the SOURCE PATTERN this section adapts for release publication; FR-1 below maps each release operation to one of these four tiers using the same anchored-regex whitelist + headless contract pattern from §7 FR-5). Section 9 (Cognitive Self-Check Protocol — `## Facts` discipline applies; this section's `### External contracts` cite all GitHub Actions identifiers and the `softprops/action-gh-release@v2` action). Section 3 (FR-3 PRD Changelog Field — this section includes the field; this section also dogfoods Section 3 by opting the SDLC core repo INTO the changelog feature it has shipped to downstream projects since iter-1).
 
-Changelog: Users running `bash install.sh` now receive prebuilt `sdlc-knowledge` binaries in seconds on macOS, Linux, and Windows instead of waiting for cargo to compile from source.
+Changelog: Users running `bash install.sh` now receive prebuilt `claudebase` binaries in seconds on macOS, Linux, and Windows instead of waiting for cargo to compile from source.
 
 ### 13.1 Overview
 
 **Problem (evidence from previous iters).** Three intertwined gaps surfaced during iter-1 (§11) and iter-2 (§12) live testing:
 
-1. **First-release chicken-and-egg.** §11 FR-11 shipped a complete cross-platform release workflow at `.github/workflows/sdlc-knowledge-release.yml`, but the workflow only fires on `sdlc-knowledge-v*` tag pushes — and no maintainer has ever pushed that tag. `install.sh:368` therefore hits a 404 on `https://github.com/<owner>/<repo>/releases/download/sdlc-knowledge-v0.1.0/sdlc-knowledge-<platform>` on every install, falls through to `cargo_source_build_fallback` at `install.sh:411`, and silently requires every user to have `cargo` available locally. The iter-1 release infrastructure works in principle but has never executed in production because cutting the first tag is friction the maintainer has not paid.
-2. **§12 inherits the gap.** §12 added PDFium binary download alongside the missing `sdlc-knowledge` binary download. `install_pdfium_binary` at `install.sh:489-613` works (the `bblanchon/pdfium-binaries` upstream tag `chromium/7802` is reachable). But the companion `sdlc-knowledge` binary is still missing for the same chicken-and-egg reason — so a fresh install needs cargo AND PDFium, instead of just PDFium.
+1. **First-release chicken-and-egg.** §11 FR-11 shipped a complete cross-platform release workflow at `.github/workflows/claudebase-release.yml`, but the workflow only fires on `claudebase-v*` tag pushes — and no maintainer has ever pushed that tag. `install.sh:368` therefore hits a 404 on `https://github.com/<owner>/<repo>/releases/download/claudebase-v0.1.0/claudebase-<platform>` on every install, falls through to `cargo_source_build_fallback` at `install.sh:411`, and silently requires every user to have `cargo` available locally. The iter-1 release infrastructure works in principle but has never executed in production because cutting the first tag is friction the maintainer has not paid.
+2. **§12 inherits the gap.** §12 added PDFium binary download alongside the missing `claudebase` binary download. `install_pdfium_binary` at `install.sh:489-613` works (the `bblanchon/pdfium-binaries` upstream tag `chromium/7802` is reachable). But the companion `claudebase` binary is still missing for the same chicken-and-egg reason — so a fresh install needs cargo AND PDFium, instead of just PDFium.
 3. **`install.sh:25` REPO_URL is wrong.** `REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"` was set when the project was scoped to a different GitHub owner; the actual remote is `codefather-labs/claude-code-sdlc.git`. The owner-derivation at `install.sh:367` (`echo "$REPO_URL" | sed 's|^https://github.com/||; s|\.git$||'`) computes `Koroqe/claude-code-sdlc`, which 404s on every release-asset URL. Even after the first tag is cut, `install.sh` would not find the asset at the URL it constructs. This is a pre-existing bug independent of the chicken-and-egg gap and must be fixed in lock-step.
 
 **Solution.** Three coordinated changes that close the loop end-to-end.
 
 1. **Flip Gate 9 release-engineer from suggest-only to executing-mode** under a four-tier authority gradation that mirrors `resource-architect.md:185-260` byte-for-byte in shape. The current `release-engineer.md:67-84` `## NEVER List` enumerates 13 forbidden commands (`git push`, `git tag`, `gh release create`, `npm publish`, `cargo publish`, `pypi upload`, etc.) and refuses to execute any of them. After this section ships, the agent classifies each command into Trivial / Moderate / Sensitive / Forbidden and uses an anchored-regex whitelist plus the same headless-contract pattern as §7 FR-5.4 to either auto-execute (Trivial), execute after per-item user approval (Moderate), require explicit user approval per Rule 4 escalation (Sensitive), or refuse entirely (Forbidden). The four-tier model is THE proven precedent in this codebase — see `src/agents/resource-architect.md:201-220` for the canonical decision table.
 
-2. **Add Windows to the cross-platform matrix and bootstrap the first release tag.** The §11 / §12 release workflow currently builds four platforms (`darwin-arm64` / `darwin-x64` / `linux-x64` / `linux-arm64` per `.github/workflows/sdlc-knowledge-release.yml:64-75`). This section adds `windows-x64` (target `x86_64-pc-windows-msvc` on `windows-latest`), bringing the matrix to FIVE platforms. A one-shot bootstrap pass cuts the FIRST `sdlc-knowledge-v0.2.0` tag (the next version after the §12 NFR-9 bump from 0.1.0 → 0.2.0), uploads all five binaries plus a source tarball to GitHub Releases, and updates `install.sh` to download the prebuilt binary as the PRIMARY path with `cargo_source_build_fallback` demoted to a true fallback (only invoked when the host platform is not in the matrix or the network is unavailable).
+2. **Add Windows to the cross-platform matrix and bootstrap the first release tag.** The §11 / §12 release workflow currently builds four platforms (`darwin-arm64` / `darwin-x64` / `linux-x64` / `linux-arm64` per `.github/workflows/claudebase-release.yml:64-75`). This section adds `windows-x64` (target `x86_64-pc-windows-msvc` on `windows-latest`), bringing the matrix to FIVE platforms. A one-shot bootstrap pass cuts the FIRST `claudebase-v0.2.0` tag (the next version after the §12 NFR-9 bump from 0.1.0 → 0.2.0), uploads all five binaries plus a source tarball to GitHub Releases, and updates `install.sh` to download the prebuilt binary as the PRIMARY path with `cargo_source_build_fallback` demoted to a true fallback (only invoked when the host platform is not in the matrix or the network is unavailable).
 
 3. **Dogfood Section 3 on the SDLC core repo.** The SDLC core ships `templates/rules/changelog.md` to every downstream project (per Section 3 FR-4.4 and `templates/rules/changelog.md:37-39` "the presence of this file at `.claude/rules/changelog.md` is the sole signal the `changelog-writer` agent uses to decide whether to run; absence equals opt-out"). The SDLC core repo itself does NOT have `.claude/rules/changelog.md` — it ships the rule to others without using it. This section opts the SDLC core repo INTO its own feature: install the sentinel into the SDLC core's `.claude/rules/`, add a root `CHANGELOG.md` with `[Unreleased]` and the first dated section for this auto-release feature, and let the dogfooded pipeline produce the SDLC core's own release notes from this point forward.
 
 **Why now.** This is the first iteration where ALL the pieces required to execute a real release exist:
 
 - §11 ships the cross-platform workflow file (just needs a tag to fire).
-- §12 ships the PDFium binary download path (just needs the companion `sdlc-knowledge` binary download to be primary).
+- §12 ships the PDFium binary download path (just needs the companion `claudebase` binary download to be primary).
 - §6 (Changelog Release Packaging iter-2) ships the release-engineer agent that knows how to compute version bumps, rename `[Unreleased]`, and provision `release.yml` (just needs to be flipped to executing-mode).
 - §7 (Resource Auto-Install iter-2) ships the four-tier authority model that gives release-engineer a known-good template for executing dangerous commands safely (just needs to be lifted into release-engineer's prompt).
 - The `templates/rules/changelog.md` opt-in mechanism (Section 3 FR-4.4) ships and is the sole dependency for dogfooding.
@@ -3008,18 +3008,18 @@ Iter-3 connects these existing pieces into a working end-to-end pipeline. No new
 
 **Two version trains.** This section operates over TWO independent version trains and must not conflate them:
 
-- **`sdlc-knowledge` tool version** — currently `0.1.0` per `tools/sdlc-knowledge/Cargo.toml:3`, bumping to `0.2.0` per §12 NFR-9. Released under the `sdlc-knowledge-v<X.Y.Z>` tag scheme. Targets the `.github/workflows/sdlc-knowledge-release.yml` workflow already in the repo.
+- **`claudebase` tool version** — currently `0.1.0` per `claudebase/Cargo.toml:3`, bumping to `0.2.0` per §12 NFR-9. Released under the `claudebase-v<X.Y.Z>` tag scheme. Targets the `.github/workflows/claudebase-release.yml` workflow already in the repo.
 - **SDLC core version** — currently `2.1.0` per `install.sh:22`. Released under the bare `v<X.Y.Z>` tag scheme (the §6 release-engineer's default per `release-engineer.md:26` `Glob('.git/refs/tags/v*.*.*')`). Targets a NEW workflow file `.github/workflows/sdlc-core-release.yml` introduced by FR-11.
 
 The two workflows share their trigger pattern, build-and-upload shape, and `softprops/action-gh-release@v2` step, but they fire on disjoint tag prefixes and produce disjoint GitHub Release pages. FR-11 below documents the dual-tag scheme explicitly so the Plan Critic does not flag it as a conflict.
 
 ### 13.2 User Stories
 
-1. **As the maintainer of `codefather-labs/claude-code-sdlc` cutting the FIRST `sdlc-knowledge-v0.2.0` release**, I want the release-engineer agent at `/merge-ready` Gate 9 to execute `git tag -a sdlc-knowledge-v0.2.0 -F .claude/release-notes-0.2.0.md` and `git push origin sdlc-knowledge-v0.2.0` for me (after I approve the Sensitive-tier prompt) so the GitHub Actions release workflow at `.github/workflows/sdlc-knowledge-release.yml` finally fires on a real tag and uploads the five-platform binary set to GitHub Releases — closing the chicken-and-egg gap that has been silently blocking every `install.sh` invocation since §11 shipped.
+1. **As the maintainer of `codefather-labs/claude-code-sdlc` cutting the FIRST `claudebase-v0.2.0` release**, I want the release-engineer agent at `/merge-ready` Gate 9 to execute `git tag -a claudebase-v0.2.0 -F .claude/release-notes-0.2.0.md` and `git push origin claudebase-v0.2.0` for me (after I approve the Sensitive-tier prompt) so the GitHub Actions release workflow at `.github/workflows/claudebase-release.yml` finally fires on a real tag and uploads the five-platform binary set to GitHub Releases — closing the chicken-and-egg gap that has been silently blocking every `install.sh` invocation since §11 shipped.
 
 2. **As a downstream developer working on a feature branch**, I want my project's `/merge-ready` Gate 9 to package the release locally (CHANGELOG date-stamp, release-notes file, version-source bump), automatically run a pre-push validation (typecheck + tests + lint), and then execute the actual `git tag` + `git push` for me when the project is opted in via `.claude/rules/auto-release.md` — so I do not have to copy-paste the structured-summary commands block by hand on every release.
 
-3. **As a Linux-x64 user running `bash install.sh --yes` for the first time**, I want the installer to download the prebuilt `sdlc-knowledge-linux-x64` binary in under 60 seconds instead of forcing me to install Rust and wait for cargo to compile the binary from source — and when the prebuilt binary is unavailable for my platform (e.g., I am on a fresh musl-libc Alpine container), I want the cargo source-build fallback to kick in transparently with a clear log line.
+3. **As a Linux-x64 user running `bash install.sh --yes` for the first time**, I want the installer to download the prebuilt `claudebase-linux-x64` binary in under 60 seconds instead of forcing me to install Rust and wait for cargo to compile the binary from source — and when the prebuilt binary is unavailable for my platform (e.g., I am on a fresh musl-libc Alpine container), I want the cargo source-build fallback to kick in transparently with a clear log line.
 
 4. **As a CI bot running `/merge-ready` in headless mode** (`AUTO_RELEASE=1` env var set, no interactive TTY), I want release-engineer to auto-execute Trivial-tier and Moderate-tier release commands without prompts (CHANGELOG rewrite, version-source bump, local annotated tag creation), but to refuse Sensitive-tier `git push` operations entirely under headless mode — mirroring `resource-architect.md`'s headless contract from §7 FR-5.5 — so an unattended pipeline cannot accidentally publish to a remote.
 
@@ -3052,7 +3052,7 @@ The release-engineer agent at `src/agents/release-engineer.md` is upgraded from 
 
    When a recommendation matches multiple rows, apply the most-restrictive-applicable-tier (verbatim contract from `resource-architect.md:222`).
 
-3. **FR-1.3: Anchored-regex whitelist (defense-in-depth).** Before executing ANY shell command via `Bash`, the agent MUST validate the command against a hardcoded anchored-regex whitelist. The whitelist is a list of `^...$` regexes; commands that do not exactly match an entry are REFUSED with the literal stderr line `error: command not in release-engineer whitelist: <command>` and the run aborts. The eight anchored regexes are: (a) `^git add CHANGELOG\.md( \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md)?$`; (b) `^git commit -m "chore\(release\): [0-9]+\.[0-9]+\.[0-9]+"$`; (c) `^git tag -a (sdlc-knowledge-)?v[0-9]+\.[0-9]+\.[0-9]+ -F \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md$`; (d) `^git push origin (sdlc-knowledge-)?v[0-9]+\.[0-9]+\.[0-9]+$`; (e) `^git push origin (feat|fix|chore)/[a-z0-9-]+$`; (f) `^npm version (patch|minor|major)$`; (g) `^cargo set-version [0-9]+\.[0-9]+\.[0-9]+$`; (h) `^poetry version (patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$`. Any command containing shell metacharacters (`;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `<`) MUST be REFUSED unconditionally — the agent never composes commands; it executes literal patterns from the whitelist.
+3. **FR-1.3: Anchored-regex whitelist (defense-in-depth).** Before executing ANY shell command via `Bash`, the agent MUST validate the command against a hardcoded anchored-regex whitelist. The whitelist is a list of `^...$` regexes; commands that do not exactly match an entry are REFUSED with the literal stderr line `error: command not in release-engineer whitelist: <command>` and the run aborts. The eight anchored regexes are: (a) `^git add CHANGELOG\.md( \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md)?$`; (b) `^git commit -m "chore\(release\): [0-9]+\.[0-9]+\.[0-9]+"$`; (c) `^git tag -a (claudebase-)?v[0-9]+\.[0-9]+\.[0-9]+ -F \.claude/release-notes-[0-9]+\.[0-9]+\.[0-9]+\.md$`; (d) `^git push origin (claudebase-)?v[0-9]+\.[0-9]+\.[0-9]+$`; (e) `^git push origin (feat|fix|chore)/[a-z0-9-]+$`; (f) `^npm version (patch|minor|major)$`; (g) `^cargo set-version [0-9]+\.[0-9]+\.[0-9]+$`; (h) `^poetry version (patch|minor|major|[0-9]+\.[0-9]+\.[0-9]+)$`. Any command containing shell metacharacters (`;`, `&&`, `||`, `|`, `` ` ``, `$(`, `>`, `<`) MUST be REFUSED unconditionally — the agent never composes commands; it executes literal patterns from the whitelist.
 
 4. **FR-1.4: Headless contract (`AUTO_RELEASE=1`).** When the environment variable `AUTO_RELEASE=1` is set, the agent operates in headless mode mirroring `resource-architect.md`'s headless contract per §7 FR-5.5:
    - **Trivial** operations execute without prompt.
@@ -3085,7 +3085,7 @@ The release pipeline is wired end-to-end so the CHANGELOG `[X.Y.Z]` body becomes
 
 2. **FR-2.2:** The annotated tag created via `git tag -a <prefix>v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md` (FR-1.2 row 6) MUST consume the release-notes file as the tag message. Per `git-tag(1)` documentation, `-F <file>` reads the message verbatim including UTF-8 multibyte characters; the multilingual user story (§13.2 #5) depends on this UTF-8 preservation.
 
-3. **FR-2.3:** The GitHub Actions release workflow's `softprops/action-gh-release@v2` step MUST set its `body_path:` field to `.claude/release-notes-<X.Y.Z>.md` (relative to the repo root) so the GitHub Release page body is the same byte content as the CHANGELOG `[X.Y.Z]` body and the tag annotation. Per FR-11.1 below, BOTH workflow files (`sdlc-knowledge-release.yml` and `sdlc-core-release.yml`) get this addition.
+3. **FR-2.3:** The GitHub Actions release workflow's `softprops/action-gh-release@v2` step MUST set its `body_path:` field to `.claude/release-notes-<X.Y.Z>.md` (relative to the repo root) so the GitHub Release page body is the same byte content as the CHANGELOG `[X.Y.Z]` body and the tag annotation. Per FR-11.1 below, BOTH workflow files (`claudebase-release.yml` and `sdlc-core-release.yml`) get this addition.
 
 4. **FR-2.4:** The release-notes file MUST NOT be mutated after tag-creation. Once the tag exists, the file is immutable — re-running `/merge-ready` on an already-released version produces the SKIPPED outcome per §6 FR-7.2 (CHANGELOG `[Unreleased]` is empty after the prior run); the existing file at `.claude/release-notes-<X.Y.Z>.md` is left in place as historical record.
 
@@ -3093,19 +3093,19 @@ The release pipeline is wired end-to-end so the CHANGELOG `[X.Y.Z]` body becomes
 
 The §11 FR-11 / §12 FR-7 matrix expands from four platforms to five, adding `windows-x64`.
 
-1. **FR-3.1:** `.github/workflows/sdlc-knowledge-release.yml:62-75` matrix `include:` MUST gain a fifth entry: `platform: windows-x64`, `runs-on: windows-latest`, `target: x86_64-pc-windows-msvc`. The existing four entries are BYTE-UNCHANGED.
+1. **FR-3.1:** `.github/workflows/claudebase-release.yml:62-75` matrix `include:` MUST gain a fifth entry: `platform: windows-x64`, `runs-on: windows-latest`, `target: x86_64-pc-windows-msvc`. The existing four entries are BYTE-UNCHANGED.
 
-2. **FR-3.2:** The `Determine pdfium asset name` step at `sdlc-knowledge-release.yml:91-101` MUST gain a fifth case branch: `windows-x64) echo "asset=pdfium-win-x64.tgz" >> "$GITHUB_OUTPUT" ;;`. The four existing branches are BYTE-UNCHANGED. (The `bblanchon/pdfium-binaries` upstream ships `pdfium-win-x64.tgz` per the same release scheme as the four existing assets — verified: no — assumption per `## Facts` below.)
+2. **FR-3.2:** The `Determine pdfium asset name` step at `claudebase-release.yml:91-101` MUST gain a fifth case branch: `windows-x64) echo "asset=pdfium-win-x64.tgz" >> "$GITHUB_OUTPUT" ;;`. The four existing branches are BYTE-UNCHANGED. (The `bblanchon/pdfium-binaries` upstream ships `pdfium-win-x64.tgz` per the same release scheme as the four existing assets — verified: no — assumption per `## Facts` below.)
 
-3. **FR-3.3:** The `Download pdfium dynamic library` step at `sdlc-knowledge-release.yml:103-116` MUST work on Windows runners. The `shell: bash` directive (already on the step per line 107) routes through `bash` even on `windows-latest` (Git for Windows is preinstalled on the runner), so the `curl` + `tar` + `find` + `cp` invocations work without modification. The library extraction target `$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/` MUST resolve to the user's Windows home path (`C:/Users/runneradmin/.claude/...`). The library filename on Windows is `pdfium.dll` (NOT `libpdfium.dll`) — the `find -name 'libpdfium*'` glob at line 115 MUST be widened to `-name 'pdfium*' -name 'libpdfium*'` style alternation to capture both naming conventions.
+3. **FR-3.3:** The `Download pdfium dynamic library` step at `claudebase-release.yml:103-116` MUST work on Windows runners. The `shell: bash` directive (already on the step per line 107) routes through `bash` even on `windows-latest` (Git for Windows is preinstalled on the runner), so the `curl` + `tar` + `find` + `cp` invocations work without modification. The library extraction target `$HOME/.claude/claudebase/pdfium/lib/` MUST resolve to the user's Windows home path (`C:/Users/runneradmin/.claude/...`). The library filename on Windows is `pdfium.dll` (NOT `libpdfium.dll`) — the `find -name 'libpdfium*'` glob at line 115 MUST be widened to `-name 'pdfium*' -name 'libpdfium*'` style alternation to capture both naming conventions.
 
-4. **FR-3.4:** The `Cargo build (release)` step MUST work on `windows-latest` with target `x86_64-pc-windows-msvc`. This requires the MSVC toolchain (`cl.exe` linker) — `dtolnay/rust-toolchain@stable` per `sdlc-knowledge-release.yml:81-83` configures `cargo` for the target but does not install MSVC; the `windows-latest` runner image preinstalls the Visual Studio 2022 Build Tools, so the linker is available without a separate setup step. **Verified: no — assumption** per `## Facts`.
+4. **FR-3.4:** The `Cargo build (release)` step MUST work on `windows-latest` with target `x86_64-pc-windows-msvc`. This requires the MSVC toolchain (`cl.exe` linker) — `dtolnay/rust-toolchain@stable` per `claudebase-release.yml:81-83` configures `cargo` for the target but does not install MSVC; the `windows-latest` runner image preinstalls the Visual Studio 2022 Build Tools, so the linker is available without a separate setup step. **Verified: no — assumption** per `## Facts`.
 
-5. **FR-3.5:** The artifact upload at `sdlc-knowledge-release.yml:163-176` MUST stage the Windows binary at `dist/sdlc-knowledge-windows-x64.exe` (NOTE: the `.exe` suffix — Cargo emits the binary with the `.exe` extension on `*-pc-windows-*` targets; the staging copy line at 168 MUST use `cp "$BIN.exe" "dist/sdlc-knowledge-${{ matrix.platform }}.exe"` for the Windows branch, gated by an `if: matrix.platform == 'windows-x64'` step or by inline shell branching).
+5. **FR-3.5:** The artifact upload at `claudebase-release.yml:163-176` MUST stage the Windows binary at `dist/claudebase-windows-x64.exe` (NOTE: the `.exe` suffix — Cargo emits the binary with the `.exe` extension on `*-pc-windows-*` targets; the staging copy line at 168 MUST use `cp "$BIN.exe" "dist/claudebase-${{ matrix.platform }}.exe"` for the Windows branch, gated by an `if: matrix.platform == 'windows-x64'` step or by inline shell branching).
 
-6. **FR-3.6:** The release job's `files:` list at `sdlc-knowledge-release.yml:208-213` MUST gain a fifth line: `dist/sdlc-knowledge-windows-x64/sdlc-knowledge-windows-x64.exe`. The four existing lines are BYTE-UNCHANGED.
+6. **FR-3.6:** The release job's `files:` list at `claudebase-release.yml:208-213` MUST gain a fifth line: `dist/claudebase-windows-x64/claudebase-windows-x64.exe`. The four existing lines are BYTE-UNCHANGED.
 
-7. **FR-3.7:** The release job MUST ALSO upload a source tarball asset (`sdlc-knowledge-source-<X.Y.Z>.tar.gz`) created by `git archive --format=tar.gz --prefix=sdlc-knowledge-<X.Y.Z>/ -o dist/sdlc-knowledge-source-<X.Y.Z>.tar.gz HEAD` so users on platforms not in the matrix (e.g., FreeBSD, Alpine musl, linux-arm32) can build from source via `cargo install --path .` after extraction. The source tarball is appended to the `files:` list as the sixth asset.
+7. **FR-3.7:** The release job MUST ALSO upload a source tarball asset (`claudebase-source-<X.Y.Z>.tar.gz`) created by `git archive --format=tar.gz --prefix=claudebase-<X.Y.Z>/ -o dist/claudebase-source-<X.Y.Z>.tar.gz HEAD` so users on platforms not in the matrix (e.g., FreeBSD, Alpine musl, linux-arm32) can build from source via `cargo install --path .` after extraction. The source tarball is appended to the `files:` list as the sixth asset.
 
 #### FR-4: install.sh Prebuilt-Binary Download Path (Replace Cargo as Primary)
 
@@ -3113,15 +3113,15 @@ The §11 FR-11 / §12 FR-7 matrix expands from four platforms to five, adding `w
 
 1. **FR-4.1:** `install.sh:354-363` `case "$(uname -ms)"` MUST gain a fifth branch: `"MINGW64_NT-* x86_64") platform="windows-x64" ;;`. The existing four branches are BYTE-UNCHANGED. (Git Bash on Windows reports `uname -s` as `MINGW64_NT-10.0` or similar — verified: no — assumption per `## Facts`. If the actual `uname -s` shape on Windows runners differs, the architect Step 3 picks the correct allowlist pattern before Slice 4 ships.)
 
-2. **FR-4.2:** The asset URL at `install.sh:368` constructs `https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}` — UNCHANGED in shape. After FR-5 below fixes `REPO_URL` to `codefather-labs/claude-code-sdlc.git` and FR-6 below cuts the FIRST `sdlc-knowledge-v0.2.0` tag, the URL resolves to a real asset on every fresh install.
+2. **FR-4.2:** The asset URL at `install.sh:368` constructs `https://github.com/${owner_repo}/releases/download/claudebase-v${KNOWLEDGE_VERSION}/claudebase-${platform}` — UNCHANGED in shape. After FR-5 below fixes `REPO_URL` to `codefather-labs/claude-code-sdlc.git` and FR-6 below cuts the FIRST `claudebase-v0.2.0` tag, the URL resolves to a real asset on every fresh install.
 
-3. **FR-4.3:** For the Windows branch, the asset URL MUST append `.exe` to the platform suffix: `sdlc-knowledge-windows-x64.exe`. The existing four platforms append nothing (the binaries are extension-less on Unix). Conditional construction MUST be done with an `if [ "$platform" = "windows-x64" ]; then suffix=".exe"; else suffix=""; fi` block before URL composition.
+3. **FR-4.3:** For the Windows branch, the asset URL MUST append `.exe` to the platform suffix: `claudebase-windows-x64.exe`. The existing four platforms append nothing (the binaries are extension-less on Unix). Conditional construction MUST be done with an `if [ "$platform" = "windows-x64" ]; then suffix=".exe"; else suffix=""; fi` block before URL composition.
 
 4. **FR-4.4:** The `cargo_source_build_fallback` at `install.sh:411` is PRESERVED byte-for-byte as the secondary path. It is invoked only when (a) the prebuilt-binary download fails (network outage, asset 404, sha256 mismatch in iter-4), (b) the host platform is not in the FR-4.1 allowlist (e.g., FreeBSD, linux-arm32), or (c) `--version` smoke-test fails on the downloaded binary per `install.sh:396-401`. The fallback's existence is the safety net that lets the prebuilt path be PRIMARY without breaking edge-case platforms.
 
-5. **FR-4.5:** Re-running `bash install.sh --yes` on a host where `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` already returns the `KNOWLEDGE_VERSION` string MUST be a no-op (no re-download, no rebuild) per `install.sh:343-350` (UNCHANGED idempotency check).
+5. **FR-4.5:** Re-running `bash install.sh --yes` on a host where `~/.claude/tools/claudebase/claudebase --version` already returns the `KNOWLEDGE_VERSION` string MUST be a no-op (no re-download, no rebuild) per `install.sh:343-350` (UNCHANGED idempotency check).
 
-6. **FR-4.6:** When the prebuilt binary download succeeds, the install summary at the end of `install.sh` MUST report the platform tag and the resolved release version (e.g., `tools/sdlc-knowledge/sdlc-knowledge (linux-x64 — sdlc-knowledge-v0.2.0 prebuilt)`). When the cargo-source fallback runs, the summary continues to report `tools/sdlc-knowledge/sdlc-knowledge (built from source)` per `install.sh:441` (UNCHANGED).
+6. **FR-4.6:** When the prebuilt binary download succeeds, the install summary at the end of `install.sh` MUST report the platform tag and the resolved release version (e.g., `tools/claudebase/claudebase (linux-x64 — claudebase-v0.2.0 prebuilt)`). When the cargo-source fallback runs, the summary continues to report `tools/claudebase/claudebase (built from source)` per `install.sh:441` (UNCHANGED).
 
 #### FR-5: install.sh REPO_URL Fix
 
@@ -3137,19 +3137,19 @@ The pre-existing bug at `install.sh:25` is fixed in lock-step with the auto-rele
 
 5. **FR-5.5:** README.md badges, Quick install instructions, and any other top-level documentation referencing the old GitHub owner MUST be updated. The README taglines at lines 5 and 35 MUST be BYTE-UNCHANGED (consistent with §11 FR-12.1 / FR-12.2 / §12 FR-9.4).
 
-#### FR-6: Bootstrap First Release for sdlc-knowledge Tool
+#### FR-6: Bootstrap First Release for claudebase Tool
 
-A one-shot bootstrap pass cuts the FIRST `sdlc-knowledge-v0.2.0` tag (resolving R-7 below — the same chicken-and-egg risk that §11 R-2 / §12 R-2 documented but did not action).
+A one-shot bootstrap pass cuts the FIRST `claudebase-v0.2.0` tag (resolving R-7 below — the same chicken-and-egg risk that §11 R-2 / §12 R-2 documented but did not action).
 
 1. **FR-6.1:** A new `install.sh` function `bootstrap_first_release` MUST be added (at the end of the install.sh function block, before the `# Main` section). It is invoked ONLY when `--bootstrap-release <X.Y.Z>` is passed as a command-line flag — it is NOT invoked on a normal install. The flag is documented in `print_help` at `install.sh:47-80`.
 
-2. **FR-6.2:** The bootstrap function MUST verify pre-conditions: (a) the current directory is the SDLC core repo (heuristic: `Cargo.toml` exists at `tools/sdlc-knowledge/Cargo.toml` AND `.git` exists at the repo root); (b) the working tree is clean (`git status --porcelain` returns empty); (c) the supplied `<X.Y.Z>` matches the version in `tools/sdlc-knowledge/Cargo.toml:3` (so the tag is consistent with the source tree). Failure on any pre-condition exits 1 with a clear stderr message and DOES NOT mutate state.
+2. **FR-6.2:** The bootstrap function MUST verify pre-conditions: (a) the current directory is the SDLC core repo (heuristic: `Cargo.toml` exists at `claudebase/Cargo.toml` AND `.git` exists at the repo root); (b) the working tree is clean (`git status --porcelain` returns empty); (c) the supplied `<X.Y.Z>` matches the version in `claudebase/Cargo.toml:3` (so the tag is consistent with the source tree). Failure on any pre-condition exits 1 with a clear stderr message and DOES NOT mutate state.
 
-3. **FR-6.3:** The bootstrap function MUST execute the FR-1.2 Sensitive-tier sequence: (a) create `.claude/release-notes-<X.Y.Z>.md` from a brief stub summarizing the iter-1 + iter-2 + iter-3 cumulative changes (the maintainer hand-edits this stub before the next step); (b) `git tag -a sdlc-knowledge-v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md`; (c) `git push origin sdlc-knowledge-v<X.Y.Z>`. The bootstrap-flag invocation BYPASSES the `release-engineer` agent (the agent is for release-engineer Gate 9 in normal `/merge-ready` runs); the bootstrap is a one-time install.sh operation gated by the `--bootstrap-release` flag.
+3. **FR-6.3:** The bootstrap function MUST execute the FR-1.2 Sensitive-tier sequence: (a) create `.claude/release-notes-<X.Y.Z>.md` from a brief stub summarizing the iter-1 + iter-2 + iter-3 cumulative changes (the maintainer hand-edits this stub before the next step); (b) `git tag -a claudebase-v<X.Y.Z> -F .claude/release-notes-<X.Y.Z>.md`; (c) `git push origin claudebase-v<X.Y.Z>`. The bootstrap-flag invocation BYPASSES the `release-engineer` agent (the agent is for release-engineer Gate 9 in normal `/merge-ready` runs); the bootstrap is a one-time install.sh operation gated by the `--bootstrap-release` flag.
 
 4. **FR-6.4:** The bootstrap function MUST emit the literal warning `[BOOTSTRAP] this is a one-time first-release operation; subsequent releases use /merge-ready Gate 9 with release-engineer in executing mode (FR-1)` to stderr before executing the tag/push. This signals to the maintainer that the next release flows through release-engineer, not through `--bootstrap-release`.
 
-5. **FR-6.5:** The bootstrap flag MUST NOT push if the user replies anything other than `y` to the literal prompt `[BOOTSTRAP] About to execute: git push origin sdlc-knowledge-v<X.Y.Z> — this fires the GH Actions release workflow at .github/workflows/sdlc-knowledge-release.yml. Approve? [y/N]:`. The prompt format mirrors FR-1.5.
+5. **FR-6.5:** The bootstrap flag MUST NOT push if the user replies anything other than `y` to the literal prompt `[BOOTSTRAP] About to execute: git push origin claudebase-v<X.Y.Z> — this fires the GH Actions release workflow at .github/workflows/claudebase-release.yml. Approve? [y/N]:`. The prompt format mirrors FR-1.5.
 
 #### FR-7: SDLC Core CHANGELOG Opt-In
 
@@ -3175,7 +3175,7 @@ Gate 9 release-engineer runs as part of `/merge-ready` AND a lightweight pre-pus
 
 2. **FR-8.2:** Validation failure MUST abort the push. The agent emits `pre-push validation failed: <command> exited <N>` and skips the push (Sensitive-tier deny semantics per FR-1.4). The CHANGELOG / release-notes / tag artifacts already created in earlier FR-1.2 rows are PRESERVED — they are local mutations and the developer can fix the validation failure and re-run `/merge-ready` (the prior tag is reused; tag creation is idempotent because `git tag -a <name>` exits non-zero if the tag exists, and the release-engineer detects this and reuses the existing tag).
 
-3. **FR-8.3:** Pre-push validation is OPTIONAL for the SDLC core repo itself (no `npm test` / `pytest` / `cargo test` setup at the repo root because the SDLC core ships markdown agent prompts, not application code; the only Rust crate is `tools/sdlc-knowledge/`). When the project root has no `## Commands` block in `./CLAUDE.md`, the validation is SKIPPED with the literal log line `pre-push validation skipped: no Commands block in ./CLAUDE.md`.
+3. **FR-8.3:** Pre-push validation is OPTIONAL for the SDLC core repo itself (no `npm test` / `pytest` / `cargo test` setup at the repo root because the SDLC core ships markdown agent prompts, not application code; the only Rust crate is `claudebase/`). When the project root has no `## Commands` block in `./CLAUDE.md`, the validation is SKIPPED with the literal log line `pre-push validation skipped: no Commands block in ./CLAUDE.md`.
 
 4. **FR-8.4:** Pre-push validation MUST NOT make network calls or run E2E tests. Only typecheck + unit-test + lint commands are in scope (the same commands `build-runner` runs at Gate 6). E2E tests (Gate 7) are explicitly OUT OF SCOPE for pre-push because they are slow, often require external services, and Gate 7 has already passed by the time release-engineer runs at Gate 9.
 
@@ -3197,28 +3197,28 @@ The agent's behavior under CI invocation (`AUTO_RELEASE=1`) is fully specified p
 
 The `~/.claude/settings.json` Bash allowlist gains explicit entries for the FR-1.3 anchored regexes, mirroring `install.sh:447-484` `register_bash_allowlist` from §11 Slice 5 and `resource-architect.md` FR-5.4.
 
-1. **FR-10.1:** `install.sh` MUST gain a new function `register_release_bash_allowlist` (sibling to `register_bash_allowlist` at line 447) that adds the FR-1.3 whitelist entries to `~/.claude/settings.json`. The eight entries match the FR-1.3 anchored regexes verbatim — `git add CHANGELOG.md *`, `git commit -m "chore(release): *"`, `git tag -a *`, `git push origin v*`, `git push origin sdlc-knowledge-v*`, `git push origin feat/*`, `git push origin fix/*`, `git push origin chore/*` (Claude Code's allowlist syntax uses `*` glob, not regex anchors — the regex anchors are enforced INSIDE the agent's prompt body per FR-1.3, the allowlist is the OUTER defense-in-depth gate).
+1. **FR-10.1:** `install.sh` MUST gain a new function `register_release_bash_allowlist` (sibling to `register_bash_allowlist` at line 447) that adds the FR-1.3 whitelist entries to `~/.claude/settings.json`. The eight entries match the FR-1.3 anchored regexes verbatim — `git add CHANGELOG.md *`, `git commit -m "chore(release): *"`, `git tag -a *`, `git push origin v*`, `git push origin claudebase-v*`, `git push origin feat/*`, `git push origin fix/*`, `git push origin chore/*` (Claude Code's allowlist syntax uses `*` glob, not regex anchors — the regex anchors are enforced INSIDE the agent's prompt body per FR-1.3, the allowlist is the OUTER defense-in-depth gate).
 
 2. **FR-10.2:** The function MUST be invoked from `# Main` block at `install.sh:619` AFTER `register_bash_allowlist` (line 620) so both knowledge-base and release-engineer allowlists are written. The function is invoked unconditionally on a normal `bash install.sh` run (it only adds entries for the release-engineer; whether the agent uses them is gated by the FR-7.3 sentinel).
 
 3. **FR-10.3:** The function MUST follow the same jq-based atomic merge pattern as `register_bash_allowlist` per `install.sh:463-483` — fail-closed if `jq` is absent, idempotent on re-run via `unique` deduplication. Settings file format (`{"permissions":{"allow":[...]}}`) is BYTE-UNCHANGED.
 
-#### FR-11: Dual-Tag Scheme — sdlc-knowledge-v\* vs v\*
+#### FR-11: Dual-Tag Scheme — claudebase-v\* vs v\*
 
-The two version trains (`sdlc-knowledge` tool and SDLC core) MUST each have their own GitHub Actions release workflow firing on disjoint tag prefixes.
+The two version trains (`claudebase` tool and SDLC core) MUST each have their own GitHub Actions release workflow firing on disjoint tag prefixes.
 
-1. **FR-11.1:** The existing `.github/workflows/sdlc-knowledge-release.yml` (triggered on `sdlc-knowledge-v*` per line 16) is PRESERVED with FR-3 additions (Windows branch, source tarball). Trigger pattern UNCHANGED.
+1. **FR-11.1:** The existing `.github/workflows/claudebase-release.yml` (triggered on `claudebase-v*` per line 16) is PRESERVED with FR-3 additions (Windows branch, source tarball). Trigger pattern UNCHANGED.
 
-2. **FR-11.2:** A new workflow file `.github/workflows/sdlc-core-release.yml` MUST be added, triggered on `v*` tag pushes (matching the bare `v<X.Y.Z>` scheme per `release-engineer.md:26`). The workflow's job is simpler than `sdlc-knowledge-release.yml` because the SDLC core ships markdown agent prompts (not Rust binaries):
-   - Job 1: actionlint self-check (mirrors `sdlc-knowledge-release.yml:33-43`).
+2. **FR-11.2:** A new workflow file `.github/workflows/sdlc-core-release.yml` MUST be added, triggered on `v*` tag pushes (matching the bare `v<X.Y.Z>` scheme per `release-engineer.md:26`). The workflow's job is simpler than `claudebase-release.yml` because the SDLC core ships markdown agent prompts (not Rust binaries):
+   - Job 1: actionlint self-check (mirrors `claudebase-release.yml:33-43`).
    - Job 2: package the SDLC core as a source tarball: `git archive --format=tar.gz --prefix=claude-code-sdlc-<X.Y.Z>/ -o claude-code-sdlc-<X.Y.Z>.tar.gz HEAD`.
    - Job 3: upload the tarball and `install.sh` (standalone) to GitHub Releases via `softprops/action-gh-release@v2` with `body_path: .claude/release-notes-<X.Y.Z>.md` and `tag_name: ${{ github.ref_name }}`.
 
-3. **FR-11.3:** The two workflows MUST NOT share the `concurrency` group (`sdlc-knowledge-release-${{ github.ref }}` for the tool workflow; `sdlc-core-release-${{ github.ref }}` for the core workflow) so a tool release and a core release in the same time window do not cancel each other.
+3. **FR-11.3:** The two workflows MUST NOT share the `concurrency` group (`claudebase-release-${{ github.ref }}` for the tool workflow; `sdlc-core-release-${{ github.ref }}` for the core workflow) so a tool release and a core release in the same time window do not cancel each other.
 
-4. **FR-11.4:** The two workflows have DIFFERENT trigger filters: `sdlc-knowledge-v*` is strictly more specific than `v*`. A `sdlc-knowledge-v0.2.0` tag MUST NOT fire the SDLC-core workflow — `v*` is a glob, but `sdlc-knowledge-v*` does NOT match `v*` (the prefix is not `v`). GitHub Actions tag filters are literal-prefix globs; this disjointness is verified by the GH Actions tag-filter contract.
+4. **FR-11.4:** The two workflows have DIFFERENT trigger filters: `claudebase-v*` is strictly more specific than `v*`. A `claudebase-v0.2.0` tag MUST NOT fire the SDLC-core workflow — `v*` is a glob, but `claudebase-v*` does NOT match `v*` (the prefix is not `v`). GitHub Actions tag filters are literal-prefix globs; this disjointness is verified by the GH Actions tag-filter contract.
 
-5. **FR-11.5:** The `release-engineer` agent's tag-prefix detection MUST disambiguate the two trains. When invoked at `/merge-ready` Gate 9 in the SDLC core repo with the version-source pointing at `tools/sdlc-knowledge/Cargo.toml`, the agent MUST emit a Sensitive-tier prompt that explicitly states which workflow will fire (e.g., `tag prefix: sdlc-knowledge-v — will fire .github/workflows/sdlc-knowledge-release.yml`) so the maintainer cannot accidentally cut a tool release expecting a core release.
+5. **FR-11.5:** The `release-engineer` agent's tag-prefix detection MUST disambiguate the two trains. When invoked at `/merge-ready` Gate 9 in the SDLC core repo with the version-source pointing at `claudebase/Cargo.toml`, the agent MUST emit a Sensitive-tier prompt that explicitly states which workflow will fire (e.g., `tag prefix: claudebase-v — will fire .github/workflows/claudebase-release.yml`) so the maintainer cannot accidentally cut a tool release expecting a core release.
 
 #### FR-12: Invariants Enforced
 
@@ -3236,7 +3236,7 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 6. **FR-12.6: Cognitive self-check UNCHANGED.** `src/rules/cognitive-self-check.md` is BYTE-UNCHANGED. The in-scope agent list (12 thinking) and exempt list (5 executors) are unchanged. Release-engineer is in the 12-thinking list and continues to emit `## Facts` blocks per Section 9.
 
-7. **FR-12.7: §11 / §12 invariants UNCHANGED.** All §11 FR-9 and §12 FR-9 invariants remain in force: five `sdlc-knowledge` subcommands (`ingest`, `search`, `list`, `status`, `delete`), `--project-root` security gate, JSON output shape, `knowledge-base:` citation literal, FTS5 + WAL schema, agent activation block in 12 thinking agents.
+7. **FR-12.7: §11 / §12 invariants UNCHANGED.** All §11 FR-9 and §12 FR-9 invariants remain in force: five `claudebase` subcommands (`ingest`, `search`, `list`, `status`, `delete`), `--project-root` security gate, JSON output shape, `knowledge-base:` citation literal, FTS5 + WAL schema, agent activation block in 12 thinking agents.
 
 8. **FR-12.8: SDLC core CHANGELOG.md is NEW — INTENTIONAL.** The repo root has no `CHANGELOG.md` today (`ls /Users/aleksandra/Documents/claude-code-sdlc/CHANGELOG.md` returns no such file). FR-7.4 ADDS this file. The Plan Critic SHOULD NOT flag the new file as a "files-not-listed-in-affected-files" gap; it is enumerated explicitly in 13.8 below.
 
@@ -3244,15 +3244,15 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 1. **NFR-1: Tag-creation latency.** Local tag creation (FR-1.2 row 6) MUST complete in ≤ 30 s on a 2024-class developer laptop. This excludes the upstream CI build time (FR-3 + FR-11) which runs ASYNCHRONOUSLY on GitHub Actions after the tag is pushed and is bounded by NFR-5 below.
 
-2. **NFR-2: install.sh prebuilt-binary download latency.** `bash install.sh --yes` on each of the five supported platforms MUST produce a working `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` binary in ≤ 60 s when the network is reachable and the asset exists at the FR-4.2 URL. (Inherited from §11 AC-3 / NFR-1.4 — the four existing platforms retain their existing budget; Windows-x64 is the new platform.)
+2. **NFR-2: install.sh prebuilt-binary download latency.** `bash install.sh --yes` on each of the five supported platforms MUST produce a working `~/.claude/tools/claudebase/claudebase` binary in ≤ 60 s when the network is reachable and the asset exists at the FR-4.2 URL. (Inherited from §11 AC-3 / NFR-1.4 — the four existing platforms retain their existing budget; Windows-x64 is the new platform.)
 
 3. **NFR-3: Backward compatibility — opt-out preserves suggest-only.** Projects WITHOUT `.claude/rules/auto-release.md` MUST receive the §6 byte-identical suggest-only behavior. The release-engineer's structured 10-section summary, the FORBIDDEN list semantics, the no-Bash posture (well — `Bash` is now in `tools:` per FR-1.1 but the agent self-restricts from invoking it absent the sentinel) all match §6 contracts when the sentinel is absent. This is the headline backward-compat contract and is exercised by AC-8 below.
 
 4. **NFR-4: Tier-based dispatch matches resource-architect contract.** The four-tier model (Trivial / Moderate / Sensitive / Forbidden), the most-restrictive-applicable rule, the anchored-regex whitelist (defense-in-depth), and the headless contract (`AUTO_RELEASE=1`) MUST match the §7 FR-5 shape byte-for-byte where they overlap. The same Plan Critic enforcement that flags `resource-architect` malformed tier strings (§7 FR-5.3 / Section 4 / `src/CLAUDE.md` Plan Critic rules) MUST apply to release-engineer's tier emissions.
 
-5. **NFR-5: Cross-platform CI matrix wall-clock.** The full `.github/workflows/sdlc-knowledge-release.yml` matrix run (5 platform builds + actionlint + release job) on a tagged `sdlc-knowledge-v*` push MUST complete in ≤ 15 min. The four existing platforms currently complete in ~6-10 min on `fail-fast: false` per the iter-1 / iter-2 release procedures; Windows MSVC builds are typically slower due to MSVC link time. The 15 min budget gives headroom for Windows.
+5. **NFR-5: Cross-platform CI matrix wall-clock.** The full `.github/workflows/claudebase-release.yml` matrix run (5 platform builds + actionlint + release job) on a tagged `claudebase-v*` push MUST complete in ≤ 15 min. The four existing platforms currently complete in ~6-10 min on `fail-fast: false` per the iter-1 / iter-2 release procedures; Windows MSVC builds are typically slower due to MSVC link time. The 15 min budget gives headroom for Windows.
 
-6. **NFR-6: Windows binary size.** The Windows binary `sdlc-knowledge-windows-x64.exe` MUST be ≤ 12 MB after `strip = true` and `lto = true` per `tools/sdlc-knowledge/Cargo.toml:34-38` (UNCHANGED profile flags from §11 NFR-1.1 / §12 NFR-1). The 12 MB budget is LOOSER than the 10 MB Linux/macOS budget per `sdlc-knowledge-release.yml:125-137` because Windows MSVC produces larger binaries due to runtime overhead (MSVCRT linkage, COFF section padding). The four existing platforms retain their 10 MB budget BYTE-UNCHANGED.
+6. **NFR-6: Windows binary size.** The Windows binary `claudebase-windows-x64.exe` MUST be ≤ 12 MB after `strip = true` and `lto = true` per `claudebase/Cargo.toml:34-38` (UNCHANGED profile flags from §11 NFR-1.1 / §12 NFR-1). The 12 MB budget is LOOSER than the 10 MB Linux/macOS budget per `claudebase-release.yml:125-137` because Windows MSVC produces larger binaries due to runtime overhead (MSVCRT linkage, COFF section padding). The four existing platforms retain their 10 MB budget BYTE-UNCHANGED.
 
 7. **NFR-7: UTF-8 boundary safety in CHANGELOG / release-notes.** The `[Unreleased]` → `[X.Y.Z]` rename and the release-notes file write MUST preserve UTF-8 multibyte character sequences byte-for-byte. The `git tag -a -F <file>` invocation MUST consume the file as UTF-8 without re-encoding. (Inherited contract from §11 FR-2.3 chunker UTF-8 safety; load-bearing for the multilingual user story 13.2 #5.)
 
@@ -3264,15 +3264,15 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 1. **AC-1: Local tag creation works under release-engineer executing mode.** On the SDLC core repo with `.claude/rules/auto-release.md` present, running `/merge-ready` Gate 9 with non-empty `[Unreleased]` content produces, in ≤ 30 s, (a) a renamed `[X.Y.Z] - YYYY-MM-DD` CHANGELOG section, (b) a `.claude/release-notes-<X.Y.Z>.md` file, (c) a local annotated git tag `<prefix>v<X.Y.Z>` whose annotation message matches the release-notes file byte-for-byte. Verified via `git cat-file tag <tag-name>`.
 
-2. **AC-2: Tag push fires the GH Actions release workflow.** After the maintainer approves the FR-1.5 Sensitive-tier prompt, `git push origin sdlc-knowledge-v0.2.0` completes successfully and the `.github/workflows/sdlc-knowledge-release.yml` workflow is observed firing within 5 min of the push (verified via `gh run list --workflow=sdlc-knowledge-release.yml`).
+2. **AC-2: Tag push fires the GH Actions release workflow.** After the maintainer approves the FR-1.5 Sensitive-tier prompt, `git push origin claudebase-v0.2.0` completes successfully and the `.github/workflows/claudebase-release.yml` workflow is observed firing within 5 min of the push (verified via `gh run list --workflow=claudebase-release.yml`).
 
-3. **AC-3: GitHub Release body matches CHANGELOG body.** The GitHub Release page for `sdlc-knowledge-v0.2.0` MUST display the contents of `.claude/release-notes-0.2.0.md` byte-for-byte (modulo GitHub's markdown rendering — the SOURCE bytes are identical). Verified by `gh release view sdlc-knowledge-v0.2.0 --json body --jq .body`.
+3. **AC-3: GitHub Release body matches CHANGELOG body.** The GitHub Release page for `claudebase-v0.2.0` MUST display the contents of `.claude/release-notes-0.2.0.md` byte-for-byte (modulo GitHub's markdown rendering — the SOURCE bytes are identical). Verified by `gh release view claudebase-v0.2.0 --json body --jq .body`.
 
-4. **AC-4: Five-platform binary matrix produces five binaries plus source tarball.** After AC-2 fires, the `sdlc-knowledge-v0.2.0` GitHub Release page MUST list six release assets: `sdlc-knowledge-darwin-arm64`, `sdlc-knowledge-darwin-x64`, `sdlc-knowledge-linux-x64`, `sdlc-knowledge-linux-arm64`, `sdlc-knowledge-windows-x64.exe`, `sdlc-knowledge-source-0.2.0.tar.gz`. Each binary asset MUST be non-zero size; each platform binary MUST pass `<binary> --version` returning `sdlc-knowledge 0.2.0`.
+4. **AC-4: Five-platform binary matrix produces five binaries plus source tarball.** After AC-2 fires, the `claudebase-v0.2.0` GitHub Release page MUST list six release assets: `claudebase-darwin-arm64`, `claudebase-darwin-x64`, `claudebase-linux-x64`, `claudebase-linux-arm64`, `claudebase-windows-x64.exe`, `claudebase-source-0.2.0.tar.gz`. Each binary asset MUST be non-zero size; each platform binary MUST pass `<binary> --version` returning `claudebase 0.2.0`.
 
-5. **AC-5: install.sh prebuilt-binary download succeeds on each platform.** `bash install.sh --yes` on each of the five supported platforms produces `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (or `.exe` on Windows) of non-zero size in ≤ 60 s. The install summary MUST report `tools/sdlc-knowledge/sdlc-knowledge (<platform> — sdlc-knowledge-v0.2.0 prebuilt)` per FR-4.6.
+5. **AC-5: install.sh prebuilt-binary download succeeds on each platform.** `bash install.sh --yes` on each of the five supported platforms produces `~/.claude/tools/claudebase/claudebase` (or `.exe` on Windows) of non-zero size in ≤ 60 s. The install summary MUST report `tools/claudebase/claudebase (<platform> — claudebase-v0.2.0 prebuilt)` per FR-4.6.
 
-6. **AC-6: install.sh fallback works when release is missing.** With network connectivity but the asset URL returning 404 (simulate by pointing `KNOWLEDGE_VERSION` at `99.99.99`), `bash install.sh --yes` MUST log the 404 warning, invoke `cargo_source_build_fallback`, and produce a working binary built from source. Verified by `~/.claude/tools/sdlc-knowledge/sdlc-knowledge --version` returning `sdlc-knowledge 0.2.0`.
+6. **AC-6: install.sh fallback works when release is missing.** With network connectivity but the asset URL returning 404 (simulate by pointing `KNOWLEDGE_VERSION` at `99.99.99`), `bash install.sh --yes` MUST log the 404 warning, invoke `cargo_source_build_fallback`, and produce a working binary built from source. Verified by `~/.claude/tools/claudebase/claudebase --version` returning `claudebase 0.2.0`.
 
 7. **AC-7: Headless CI mode skips Sensitive operations.** Setting `AUTO_RELEASE=1` and running `/merge-ready` Gate 9 with non-empty `[Unreleased]` content MUST produce: (a) the local CHANGELOG / release-notes / annotated-tag artifacts (Trivial + Moderate operations executed), (b) NO `git push` invocation (Sensitive operations refused), (c) the literal stderr line `aborted-headless-sensitive: git push origin <tag> requires interactive approval; rerun without AUTO_RELEASE=1`, (d) exit code 0 (headless skip is not an error), (e) Tier breakdown line `<N> Sensitive (skipped)`.
 
@@ -3292,7 +3292,7 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 1. **R-1: `git push` is destructive — wrong tier classification.** A misclassified operation in FR-1.2 (e.g., `git push origin main` accidentally tagged Trivial instead of Sensitive) would lead to unwanted publication. **Mitigation:** the FR-1.2 tier table is hard-coded in `src/agents/release-engineer.md` (not user-editable at runtime); the FR-1.3 anchored-regex whitelist is a defense-in-depth gate that REFUSES any command not exactly matching one of eight regexes; security-auditor pre-reviews the release-engineer rewrite slice; the `AUTO_RELEASE=1` headless contract REFUSES Sensitive operations entirely under unattended runs. Triple defense: tier classification + whitelist + headless deny.
 
-2. **R-2: GitHub Actions release-workflow drift between `sdlc-knowledge-v*` and `v*` tag schemes.** A change to one workflow (e.g., bumping `softprops/action-gh-release@v2` to `@v3`) might silently miss the other. **Mitigation:** both workflows share a common subset (actionlint job, `softprops/action-gh-release` step shape); a repo-root `.github/workflows/_RELEASE_DRIFT_CHECK.md` documents the shared identifiers and is updated lock-step on workflow changes; FR-11.4 documents the trigger disjointness so a human reviewer can spot drift in PR review.
+2. **R-2: GitHub Actions release-workflow drift between `claudebase-v*` and `v*` tag schemes.** A change to one workflow (e.g., bumping `softprops/action-gh-release@v2` to `@v3`) might silently miss the other. **Mitigation:** both workflows share a common subset (actionlint job, `softprops/action-gh-release` step shape); a repo-root `.github/workflows/_RELEASE_DRIFT_CHECK.md` documents the shared identifiers and is updated lock-step on workflow changes; FR-11.4 documents the trigger disjointness so a human reviewer can spot drift in PR review.
 
 3. **R-3: `install.sh` REPO_URL change breaks pre-fix checkouts.** Anyone who forked the repo or deep-copied `install.sh` before FR-5.1 ships would see their local copy's `REPO_URL` continue to point at the old `Koroqe/...` URL. **Mitigation:** documented in FR-5.4 — repo-root `MIGRATION.md` notes the change; the impact is limited because the old URL was never functional (the Koroqe repo does not exist), so anyone affected was already in a broken state.
 
@@ -3300,21 +3300,21 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 5. **R-5: Cross-platform binary build failures on uncommon edge cases.** glibc version mismatch on `linux-x64` (the `ubuntu-latest` runner uses glibc 2.35; users on glibc 2.31 fail the dynamic-link check), or MSVC runtime version mismatch on Windows (`vcruntime140.dll` not found). **Mitigation:** `cargo_source_build_fallback` per FR-4.4 is the universal escape hatch — when the prebuilt binary fails any smoke test, install.sh falls through to the source build. The fallback is explicitly tested in AC-6.
 
-6. **R-6: Tag-collision (two parallel `develop-feature` runs both compute `v3.2.1`).** Two engineers running `/merge-ready` simultaneously could both compute the same next-version tag and try to push it. **Mitigation:** `git push origin <tag>` is atomic and the second push fails with `! [rejected] (already exists)`; the FR-8.2 pre-push validation surfaces the failure cleanly; the `concurrency:` group in the workflow file (`sdlc-knowledge-release-${{ github.ref }}`) cancels the second workflow invocation. Recovery is to bump the version-source by one and re-run `/merge-ready`.
+6. **R-6: Tag-collision (two parallel `develop-feature` runs both compute `v3.2.1`).** Two engineers running `/merge-ready` simultaneously could both compute the same next-version tag and try to push it. **Mitigation:** `git push origin <tag>` is atomic and the second push fails with `! [rejected] (already exists)`; the FR-8.2 pre-push validation surfaces the failure cleanly; the `concurrency:` group in the workflow file (`claudebase-release-${{ github.ref }}`) cancels the second workflow invocation. Recovery is to bump the version-source by one and re-run `/merge-ready`.
 
-7. **R-7: Chicken-and-egg first release.** RESOLVED — the maintainer one-shot bootstrap per FR-6 cuts the FIRST `sdlc-knowledge-v0.2.0` tag explicitly. Subsequent releases flow through `release-engineer` Gate 9 in executing mode. The bootstrap is documented as a one-time operation per FR-6.4.
+7. **R-7: Chicken-and-egg first release.** RESOLVED — the maintainer one-shot bootstrap per FR-6 cuts the FIRST `claudebase-v0.2.0` tag explicitly. Subsequent releases flow through `release-engineer` Gate 9 in executing mode. The bootstrap is documented as a one-time operation per FR-6.4.
 
-8. **R-8: Revert/rollback semantics.** What happens if a published `sdlc-knowledge-v0.2.0` release contains a regression that bricks `install.sh`? **Mitigation:** the maintainer cuts a `sdlc-knowledge-v0.2.1` patch release with the fix per the same Gate 9 flow. The broken `0.2.0` release page can be marked as a pre-release via the GitHub UI (manual action; out of scope for the agent). Yanking the GitHub Release entirely is a Forbidden operation (it is a remote-state mutation outside the FR-1.2 whitelist) — the maintainer performs it manually if needed. Auto-revert on regression detection is OUT OF SCOPE per 13.7 item 5.
+8. **R-8: Revert/rollback semantics.** What happens if a published `claudebase-v0.2.0` release contains a regression that bricks `install.sh`? **Mitigation:** the maintainer cuts a `claudebase-v0.2.1` patch release with the fix per the same Gate 9 flow. The broken `0.2.0` release page can be marked as a pre-release via the GitHub UI (manual action; out of scope for the agent). Yanking the GitHub Release entirely is a Forbidden operation (it is a remote-state mutation outside the FR-1.2 whitelist) — the maintainer performs it manually if needed. Auto-revert on regression detection is OUT OF SCOPE per 13.7 item 5.
 
 9. **R-9: Plan Critic false-positive on `templates/` invariant relaxation.** The Plan Critic could flag `templates/rules/auto-release.md` and `templates/hooks/pre-push` as new files that violate a perceived "templates UNCHANGED" invariant (which §11 / §12 informally implied). **Mitigation:** FR-12.5 explicitly relaxes the invariant with rationale; this PRD section is the authoritative scope expansion. The Plan Critic SHOULD treat the explicit FR-12.5 statement as the dispositive source.
 
-10. **R-10: `softprops/action-gh-release@v2` action being yanked or compromised.** The action is community-maintained; a yank or supply-chain attack could break the upload step. **Mitigation:** pin the action by SHA in iter-4 (currently pinned by major-version `@v2` per `sdlc-knowledge-release.yml:202` — UNCHANGED in iter-3); the workflow file is auditable at PR review time; the `softprops/action-gh-release` repo is widely used and well-audited.
+10. **R-10: `softprops/action-gh-release@v2` action being yanked or compromised.** The action is community-maintained; a yank or supply-chain attack could break the upload step. **Mitigation:** pin the action by SHA in iter-4 (currently pinned by major-version `@v2` per `claudebase-release.yml:202` — UNCHANGED in iter-3); the workflow file is auditable at PR review time; the `softprops/action-gh-release` repo is widely used and well-audited.
 
 11. **Dependency: Section 6 (Changelog Release Packaging — iter-2).** This section's FR-1 / FR-2 build directly on §6's release-engineer agent and Gate 9 wiring. If §6 has not shipped at iter-3 implementation time, iter-3 cannot start. (§6 shipped per the merge commit history before 2026-04-25.)
 
 12. **Dependency: Section 7 (Resource Manager-Architect — Iteration 2: Auto-Install).** This section's FR-1.2 / FR-1.3 / FR-1.4 directly mirror §7's tier model and headless contract. The `most-restrictive-applicable-tier` rule, the anchored-regex whitelist pattern, and the headless contract are all lifted from `src/agents/resource-architect.md:185-260`. If §7 has not shipped, iter-3 cannot reuse the precedent.
 
-13. **Dependency: Section 11 (Local Knowledge Base — iter-1).** The FIRST `sdlc-knowledge-v0.2.0` tag bootstrap (FR-6) presupposes that the §11 / §12 binary at `tools/sdlc-knowledge/` is build-able. The `.github/workflows/sdlc-knowledge-release.yml` workflow file from §11 is the integration point for FR-3.
+13. **Dependency: Section 11 (Local Knowledge Base — iter-1).** The FIRST `claudebase-v0.2.0` tag bootstrap (FR-6) presupposes that the §11 / §12 binary at `claudebase/` is build-able. The `.github/workflows/claudebase-release.yml` workflow file from §11 is the integration point for FR-3.
 
 14. **Dependency: Section 12 (Robust PDF Extraction via pdfium-render — iter-2).** The Cargo.toml version bump to `0.2.0` (per §12 NFR-9) is the version that this section ships. The PDFium binary download path at `install.sh:489-613` is the precedent shape for the FR-4 prebuilt-binary download path.
 
@@ -3326,7 +3326,7 @@ Iter-3 is an authority-boundary upgrade plus a binary matrix expansion plus a do
 
 The following items are explicitly deferred to iter-4 or beyond and MUST NOT be implemented as part of iter-3:
 
-1. **npm / cargo / PyPI / gem registry publishing.** The Forbidden tier (FR-1.2 row 10) refuses these operations. A future iter-4 PRD section would lift specific publishers (e.g., `cargo publish` for the `sdlc-knowledge` crate) into a Sensitive-tier flow with credential management. Iter-3 ships the GitHub Releases pipeline only.
+1. **npm / cargo / PyPI / gem registry publishing.** The Forbidden tier (FR-1.2 row 10) refuses these operations. A future iter-4 PRD section would lift specific publishers (e.g., `cargo publish` for the `claudebase` crate) into a Sensitive-tier flow with credential management. Iter-3 ships the GitHub Releases pipeline only.
 
 2. **sha256 / sigstore signature verification of binaries.** The §11 iter-1 deferral and §12 iter-2 deferral remain in force — iter-3 trusts GitHub Releases TLS + the GH Actions provenance attestations attached to releases. Signature verification is iter-4 scope.
 
@@ -3348,7 +3348,7 @@ These items are listed explicitly so the Plan Critic does not flag their absence
 
 #### Affected Endpoints
 
-Not applicable. This project has no HTTP API. The `sdlc-knowledge` CLI subcommand surface is BYTE-UNCHANGED (per FR-12.7 / §11 FR-9.1 / §12 FR-9.1). The release-engineer agent's structured 10-section output contract is BYTE-UNCHANGED in shape (only the `Commands to run` section content and the new `Tier breakdown` section per FR-1.8 differ in semantics).
+Not applicable. This project has no HTTP API. The `claudebase` CLI subcommand surface is BYTE-UNCHANGED (per FR-12.7 / §11 FR-9.1 / §12 FR-9.1). The release-engineer agent's structured 10-section output contract is BYTE-UNCHANGED in shape (only the `Commands to run` section content and the new `Tier breakdown` section per FR-1.8 differ in semantics).
 
 #### Schema Changes
 
@@ -3368,8 +3368,8 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 | `templates/hooks/pre-push` | Pre-push hook script (thin wrapper over project's typecheck/test/lint). Installed by `install.sh --init-project` when auto-release is opted in. | FR-8.5 |
 | `CHANGELOG.md` (repo root) | SDLC core CHANGELOG with `[Unreleased]` and `[3.0.0] - 2026-04-26 — Auto-Release Pipeline` sections. | FR-7.4, FR-12.8, AC-10 |
 | `.claude/release-notes-3.0.0.md` | Release-notes file for the SDLC core's first auto-release run. Body of the `[3.0.0]` CHANGELOG section. | FR-2.1 |
-| `.claude/release-notes-0.2.0.md` | Release-notes file for the FIRST `sdlc-knowledge-v0.2.0` bootstrap. Body summarizes iter-1 + iter-2 + iter-3 cumulative changes. | FR-6.3 |
-| `.github/workflows/sdlc-core-release.yml` | New GH Actions workflow triggered on `v*` tags. Mirrors `sdlc-knowledge-release.yml` shape; produces source tarball + install.sh asset; uses `softprops/action-gh-release@v2`. | FR-11.2 |
+| `.claude/release-notes-0.2.0.md` | Release-notes file for the FIRST `claudebase-v0.2.0` bootstrap. Body summarizes iter-1 + iter-2 + iter-3 cumulative changes. | FR-6.3 |
+| `.github/workflows/sdlc-core-release.yml` | New GH Actions workflow triggered on `v*` tags. Mirrors `claudebase-release.yml` shape; produces source tarball + install.sh asset; uses `softprops/action-gh-release@v2`. | FR-11.2 |
 | `MIGRATION.md` (repo root) | Documents the `Koroqe → codefather-labs` REPO_URL change for users with pre-fix checkouts. | FR-5.4 |
 
 #### Modified Files
@@ -3378,12 +3378,12 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 |------|---------|---------------------|
 | `src/agents/release-engineer.md` | REWRITE: frontmatter `tools:` gains `Bash`; `## Authority Boundary` gains EXECUTE-allowed set; `## NEVER List` shrinks to FR-1.2 Forbidden-tier rows only; new `## Tier-Based Authority Gradation` section codifying FR-1.2 / FR-1.3 / FR-1.4 / FR-1.5; `## Output Contract` gains `Tier breakdown` section. The agent prompt frontmatter `name:` field is BYTE-UNCHANGED. | FR-1.1 through FR-1.8 |
 | `install.sh` | Update `VERSION="2.1.0"` → `"3.0.0"` (line 22); update `REPO_URL` (line 25) Koroqe → codefather-labs; update Quick install URL (line 12); update `print_help` heredoc first line (line 49); add Windows branch to `case "$(uname -ms)"` allowlist (line 354-363); add `.exe` suffix logic to URL composition (line 368); add `register_release_bash_allowlist` function; add `bootstrap_first_release` function; invoke both new functions from `# Main` block. | FR-3 series, FR-4 series, FR-5 series, FR-6 series, FR-7.5, FR-10 series |
-| `.github/workflows/sdlc-knowledge-release.yml` | Add Windows-x64 to matrix `include:` list (line 64-75); add Windows case to pdfium asset name step (line 91-101); widen libpdfium glob to capture Windows DLL naming (line 115); add `.exe` suffix to Windows artifact staging (line 168); add Windows binary to release `files:` list (line 208-213); add source tarball asset and upload; add `body_path: .claude/release-notes-${{ github.ref_name }}.md` to `softprops/action-gh-release@v2` step. | FR-3 series, FR-2.3, FR-11.1 |
+| `.github/workflows/claudebase-release.yml` | Add Windows-x64 to matrix `include:` list (line 64-75); add Windows case to pdfium asset name step (line 91-101); widen libpdfium glob to capture Windows DLL naming (line 115); add `.exe` suffix to Windows artifact staging (line 168); add Windows binary to release `files:` list (line 208-213); add source tarball asset and upload; add `body_path: .claude/release-notes-${{ github.ref_name }}.md` to `softprops/action-gh-release@v2` step. | FR-3 series, FR-2.3, FR-11.1 |
 | `README.md` | Add ONE new row to the Hardening table referencing iter-3 auto-release. Update any Quick install URL referencing `Koroqe`. Lines 5 and 35 (taglines) BYTE-UNCHANGED. | FR-5.5, FR-7.6, FR-12.4 |
 | `~/.claude/rules/knowledge-base-tool.md` | UNCHANGED. (This section makes no rule edits to the knowledge-base rule.) | — |
 | `~/.claude/rules/knowledge-base.md` | UNCHANGED. | — |
 | `~/.claude/rules/cognitive-self-check.md` | UNCHANGED per FR-12.6. | — |
-| `tools/sdlc-knowledge/RELEASING.md` | Document the dual-tag scheme (FR-11), the bootstrap procedure (FR-6), the Windows binary addition (FR-3), the install.sh fallback semantics (FR-4.4). | FR-3, FR-4, FR-6, FR-11 |
+| `claudebase/RELEASING.md` | Document the dual-tag scheme (FR-11), the bootstrap procedure (FR-6), the Windows binary addition (FR-3), the install.sh fallback semantics (FR-4.4). | FR-3, FR-4, FR-6, FR-11 |
 
 #### Unchanged Files (verified no impact)
 
@@ -3392,8 +3392,8 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 | `src/agents/{prd-writer,ba-analyst,architect,qa-planner,planner,security-auditor,test-writer,code-reviewer,build-runner,e2e-runner,verifier,doc-updater,refactor-cleaner,changelog-writer,resource-architect,role-planner}.md` | The 16 non-release-engineer agents are BYTE-UNCHANGED per FR-12.1. |
 | `src/rules/cognitive-self-check.md` | BYTE-UNCHANGED per FR-12.6. |
 | `src/rules/git.md`, `src/rules/scratchpad.md`, `src/rules/error-recovery.md`, `src/rules/tool-limitations.md` | Independent rules, unaffected. |
-| `tools/sdlc-knowledge/src/*.rs` | BYTE-UNCHANGED — iter-3 makes no Rust code changes (the Cargo.toml version is bumped to `0.2.0` by §12; iter-3 ships the FIRST release of that version). |
-| `tools/sdlc-knowledge/Cargo.toml` | BYTE-UNCHANGED — version `0.2.0` already set by §12 NFR-9. |
+| `claudebase/src/*.rs` | BYTE-UNCHANGED — iter-3 makes no Rust code changes (the Cargo.toml version is bumped to `0.2.0` by §12; iter-3 ships the FIRST release of that version). |
+| `claudebase/Cargo.toml` | BYTE-UNCHANGED — version `0.2.0` already set by §12 NFR-9. |
 | `templates/rules/changelog.md` | BYTE-UNCHANGED — already in templates per Section 3 FR-4.4. |
 | `templates/rules/architecture.md`, `templates/rules/security.md`, `templates/rules/testing.md` | UNCHANGED — independent templates. |
 | `templates/CLAUDE.md` | UNCHANGED. |
@@ -3408,32 +3408,32 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 
 - The PRD file `/Users/aleksandra/Documents/claude-code-sdlc/docs/PRD.md` ends at line 2972 immediately before Section 13 is appended; the last existing section is Section 12 ("Robust PDF Extraction via pdfium-render") starting at line 2696 — verified by `grep -n "^## "` and `wc -l` in the current session.
 - `install.sh:22` declares `VERSION="2.1.0"`; `install.sh:23` declares `KNOWLEDGE_VERSION="0.1.0"`; `install.sh:24` declares `KNOWLEDGE_PDFIUM_VERSION="chromium/7802"`; `install.sh:25` declares `REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"` (the bug FR-5.1 fixes) — verified by Read of lines 1-80 in this session.
-- `install.sh:332-406` `install_knowledge_binary` constructs the asset URL `https://github.com/${owner_repo}/releases/download/sdlc-knowledge-v${KNOWLEDGE_VERSION}/sdlc-knowledge-${platform}` at line 368, with a four-platform allowlist at lines 354-363 (Darwin arm64 / x86_64, Linux x86_64 / aarch64) and falls through to `cargo_source_build_fallback` at lines 411-442 on download failure — verified by Read in this session.
+- `install.sh:332-406` `install_knowledge_binary` constructs the asset URL `https://github.com/${owner_repo}/releases/download/claudebase-v${KNOWLEDGE_VERSION}/claudebase-${platform}` at line 368, with a four-platform allowlist at lines 354-363 (Darwin arm64 / x86_64, Linux x86_64 / aarch64) and falls through to `cargo_source_build_fallback` at lines 411-442 on download failure — verified by Read in this session.
 - `install.sh:489-613` `install_pdfium_binary` is the precedent shape for the new `download_release_binary` function: subshell wrapped with `set +e`, `umask 0022`, mktemp staging, TLS-only `curl`/`wget` fallback, `tar` traversal/setuid checks, version sentinel at `$target_dir/.version` — verified by Read in this session.
 - `install.sh:447-484` `register_bash_allowlist` is the precedent shape for `register_release_bash_allowlist` per FR-10.1: jq-based atomic merge with `unique` deduplication; fail-closed when jq absent; missing-file create with literal JSON — verified by Read in this session.
 - `src/agents/release-engineer.md:4` was Read in this session and showed `tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]` — but the prompt body at lines 12, 16, 30, and 63 contradicts this by explicitly stating "no Bash tool" and asserting the NEVER List is enforced "via tool removal". This is a documented frontmatter-vs-body contract drift in the current `release-engineer.md` file. FR-1.1's behavior depends on the resolution: if `Bash` is already in the frontmatter, FR-1.1 is a documentation-accuracy edit to the prompt body; if `Bash` is absent, FR-1.1 adds it. Either path satisfies the FR contract — see Open Question #1 below.
 - `src/agents/release-engineer.md:67-84` enumerates the 13-line NEVER List inside a fenced code block — verified by Read in this session. The list contains: `git push`, `git push origin <anything>`, `git push origin v<anything>`, `git tag`, `git tag -a vX.Y.Z`, `git tag -a vX.Y.Z -F .claude/release-notes-X.Y.Z.md`, `gh release create`, `gh release create vX.Y.Z`, `npm publish`, `yarn publish`, `pnpm publish`, `cargo publish`, `pypi upload`, `twine upload`, `poetry publish`, `gem push`.
 - `src/agents/resource-architect.md:185-260` defines the four-tier authority gradation (Trivial / Moderate / Sensitive / Forbidden), the most-restrictive-applicable-tier rule (line 222), the 18-row classification decision table (lines 201-220), the 7th-field `Tier:` requirement (line 224-228), and the Forbidden-tier canonical handling (lines 248-256) — verified by `grep -n "Trivial\|Moderate\|Sensitive\|Forbidden\|Tier" src/agents/resource-architect.md` in this session.
 - `templates/rules/changelog.md:37-39` documents the activation sentinel rule: "the presence of this file at `.claude/rules/changelog.md` is the sole signal the `changelog-writer` agent uses to decide whether to run; absence equals opt-out" — verified by Read of the entire 43-line file in this session.
-- `.github/workflows/sdlc-knowledge-release.yml:13-16` triggers on `tags: 'sdlc-knowledge-v*'`; lines 64-75 declare the four-platform matrix (`darwin-arm64`/`macos-14`, `darwin-x64`/`macos-13`, `linux-x64`/`ubuntu-latest`, `linux-arm64`/`ubuntu-22.04-arm`); line 202 uses `softprops/action-gh-release@v2`; lines 208-213 list the four binary `files:` paths — verified by Read of the entire 213-line file in this session.
-- `.github/workflows/sdlc-knowledge-release.yml:91-101` `Determine pdfium asset name` step has FOUR case branches matching the four matrix platforms; this is the precedent shape FR-3.2 extends with a fifth Windows branch — verified by Read in this session.
-- `.github/workflows/sdlc-knowledge-release.yml:103-116` `Download pdfium dynamic library` step uses `shell: bash`, `curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120`, `tar --no-same-owner --no-same-permissions -xzf`, and `find ... -name 'libpdfium*' -type f -exec cp {} ...` — the same shape FR-3.3 widens for Windows DLL naming — verified by Read in this session.
+- `.github/workflows/claudebase-release.yml:13-16` triggers on `tags: 'claudebase-v*'`; lines 64-75 declare the four-platform matrix (`darwin-arm64`/`macos-14`, `darwin-x64`/`macos-13`, `linux-x64`/`ubuntu-latest`, `linux-arm64`/`ubuntu-22.04-arm`); line 202 uses `softprops/action-gh-release@v2`; lines 208-213 list the four binary `files:` paths — verified by Read of the entire 213-line file in this session.
+- `.github/workflows/claudebase-release.yml:91-101` `Determine pdfium asset name` step has FOUR case branches matching the four matrix platforms; this is the precedent shape FR-3.2 extends with a fifth Windows branch — verified by Read in this session.
+- `.github/workflows/claudebase-release.yml:103-116` `Download pdfium dynamic library` step uses `shell: bash`, `curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120`, `tar --no-same-owner --no-same-permissions -xzf`, and `find ... -name 'libpdfium*' -type f -exec cp {} ...` — the same shape FR-3.3 widens for Windows DLL naming — verified by Read in this session.
 - The repo's actual GitHub remote is `codefather-labs/claude-code-sdlc.git` per the user task and the gitStatus environment context; the install.sh value `Koroqe/claude-code-sdlc.git` is incorrect — verified by reconciling the user task description against `install.sh:25`.
-- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `sdlc-knowledge status --json` in this session.
-- Knowledge-base contains BOTH English and Russian content: live probes returned `the` matching `Building AI Agents With LLMs RAG And Knowledge Graphs.pdf` and `Hands-On Machine Learning with Pytorch.pdf` (both English); `не` matching `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf` (both Russian) — verified via `sdlc-knowledge search "the" --top-k 2 --json` and `sdlc-knowledge search "не" --top-k 2 --json` in this session.
+- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `claudebase status --json` in this session.
+- Knowledge-base contains BOTH English and Russian content: live probes returned `the` matching `Building AI Agents With LLMs RAG And Knowledge Graphs.pdf` and `Hands-On Machine Learning with Pytorch.pdf` (both English); `не` matching `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf` (both Russian) — verified via `claudebase search "the" --top-k 2 --json` and `claudebase search "не" --top-k 2 --json` in this session.
 
 ### External contracts
 
-- **`softprops/action-gh-release@v2` GitHub Action** — symbol: `inputs.tag_name`, `inputs.name`, `inputs.body_path`, `inputs.files`, `inputs.draft`, `inputs.prerelease`, `inputs.fail_on_unmatched_files` — source: `.github/workflows/sdlc-knowledge-release.yml:201-213` (consumed in this repo by the §11 / §12 release workflow) — verified: yes (the input shape is observed in the existing workflow file). Risk: action upgrade `@v2 → @v3` could change the `inputs.body_path` semantics; iter-3 pins `@v2` per FR-2.3 / FR-11.2 unchanged from §11.
+- **`softprops/action-gh-release@v2` GitHub Action** — symbol: `inputs.tag_name`, `inputs.name`, `inputs.body_path`, `inputs.files`, `inputs.draft`, `inputs.prerelease`, `inputs.fail_on_unmatched_files` — source: `.github/workflows/claudebase-release.yml:201-213` (consumed in this repo by the §11 / §12 release workflow) — verified: yes (the input shape is observed in the existing workflow file). Risk: action upgrade `@v2 → @v3` could change the `inputs.body_path` semantics; iter-3 pins `@v2` per FR-2.3 / FR-11.2 unchanged from §11.
 - **GitHub Actions runner image `windows-latest`** — symbol: runner-label string used in `runs-on:` field; preinstalls Visual Studio 2022 Build Tools (`cl.exe`), Git for Windows (`git`, `bash`), `curl`, `tar`, `find` — source: GitHub Actions docs (NOT opened in this session) — verified: **no — assumption**. Risk: the `windows-latest` runner image's preinstalled tooling could change between GitHub-managed runner-image releases. Verification path: architect Step 3 verifies the runner image's tooling version against the GitHub-managed-runner-images repo before Slice 4 ships; Slice 4 done-condition includes a Windows matrix run that exercises `cargo build --target x86_64-pc-windows-msvc` AND the bash-shell tar/curl/find pipeline.
 - **Cargo cross-compile target `x86_64-pc-windows-msvc`** — symbol: rustup target name; requires MSVC linker (`link.exe`); produces `.exe` suffix on output binaries — source: rustup docs (NOT opened in this session) — verified: **no — assumption**. Risk: target name precision (`x86_64-pc-windows-msvc` vs `x86_64-pc-windows-gnu`); the MSVC variant is correct for `windows-latest` per industry convention. Verification path: architect Step 3 confirms `dtolnay/rust-toolchain@stable` accepts the target; Slice 4 first matrix run verifies on the actual GH runner.
 - **`bblanchon/pdfium-binaries` Windows asset filename `pdfium-win-x64.tgz`** — symbol: asset filename in GitHub Releases for the `chromium/<version>` tag scheme — source: §12 PRD assumption (`pdfium-mac-arm64.tgz`, `pdfium-mac-x64.tgz`, `pdfium-linux-x64.tgz`, `pdfium-linux-arm64.tgz` are confirmed; the Windows asset name is extrapolated by pattern) — verified: **no — assumption**. Risk: the actual asset name could be `pdfium-windows-x64.tgz` or `pdfium-win-x64.zip` — the upstream project ships ZIPs for Windows in some releases. Verification path: architect Step 3 opens the `bblanchon/pdfium-binaries` releases page for the pinned `chromium/7802` tag and pins the exact asset filename before Slice 4 ships.
-- **Windows DLL naming convention `pdfium.dll` (no `lib` prefix)** — symbol: filename of the dynamic library on Windows; differs from `libpdfium.dylib` (macOS) and `libpdfium.so` (Linux) — source: Windows PE convention; `bblanchon/pdfium-binaries` releases — verified: **no — assumption**. Risk: the find-glob in `sdlc-knowledge-release.yml:115` searches `libpdfium*` which may MISS the Windows `pdfium.dll`; FR-3.3 explicitly widens the glob. Verification path: Slice 4 first Windows matrix run logs the post-extract directory listing; the architect inspects to confirm the filename.
+- **Windows DLL naming convention `pdfium.dll` (no `lib` prefix)** — symbol: filename of the dynamic library on Windows; differs from `libpdfium.dylib` (macOS) and `libpdfium.so` (Linux) — source: Windows PE convention; `bblanchon/pdfium-binaries` releases — verified: **no — assumption**. Risk: the find-glob in `claudebase-release.yml:115` searches `libpdfium*` which may MISS the Windows `pdfium.dll`; FR-3.3 explicitly widens the glob. Verification path: Slice 4 first Windows matrix run logs the post-extract directory listing; the architect inspects to confirm the filename.
 - **`uname -s` shape on Git Bash for Windows runners** — symbol: typically `MINGW64_NT-10.0-22631` or similar; the `case` pattern in `install.sh:354-363` matches by exact string per the existing four-platform allowlist — source: Git for Windows documentation (NOT opened in this session) — verified: **no — assumption**. Risk: the actual `uname -ms` shape on the `windows-latest` runner under Git Bash could differ from the FR-4.1 assumption. Verification path: architect Step 3 runs `uname -ms` on a Windows runner; Slice 4 done-condition includes `bash install.sh --yes` on the runner asserting the case branch matches.
 - **`git tag -a -F <file>` UTF-8 byte-preservation** — symbol: `git-tag(1)` `-F <file>` flag; the message file is read verbatim as UTF-8 bytes — source: git-tag manpage (NOT opened in this session) — verified: **no — assumption**, but well-documented industry contract. Risk: locale-dependent re-encoding on rare systems. Verification path: AC-12 multilingual round-trip test exercises Cyrillic content end-to-end.
-- **GitHub Actions tag-filter glob semantics** — symbol: `on.push.tags` accepts glob patterns where `*` matches any character sequence; `sdlc-knowledge-v*` is a literal-prefix glob that does NOT match plain `v*` — source: GitHub Actions workflow syntax docs (NOT opened in this session) — verified: **no — assumption**, but heavily relied on by the iter-1 release workflow at `sdlc-knowledge-release.yml:13-16`. Risk: tag-filter cross-firing between the two workflows. Verification path: FR-11.4 documents the disjointness; Slice 8 first dual-tag run verifies disjoint firing.
+- **GitHub Actions tag-filter glob semantics** — symbol: `on.push.tags` accepts glob patterns where `*` matches any character sequence; `claudebase-v*` is a literal-prefix glob that does NOT match plain `v*` — source: GitHub Actions workflow syntax docs (NOT opened in this session) — verified: **no — assumption**, but heavily relied on by the iter-1 release workflow at `claudebase-release.yml:13-16`. Risk: tag-filter cross-firing between the two workflows. Verification path: FR-11.4 documents the disjointness; Slice 8 first dual-tag run verifies disjoint firing.
 - **`git archive --format=tar.gz --prefix=<name>/ -o <file> HEAD`** — symbol: `git-archive(1)` flags producing a deterministic source tarball — source: git docs (NOT opened in this session) — verified: **no — assumption**, but standard git plumbing. Risk: low. Verification path: Slice 4 done-condition includes the tarball production and `tar -tzf` listing.
-- **`knowledge-base` CLI for §13 authoring** — symbol: `sdlc-knowledge status --json`, `sdlc-knowledge list --json`, `sdlc-knowledge search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes. Multilingual-mandate compliance: status returned 28 docs / 51542 chunks; English probe `the` returned hits in `Building AI Agents With LLMs RAG.pdf` and `Hands-On Machine Learning with Pytorch.pdf`; Russian probe `не` returned hits in `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf`; English topical probes `release engineering tag push`, `GitHub Actions release workflow`, `semver versioning`, `git tag annotated signed`, `release rollback regression` returned ZERO hits each (corpus is ML/AI + RU SE/SRE/Chaos books, not release-engineering literature); English topical probes `continuous deployment` and `blue green canary` returned hits in `Practical MLOps_ Operationalizing Machine Learning Models.pdf` (chunks 921, 131, 534, 1872, 1875, 1865) and `dokumen_pub_building_applications_with_ai_agents_designing_and_implementing.pdf` (chunks 9186, 9181); Russian topical probes `релиз тегирование`, `выпуск версий релиз`, `канареечный релиз`, `канареечное развертывание`, `развертывание production`, `откат релиза версия`, `версионирование система` returned ZERO hits each; Russian probes `автоматизация развертывания` and `непрерывная интеграция` returned hits in `Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf` (chunks 9962, 11012, 9906) and `841031560_Современная_программная_инженерия_2023.pdf` (chunks 46287, 46286, 45676, 45687, 45529) and `dokumen.pub_9785446114610-9781492054788.pdf` (chunk 16841). Two load-bearing citations follow because they specifically informed the FR-1 / R-8 design (canary/blue-green as deployment-strategy precedent and reversibility/CI-CD as the underlying release-safety pattern):
+- **`knowledge-base` CLI for §13 authoring** — symbol: `claudebase status --json`, `claudebase list --json`, `claudebase search "<query>" --top-k 5 --json` — source: live invocation in this session per the knowledge-base mandate — verified: yes. Multilingual-mandate compliance: status returned 28 docs / 51542 chunks; English probe `the` returned hits in `Building AI Agents With LLMs RAG.pdf` and `Hands-On Machine Learning with Pytorch.pdf`; Russian probe `не` returned hits in `dokumen.pub_9785446114610-9781492054788.pdf` and `841031560_Современная_программная_инженерия_2023.pdf`; English topical probes `release engineering tag push`, `GitHub Actions release workflow`, `semver versioning`, `git tag annotated signed`, `release rollback regression` returned ZERO hits each (corpus is ML/AI + RU SE/SRE/Chaos books, not release-engineering literature); English topical probes `continuous deployment` and `blue green canary` returned hits in `Practical MLOps_ Operationalizing Machine Learning Models.pdf` (chunks 921, 131, 534, 1872, 1875, 1865) and `dokumen_pub_building_applications_with_ai_agents_designing_and_implementing.pdf` (chunks 9186, 9181); Russian topical probes `релиз тегирование`, `выпуск версий релиз`, `канареечный релиз`, `канареечное развертывание`, `развертывание production`, `откат релиза версия`, `версионирование система` returned ZERO hits each; Russian probes `автоматизация развертывания` and `непрерывная интеграция` returned hits in `Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf` (chunks 9962, 11012, 9906) and `841031560_Современная_программная_инженерия_2023.pdf` (chunks 46287, 46286, 45676, 45687, 45529) and `dokumen.pub_9785446114610-9781492054788.pdf` (chunk 16841). Two load-bearing citations follow because they specifically informed the FR-1 / R-8 design (canary/blue-green as deployment-strategy precedent and reversibility/CI-CD as the underlying release-safety pattern):
 - knowledge-base: Practical MLOps_ Operationalizing Machine Learning Models.pdf:534 — query: "blue green canary" — BM25: 23.402437612783395 — verified: yes
 - knowledge-base: Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf:9906 — query: "непрерывная интеграция" — BM25: 17.24736581105278 — verified: yes
 
@@ -3442,8 +3442,8 @@ Not applicable. This project is a collection of markdown agent prompts, a Rust C
 - **The four-tier authority gradation lifted from `resource-architect.md` is a clean fit for release operations.** Risk: the `resource-architect` tier table targets dependency / MCP / cloud-credential operations; release operations (`git tag`, `git push`, `gh release`) have different blast-radii. The most-restrictive-applicable-tier rule is the same; the ROW SET differs. How to verify: architect Step 3 reviews the FR-1.2 12-row table against `resource-architect.md:201-220` 18-row table and reconciles classification logic before Slice 1 ships.
 - **`AUTO_RELEASE=1` is the right env-var name (not `RELEASE_HEADLESS=1` or `CI_RELEASE=1`).** Risk: low — the name is local to this section and consistent with §7 FR-5.5's `AUTO_INSTALL=1` (assumed; confirm). How to verify: architect Step 3 grep-confirms the §7 env-var name and aligns FR-1.4 accordingly.
 - **The bootstrap one-shot `bash install.sh --bootstrap-release 0.2.0` is acceptable as a dedicated install.sh code path rather than a separate script (`bootstrap_release.sh`).** Risk: install.sh becomes a kitchen-sink utility. How to verify: architect Step 3 picks one approach with cited rationale; FR-6 documents the choice.
-- **Pre-existing `install.sh` cleanup of `Koroqe` is contained — no other scripts in the repo hardcode the value.** Risk: the README, `tools/sdlc-knowledge/RELEASING.md`, or hidden CI files could reference the old owner. How to verify: FR-5.3 mandates `grep -r 'Koroqe' .` returning zero matches before Slice 5 done-condition.
-- **The Windows pdfium dynamic library (`pdfium.dll`) is loadable by `pdfium-render` v0.9 from `~/.claude/tools/sdlc-knowledge/pdfium/lib/pdfium.dll` via `Pdfium::bind_to_system_library` plus `PATH` manipulation.** Risk: Windows uses `PATH` for DLL lookup, not `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; the `pdfium-render` resolver may need a different invocation on Windows. How to verify: §12 Open Question #1 carries forward — architect Step 3 selects `bind_to_library(path: &Path)` with the explicit Windows path if the system-library variant fails on Windows.
+- **Pre-existing `install.sh` cleanup of `Koroqe` is contained — no other scripts in the repo hardcode the value.** Risk: the README, `claudebase/RELEASING.md`, or hidden CI files could reference the old owner. How to verify: FR-5.3 mandates `grep -r 'Koroqe' .` returning zero matches before Slice 5 done-condition.
+- **The Windows pdfium dynamic library (`pdfium.dll`) is loadable by `pdfium-render` v0.9 from `~/.claude/claudebase/pdfium/lib/pdfium.dll` via `Pdfium::bind_to_system_library` plus `PATH` manipulation.** Risk: Windows uses `PATH` for DLL lookup, not `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; the `pdfium-render` resolver may need a different invocation on Windows. How to verify: §12 Open Question #1 carries forward — architect Step 3 selects `bind_to_library(path: &Path)` with the explicit Windows path if the system-library variant fails on Windows.
 - **The `templates/` invariant relaxation (FR-12.5) does not break any downstream consumer that grep's the templates dir for a fixed file count.** Risk: a downstream project's pre-existing CI step `[ "$(ls templates/ | wc -l)" -eq 4 ]` would fail. How to verify: not load-bearing — `templates/` is a one-way scaffold; downstream consumers do not import the templates programmatically.
 - **The CHANGELOG `[3.0.0]` body for the SDLC core's first release is authored manually in the bootstrap step.** Risk: a hand-authored stub may drift from the FR-1 through FR-12 list. How to verify: AC-10 verifies presence and date-stamp; the body content is checked manually by the maintainer at Slice 9 done-condition.
 
@@ -3592,7 +3592,7 @@ Not applicable. This project is a collection of markdown prompt files with no gr
 - The `templates/` directory contains `CLAUDE.md`, `scratchpad.md`, `settings.json`, `hooks/`, `knowledge/`, `rules/` only — no `commands/` or `agents/` subdirectories. Therefore no template counterparts exist for any of the four affected files. Verified: yes (directory listing in this session).
 - `src/agents/planner.md` is listed in `ls src/agents/` output — verified by directory listing in this session.
 - `src/commands/bootstrap-feature.md` is listed in `ls src/commands/` output — verified by directory listing in this session.
-- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `claudeknows status --json` in this session.
+- Knowledge-base status at task start: `doc_count: 28`, `chunk_count: 51542`, `db_path: /Users/aleksandra/Documents/claude-code-sdlc/.claude/knowledge/index.db` — verified via `claudebase status --json` in this session.
 - Knowledge-base language detection: English (probes in §13 Facts confirmed `the` hits English titles) and Russian (`не` hits Russian titles). Corpus contains ML/AI, data engineering, SRE/chaos engineering, and software engineering books — no meta-SDLC pipeline, plan-mode, or Claude Code agent orchestration content. Verified: yes (list output and prior §13 language probes in this session).
 - Corpus scope relevance: **No overlap**. Observed corpus domain: ML/AI, data engineering, SRE, software engineering (generic). Task domain: meta-SDLC agent orchestration, Claude Code plan-mode persistence, markdown prompt engineering. No topical queries were run; the title list is sufficient evidence per the corpus-scope-relevance protocol.
 
@@ -3617,259 +3617,13 @@ Not applicable. This project is a collection of markdown prompt files with no gr
 
 ---
 
-## §15. Vector + Multimodal Retrieval Backend
+## §15. Vector + Multimodal Retrieval Backend (extracted)
 
-**Status:** [IN DEVELOPMENT]
-**Date:** 2026-05-09
-**Priority:** High
-**Related:** §11 (pdfium-render PDF extraction — Docling replaces pdfium as primary parser, pdfium kept as fallback). §12 (schema v1 FTS5 store — schema bumped to v2 with `chunks_vec` virtual table, amendments documented in §15.9). §14 (plan auto-persist — the user-approved plan at `.claude/plan.md` is the authoritative source for this section).
+**Status:** Extracted to standalone repo on 2026-05-10.
 
-Changelog: The knowledge-base search tool now understands your queries semantically — matching concepts and cross-lingual paraphrases rather than exact keywords — and can also find text embedded in figures and diagrams extracted from PDFs.
+The hybrid lexical+dense+RRF retrieval engine and multimodal OCR pipeline are now distributed via this repos installer as a binary download. Source code, full PRD, architecture decisions (including the *How vector search works end-to-end* walkthrough), benchmark numbers (+75% Recall@5 over lexical baseline on the 12-query golden set), use cases, and QA test cases all live at:
 
-### 15.1 Feature Description
+**https://github.com/codefather-labs/claudebase**
 
-The `claudeknows` retrieval backend shipped in 0.3.x uses BM25-only lexical search via SQLite FTS5 with a naïve 500-character sliding-window chunker and pdfium-text-only PDF extraction. This produces three concrete user-facing limitations on the existing 51 K-chunk multilingual corpus: (1) a Russian query never matches an English chunk that covers the same concept, because the FTS5 `unicode61` tokenizer is purely lexical; (2) tables flatten poorly, headings do not influence chunking, and figures are dropped entirely, so retrieval misses content BM25 can never see; (3) paraphrases ("how do I authenticate" vs. "JWT validation") do not match. This feature replaces the BM25-only backend with a **hybrid lexical + dense retrieval layer** (BM25 ⊕ K-NN dense via Reciprocal Rank Fusion k=60), **structurally-aware document parsing** via Docling (IBM, Apache-2.0) with pdfium fallback, and **OCR-based multimodal embeddings** so figures from PDFs are searchable through unified cosine similarity in the same 384-dimensional `intfloat/multilingual-e5-small` embedding space as text and tables. A benchmark harness ships alongside the new backend and quantifies Recall@K, MRR, NDCG@10, and latency across all three search modes against a 25-query golden set grounded in the user's multilingual corpus.
-
-### 15.2 User Story
-
-As a developer using the SDLC pipeline with a curated multilingual knowledge base, I want hybrid lexical + dense retrieval with multimodal awareness so that cross-lingual queries, paraphrase-style queries, and queries whose answers live inside figures and diagrams all return relevant chunks — not just queries whose exact keywords appear in text.
-
-### 15.3 Functional Requirements
-
-#### FR-VR-1: Structurally-Aware Document Parser (Docling integration — Slice 3)
-
-1. **FR-VR-1.1:** The ingest path MUST attempt Docling as the primary PDF backend when Docling model files are present at `~/.claude/tools/sdlc-knowledge/models/docling/`. On Docling error or absent models, the path MUST fall back to pdfium and log a warning.
-2. **FR-VR-1.2:** Docling output (Markdown + figure list) MUST feed the structural chunker (FR-VR-2) so that section hierarchy is preserved in chunk metadata.
-3. **FR-VR-1.3:** The fallback to pdfium MUST produce non-empty output for any PDF that pdfium can extract; the fallback MUST be tested by a fixture `sample-structured.pdf` ingested with Docling models absent.
-4. **FR-VR-1.4:** **Pragmatic fallback (OQ-1):** If the architect pre-review (Slice 3) determines Docling is not feasible in a zero-Python Rust binary, Slice 3 de-scopes to "structural chunker over pdfium output" and Docling is deferred to v2. This de-scope is permissible without violating this PRD section — FR-VR-2 (structural chunker) still ships regardless of whether the parser is Docling or pdfium.
-
-#### FR-VR-2: Heading-Aware Structural Chunker (Slice 1)
-
-1. **FR-VR-2.1:** A new `chunker::structural_chunk()` function MUST parse Markdown and plain-text input for `^#{1,6}\s+` heading patterns and "Chapter/Section N" markers, chunking on heading boundaries with a soft cap of 1 500 characters and 200-character overlap.
-2. **FR-VR-2.2:** When no headings are detected, `structural_chunk()` MUST fall back to the current 500-character sliding-window output (backward-compatible — existing regression tests pass unchanged).
-3. **FR-VR-2.3:** The existing `ingest::chunk()` at `src/ingest.rs:71` MUST be replaced with a thin call to `chunker::structural_chunk()`.
-4. **FR-VR-2.4:** A fixture `sample-with-headings.md` containing exactly three headings MUST yield exactly three chunks each starting with its heading line; a fixture `sample-no-headings.md` MUST yield the same chunk count as the iter-1 baseline.
-
-#### FR-VR-3: Schema v2 — Vector Table, Image BLOB Column, Migration UX (Slice 2)
-
-1. **FR-VR-3.1:** The `sqlite-vec` extension MUST be linked at connection-open time. A new virtual table `CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384])` MUST be created in the same `index.db` file as the FTS5 table — preserving the single-file invariant (NFR-VR-4).
-2. **FR-VR-3.2:** Two new columns MUST be added to the `chunks` table: `type TEXT NOT NULL DEFAULT 'text'` (allowed values: `'text'`, `'table'`, `'image'`) and `image_bytes BLOB NULL` (populated only for `type='image'` chunks).
-3. **FR-VR-3.3:** The schema version MUST be bumped from 1 to 2. `claudeknows status --json` on a fresh v2 database MUST return `"schema_version": 2`.
-4. **FR-VR-3.4:** When the v2 binary opens a v1 index, it MUST detect the version mismatch and: (a) if a TTY is attached, prompt "Re-ingest required for v2 schema. Proceed? [y/N]"; (b) if `CLAUDEKNOWS_AUTO_REINGEST=1` is set, skip the prompt; (c) on user refusal, exit 0 with a hint message; (d) on acceptance or env-var, drop and recreate the schema, then exit 0 with a hint to re-run `ingest`.
-5. **FR-VR-3.5:** A truncated or corrupt v1 database MUST honor the iter-1 AC-7 contract: exit 1 with the literal message `error: index database invalid; re-ingest required`.
-
-#### FR-VR-4: Text Encoder + Ingest-Time Embedding (Slice 5)
-
-1. **FR-VR-4.1:** An `Encoder` singleton (mutex-guarded, lazy-loaded) MUST load the `intfloat/multilingual-e5-small` ONNX model from `~/.claude/tools/sdlc-knowledge/models/e5-small/`.
-2. **FR-VR-4.2:** Two public methods MUST be provided: `encode_passages(&[&str]) -> Vec<Vec<f32>>` which prepends `"passage: "` to each input, and `encode_query(&str) -> Vec<f32>` which prepends `"query: "` to the input. The e5 prefix discipline MUST be enforced and covered by dedicated tests (`encoder_prefix_test.rs`).
-3. **FR-VR-4.3:** Ingest MUST batch chunks at `batch_size=32` and write 384-dimensional float vectors to `chunks_vec`. After a complete ingest, the row count in `chunks_vec` MUST equal the row count in `chunks`.
-4. **FR-VR-4.4:** When model files are absent, the encoder MUST initialize in degraded mode that returns `Err` on every encode call. Ingest MUST catch this and fall back to BM25-only indexing. `claudeknows status --json` MUST report `"degraded": "encoder model missing"` in degraded mode.
-5. **FR-VR-4.5:** On a 2024 MacBook M1 (reference machine): encoder cold-start MUST be below 3 seconds; hot-path batch of 32 chunks MUST complete below 50 ms.
-
-#### FR-VR-5: OCR Bridge for Image Chunks (Slice 6)
-
-1. **FR-VR-5.1:** For each `type='image'` chunk containing a non-NULL `image_bytes` BLOB, the ingest pipeline MUST load the PNG bytes, run the OCR model (PaddleOCR det+rec via `ort`, or architect-selected alternative per OQ-3), and set `chunk.text` to the OCR'd text.
-2. **FR-VR-5.2:** If OCR returns empty output (non-textual diagram), `chunk.text` MUST be set to the placeholder `[image: figure N from <doc-basename>]`.
-3. **FR-VR-5.3:** Each image chunk's text (OCR'd or placeholder) MUST be encoded via the Slice 5 encoder and written to `chunks_vec`, making image chunks part of the unified 384-dim e5 search space.
-4. **FR-VR-5.4:** A fixture `diagram-with-text.png` containing the literal text "Authentication Service" MUST yield a cosine similarity above 0.5 between the query `"auth service architecture"` (encoded via `encode_query`) and the corresponding stored embedding.
-5. **FR-VR-5.5:** When OCR model files are absent, all `type='image'` chunks MUST receive placeholder text with a warning logged; ingest MUST continue without hard failure.
-
-#### FR-VR-6: Hybrid Search — Three Modes with RRF (Slice 7)
-
-1. **FR-VR-6.1:** A `dense_search(query, top_k)` function MUST encode the query via `encode_query()`, run K-NN over `chunks_vec` using the sqlite-vec distance function, and return the top-K results.
-2. **FR-VR-6.2:** A `hybrid_search(query, top_k)` function MUST run BM25 top-(K×4) and dense top-(K×4) in parallel, merge results via Reciprocal Rank Fusion with k=60 per the formula `score(d) = Σ_i 1/(60 + rank_i(d))`, and return the top-K results.
-3. **FR-VR-6.3:** The CLI `--mode` flag MUST accept values `lexical`, `dense`, and `hybrid`. The default MUST be `hybrid`.
-4. **FR-VR-6.4:** JSON output from all three modes MUST be extended with fields `mode_used`, `bm25_score`, `dense_score`, and `rrf_score`.
-5. **FR-VR-6.5:** RRF correctness MUST be covered by a unit test (`rrf_test.rs`) providing three known input rankings and verifying the output matches the expected merged ranking exactly.
-6. **FR-VR-6.6:** When dense mode is requested but the encoder model is absent, the CLI MUST exit 1 with the message `"encoder model missing"`. When hybrid mode is requested with no encoder model, the CLI MUST fall back to lexical mode with a warning printed to stderr.
-7. **FR-VR-6.7:** On a 2024 MacBook M1 reference machine, hybrid p95 latency over a fixed sequence of 30 queries against the 51 K-chunk corpus MUST be below 500 ms.
-
-#### FR-VR-7: Benchmark Harness + Report (Slices 9 and 10)
-
-1. **FR-VR-7.1:** A standalone binary `claudeknows-bench` (declared as `[[bin]]` in `Cargo.toml`) MUST accept `--queries <path>` and `--modes <comma-list>` flags and produce a Markdown benchmark report.
-2. **FR-VR-7.2:** The golden query set at `tools/sdlc-knowledge/bench/golden/queries.jsonl` MUST contain at least 25 manually-curated queries with fields: `id`, `query`, `lang` (values `ru`, `en`, or `cross`), `relevant_chunk_ids`, `relevant_docs`, and `category` (values `keyword`, `nl`, `cross`, or `paraphrase`).
-3. **FR-VR-7.3:** The benchmark MUST compute and report for each mode: Recall@1, Recall@3, Recall@5, Recall@10, Precision@5, MRR (mean reciprocal rank, 1/rank of first relevant result), NDCG@10, per-document recall (fraction of relevant documents hit), and latency p50/p95.
-4. **FR-VR-7.4:** The committed benchmark report at `tools/sdlc-knowledge/bench/reports/2026-05-09-vector-vs-bm25.md` MUST include: methodology, dataset description, query categorization, metric tables per mode, latency, top-10 qualitative side-by-side samples for 5–10 representative queries, failure-mode taxonomy, and recommendations.
-5. **FR-VR-7.5:** Per-language metric stratification is **out of scope** per OQ-4 resolution — the report includes overall metrics plus qualitative side-by-side samples only.
-
-#### FR-VR-8: Install Scripts, Model Bundles, and Rule Updates (Slice 11)
-
-1. **FR-VR-8.1:** `install.sh` and `install.ps1` MUST add `install_e5_model`, `install_paddleocr_models`, and `install_docling_models` functions following the existing `install_pdfium_binary` pattern. Total model footprint at install time is approximately 200 MB.
-2. **FR-VR-8.2:** After fresh install, the following directories MUST exist: `~/.claude/tools/sdlc-knowledge/models/e5-small/`, `~/.claude/tools/sdlc-knowledge/models/paddleocr/`, and `~/.claude/tools/sdlc-knowledge/models/docling/`.
-3. **FR-VR-8.3:** `src/rules/knowledge-base-tool.md` MUST have the assertion "**NOT a vector database. No embeddings, no semantic similarity.**" removed and replaced with a description of the three search modes and hybrid retrieval.
-4. **FR-VR-8.4:** `src/rules/knowledge-base.md` MUST be updated to reference three search modes, hybrid retrieval, image chunks, and schema v2.
-5. **FR-VR-8.5:** `README.md` MUST gain a "Vector + Multimodal Retrieval" subsection in the Hardening table referencing the benchmark report.
-
-### 15.4 Non-Functional Requirements
-
-1. **NFR-VR-1:** The `claudeknows` binary itself MUST remain below 10 MB. If static-linking `ort` or `sqlite-vec` would breach this limit, those libraries MUST be shipped as dynamic loads following the pdfium pattern. (Risk R9 — architect pre-review at Slice 5 validates.)
-2. **NFR-VR-2:** Hybrid search p95 latency MUST be below 500 ms on a 2024 MacBook M1 over the user's 51 K-chunk corpus (same reference machine used for encoder latency in FR-VR-4.5).
-3. **NFR-VR-3:** Full re-ingest of approximately 40 PDFs (the user's books corpus) MUST complete within 15 minutes on CPU (M1/M2 MacBook). Wall-clock time is captured and documented in Slice 8.
-4. **NFR-VR-4 (Single-file invariant — amends §11 NFR-1.5):** The `index.db` SQLite file remains the sole persistent artifact of the knowledge base. Image PNG bytes are stored as `chunks.image_bytes BLOB` INSIDE `index.db`. The `chunks_vec` virtual table is INSIDE `index.db`. No co-located figure files or vector store files outside the database.
-5. **NFR-VR-5:** Zero Python dependencies. All ML inference runs via `ort` (Rust ONNX Runtime). If Docling requires Python orchestration and no feasible Rust integration exists, Docling is deferred to v2 (FR-VR-1.4 fallback) — the zero-Python constraint is non-negotiable.
-6. **NFR-VR-6:** Model footprint at install time MUST not exceed approximately 200 MB total (e5-small ~120 MB + PaddleOCR ~30 MB + Docling models ~50 MB). Binary size is excluded from this budget.
-7. **NFR-VR-7:** All changes are Rust source files, test fixtures, install scripts, and Markdown documentation. No agent prompt files are modified by this feature.
-8. **NFR-VR-8:** Backward compatibility for BM25-only mode: `claudeknows search "<query>" --mode lexical` MUST work even when all model files are absent, providing identical behavior to the iter-1 baseline.
-
-### 15.5 Acceptance Criteria
-
-Each criterion is bash-runnable or grep-verifiable by a test runner or human reviewer:
-
-1. **AC-VR-1 (Schema v2):** `claudeknows status --json | jq '.schema_version'` returns `2` on a fresh post-install database.
-2. **AC-VR-2 (Search modes — lexical):** `claudeknows search "authentication architecture" --mode lexical --json | jq '.[0].mode_used'` returns `"lexical"`.
-3. **AC-VR-3 (Search modes — dense):** `claudeknows search "authentication architecture" --mode dense --json | jq '.[0].mode_used'` returns `"dense"`.
-4. **AC-VR-4 (Search modes — hybrid):** `claudeknows search "authentication architecture" --mode hybrid --json | jq '.[0].mode_used'` returns `"hybrid"`.
-5. **AC-VR-5 (Default mode is hybrid):** `claudeknows search "authentication architecture" --json | jq '.[0].mode_used'` returns `"hybrid"` (no `--mode` flag supplied).
-6. **AC-VR-6 (RRF correctness):** `cargo test --test rrf_test -p sdlc-knowledge` exits 0.
-7. **AC-VR-7 (Image chunks searchable):** After re-ingesting the books corpus, `claudeknows search "figure diagram" --mode dense --json | jq '[.[] | select(.type=="image")] | length'` returns a value greater than 0.
-8. **AC-VR-8 (Benchmark report exists):** `test -f tools/sdlc-knowledge/bench/reports/2026-05-09-vector-vs-bm25.md && echo EXISTS` prints `EXISTS`.
-9. **AC-VR-9 (Rule updated — no stale assertion):** `grep -rF "NOT a vector database" ~/.claude/rules/` returns zero matches after a fresh `bash install.sh --yes`.
-10. **AC-VR-10 (Rule updated — hybrid present):** `grep -E "hybrid|RRF|sqlite-vec" ~/.claude/rules/knowledge-base.md | wc -l` returns a count greater than or equal to 1.
-11. **AC-VR-11 (Structural chunker — headings):** `cargo test --test chunker_test -p sdlc-knowledge` exits 0; the fixture with three headings yields exactly three chunks.
-12. **AC-VR-12 (Migration UX — corrupt v1 DB):** Placing a truncated v1 fixture `index.db` in a temp dir and running `claudeknows status --json --project-root <tmpdir>` exits 1 and stdout/stderr contains the substring `index database invalid`.
-13. **AC-VR-13 (Migration UX — headless):** With `CLAUDEKNOWS_AUTO_REINGEST=1` and a v1 fixture DB, running any `claudeknows` command exits 0 without prompting.
-14. **AC-VR-14 (Model-missing degraded mode):** With model files removed, `claudeknows search "anything" --mode dense` exits 1 with the substring `encoder model missing`; `claudeknows search "anything" --mode lexical` exits 0.
-15. **AC-VR-15 (Image BLOB integrity):** `cargo test --test image_extraction_test -p sdlc-knowledge` exits 0 and the test asserts that `image_bytes` decodes to a valid PNG via `image::load_from_memory`.
-16. **AC-VR-16 (e5 prefix discipline):** `cargo test --test encoder_prefix_test -p sdlc-knowledge` exits 0; the test asserts every passage input starts with `"passage: "` and every query input starts with `"query: "`.
-17. **AC-VR-17 (chunks_vec parity):** After a full ingest, `SELECT COUNT(*) FROM chunks` equals `SELECT COUNT(*) FROM chunks_vec` (verifiable via sqlite3 CLI on `index.db`).
-
-### 15.6 Affected Files
-
-**New files [NEW]:**
-- `tools/sdlc-knowledge/src/chunker.rs` [NEW]
-- `tools/sdlc-knowledge/src/docling.rs` [NEW]
-- `tools/sdlc-knowledge/src/encoder.rs` [NEW]
-- `tools/sdlc-knowledge/src/ocr.rs` [NEW]
-- `tools/sdlc-knowledge/tests/chunker_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/store_v2_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/migration_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/docling_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/image_extraction_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/encoder_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/encoder_prefix_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/ocr_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/search_modes_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/rrf_test.rs` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/sample-with-headings.md` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/sample-no-headings.md` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/sample-structured.pdf` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/sample-with-figure.pdf` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/sample-with-multiple-figures.pdf` [NEW]
-- `tools/sdlc-knowledge/tests/fixtures/diagram-with-text.png` [NEW]
-- `tools/sdlc-knowledge/bench/runner.rs` [NEW]
-- `tools/sdlc-knowledge/bench/metrics.rs` [NEW]
-- `tools/sdlc-knowledge/bench/golden/queries.jsonl` [NEW]
-- `tools/sdlc-knowledge/bench/golden/README.md` [NEW]
-- `tools/sdlc-knowledge/bench/reports/2026-05-09-vector-vs-bm25.md` [NEW]
-- `docs/use-cases/vector-retrieval-backend_use_cases.md` [NEW]
-- `docs/qa/vector-retrieval-backend_test_cases.md` [NEW]
-
-**Modified files [MODIFIED]:**
-- `tools/sdlc-knowledge/Cargo.toml` [MODIFIED] — new dependencies (`fastembed`/`ort`, `sqlite-vec`, `image`); new `[[bin]]` for `claudeknows-bench`; version bump deferred to `/release`
-- `tools/sdlc-knowledge/Cargo.lock` [MODIFIED]
-- `tools/sdlc-knowledge/src/ingest.rs` [MODIFIED] — calls structural chunker; Docling/pdfium routing; image chunk queue; encoder batch writes
-- `tools/sdlc-knowledge/src/store.rs` [MODIFIED] — sqlite-vec extension load; `chunks_vec` table creation; new columns
-- `tools/sdlc-knowledge/src/migrations.rs` [MODIFIED] — v1→v2 migration logic and UX
-- `tools/sdlc-knowledge/src/search.rs` [MODIFIED] — dense_search and hybrid_search functions; RRF merge
-- `tools/sdlc-knowledge/src/cli.rs` [MODIFIED] — `--mode` flag; output field extensions
-- `tools/sdlc-knowledge/src/output.rs` [MODIFIED] — `mode_used`, `bm25_score`, `dense_score`, `rrf_score` JSON fields
-- `install.sh` [MODIFIED] — model download functions for e5, PaddleOCR, Docling
-- `install.ps1` [MODIFIED] — Windows equivalents
-- `README.md` [MODIFIED] — "Vector + Multimodal Retrieval" subsection
-- `src/rules/knowledge-base.md` [MODIFIED] — schema v2, three modes, hybrid retrieval, image chunks
-- `src/rules/knowledge-base-tool.md` [MODIFIED] — remove "NOT a vector database" assertion; update description (create file if absent in `src/rules/`)
-- `docs/PRD.md` [MODIFIED] — this §15 section
-- `CHANGELOG.md` [MODIFIED] — `[Unreleased]` entry added by `changelog-writer` at `/merge-ready`
-
-**Intentionally unchanged:**
-- All 17 agent prompt files (`src/agents/*.md`)
-- All 7 slash-command files (`src/commands/*.md`)
-- `templates/` directory
-
-### 15.7 Out of Scope
-
-The following items are explicitly excluded from this feature:
-
-1. **Pure-vision CLIP-space embeddings.** Embedding images in a CLIP embedding space (separate from the e5 text space) would require a parallel index in a different dimensionality. Deferred to v3 pending benchmark evidence that OCR-as-text bridge is insufficient.
-2. **Per-language benchmark stratification.** 25 queries split across multiple languages produces statistically marginal per-language metrics. The benchmark reports overall metrics plus qualitative side-by-side samples only (OQ-4, resolved).
-3. **Semantic re-ranking (cross-encoder).** Adding a cross-encoder re-ranking step after hybrid retrieval is an iter-3 enhancement; not included here.
-4. **Auto-publish or version bump in this feature.** Version bump 0.3.x → 0.4.0 happens via the user-invoked `/release` command after merge, not in any implementation slice.
-5. **Windows native installer for model bundles.** The `install.ps1` changes add model downloads but the Windows-native CI pipeline for testing them is left to a subsequent CI hardening feature.
-
-### 15.8 Risks
-
-1. **R1 — Docling Rust integration (CRITICAL, OQ-1).** Docling is a Python library with no first-class Rust SDK; direct ONNX inference, sidecar binary, or alternative parser are the three options. **Mitigation:** pragmatic fallback — if architect Slice 3 pre-review rules Docling unfeasible, Slice 3 de-scopes to "structural chunker over pdfium output is sufficient for v1"; vector backend (Slices 2/5/7) + OCR multimodal (Slice 6) + benchmark (Slices 9/10) still deliver the primary win.
-2. **R2 — sqlite-vec linking strategy (OQ-2).** Static-link via `rusqlite-bundled` vs. runtime `Connection::load_extension`. **Mitigation:** prefer static-link; fall back to runtime-load if static build fails on any target. Architect Slice 2 pre-review decides.
-3. **R3 — Model bundle size (+200 MB at install).** Mitigation: install-time download per the pdfium pattern; lazy degraded-mode fallback if models are missing (encoder degraded → BM25-only; OCR degraded → placeholder text). Binary stays below 10 MB.
-4. **R4 — v1→v2 migration UX on large corpora.** Re-encoding 51 K chunks takes approximately 10 minutes on CPU. **Mitigation:** `CLAUDEKNOWS_AUTO_REINGEST=1` for headless; clear TTY prompt; corrupt-v1 honors AC-7 contract.
-5. **R5 — Benchmark fairness.** BM25 and dense must use the same post-Slice-1 structural-chunker output to isolate retrieval-method differences from chunking effects. Slice 9 enforces this invariant.
-6. **R6 — OCR quality on schematic diagrams.** PaddleOCR is optimized for natural text; quality degrades on diagrams with irregular fonts, arrows, and labels. **Mitigation:** benchmark Slice 10 surfaces real numbers; if poor, iter-2 may add layout-aware diagram parsers. Placeholder text ensures image chunks remain searchable even when OCR fails.
-7. **R7 — e5 prefix discipline drift.** Forgetting `"passage: "` / `"query: "` prefixes silently degrades retrieval quality by 5–10%. **Mitigation:** `encoder_prefix_test.rs` mocks the ONNX call and asserts prefix discipline at the unit-test level.
-8. **R8 — Plan-mode persistence.** The plan body is auto-persisted to `<project>/.claude/plan.md` per the rule shipped in 0.3.1 (§14). This is a built-in precondition, not a risk.
-9. **R9 — Binary-size budget breach from static ONNX runtime.** Static-linking `ort` can add 20–40 MB. **Mitigation:** investigate `ort` linkage modes; if static blows the 10 MB budget, ship `ort` as a dynamic load following the pdfium pattern. Architect Slice 5 pre-review validates the linkage strategy.
-10. **R10 — Cargo.toml multi-wave serialization.** Six slices touch `Cargo.toml` across five waves. **Mitigation:** each edit ADDS a new dependency entry only, never modifying existing entries; sequential wave merges preserve correctness.
-
-### 15.9 Amendments to Prior PRD Sections
-
-#### Amendment to §11 FR-4.3 (Scope Reduction Detection — Plan Critic finding identifier reuse)
-
-**Original §11 FR-4.3** (pipeline hardening) defined: "The finding MUST identify the specific hedging phrase, the slice where it appears, and the PRD requirement it violates." This is a Plan Critic output format requirement unrelated to the database schema.
-
-**§15 supersession of the iter-1 schema reservation:** §11 reserved an `embedding BLOB` column on the `chunks` table for non-destructive iter-2 migration (documented in the §11 Facts block). PRD §15 **supersedes that reservation** — the `embedding BLOB` column on `chunks` is NOT added. Instead, a separate `chunks_vec` virtual table from the `sqlite-vec` extension is used. **Rationale:** `sqlite-vec` is purpose-built for vector K-NN queries, exposes a native `vec_distance_cosine` function, and operates as an independent virtual table that does not interfere with FTS5 triggers. Storing 384 × 4 = 1 536 bytes inline on every `chunks` row would bloat the FTS5 content table and complicate partial-update migrations. The virtual-table approach cleanly separates lexical and dense storage. The iter-1 `embedding BLOB` reservation is now archival; §15 FR-VR-3.1 is canonical.
-
-#### Clarification of §11 NFR-1.5 (Single-File SQLite Invariant)
-
-**§11 NFR-1.5** mandates that the knowledge base consists of a single SQLite file (`index.db`). **§15 confirms this invariant is preserved:** image PNG bytes are stored as `chunks.image_bytes BLOB` INSIDE the same `index.db` file (FR-VR-3.2). The `chunks_vec` virtual table is also INSIDE `index.db` (FR-VR-3.1). No figure files, no separate vector store files, and no sidecar databases exist outside `index.db`. The single-file invariant holds.
-
-## Facts
-
-### Verified facts
-
-- Current `claudeknows` v0.3.1 uses BM25-only FTS5 retrieval, schema v1, ~4 MB binary — verified against `tools/sdlc-knowledge/Cargo.toml` and `tools/sdlc-knowledge/src/store.rs` (plan.md Verified facts, verified via plan Read this session).
-- 500-character sliding-window chunker is at `tools/sdlc-knowledge/src/ingest.rs:71` — verified via plan.md Verified facts.
-- Knowledge-base corpus: 28 documents, 51 542 chunks — verified by `claudeknows status --json` run in this session (output: `{"schema_version":1,"doc_count":28,"chunk_count":51542}`).
-- Corpus contains English and Russian content: `claudeknows list --json` returned filenames including `841031560_Современная_программная_инженерия_2023.pdf`, `Али_Аминиан_и_другие_System_Design_Подготовка_к_сложному_интервью.pdf`, `Хаос_инжиниринг_2021_Кейси_Розенталь,_Нора_Джонс.pdf` (Russian) and `Hands-On Machine Learning with Pytorch.pdf`, `Building_AI_Agents_With_LLMs_RAG_And_Knowledge_Graphs.pdf` (English) — verified this session.
-- Corpus scope relevance: **Overlap**. Observed corpus domain: ML/AI, data engineering, RAG, vector search, generative AI, LLM agents, system design, SRE. Task domain: vector retrieval, dense embeddings, hybrid search, multimodal RAG. The domain overlap is direct — all key concepts in this PRD section (embeddings, RAG, BM25, hybrid retrieval, chunking, OCR) appear in the corpus.
-- Detected corpus languages: English and Russian — confirmed by language probes in `claudeknows list --json` and search hits in both languages this session.
-- Plan at `.claude/plan.md` confirmed as authoritative source: read in full this session (lines 1–349). 26 Plan Critic findings (7 CRITICAL, 13 MAJOR, 6 MINOR) all addressed. User approved verbatim.
-- `tools/sdlc-knowledge/src/migrations.rs` and `tools/sdlc-knowledge/src/store.rs` confirmed to exist — stated in plan.md Verified facts.
-- e5 prompt-prefix discipline (`"passage: "` for ingest, `"query: "` for search) documented on the `intfloat/multilingual-e5-small` model card — verified: yes (plan.md External contracts entry marked `verified: yes`).
-- RRF formula `score(d) = Σ_i 1/(k + rank_i(d))` with k=60 from Cormack et al. 2009 — verified: yes (plan.md External contracts entry marked `verified: yes`).
-- `docs/PRD.md` sections §1–§14 exist; §15 is the next available number — confirmed by reading PRD end (lines 3462–3616) and section grep this session.
-
-### External contracts
-
-- knowledge-base: Али_Аминиан_и_другие_System_Design_Подготовка_к_сложному_интервью.pdf:44359 — query: "векторный поиск" — BM25: 19.937681073031765 — verified: yes
-- knowledge-base: Али_Аминиан_и_другие_System_Design_Подготовка_к_сложному_интервью.pdf:44368 — query: "векторный поиск" — BM25: 19.44132131158577 — verified: yes
-- knowledge-base: Али_Аминиан_и_другие_System_Design_Подготовка_к_сложному_интервью.pdf:44368 — query: "семантический поиск" — BM25: 19.152063060870095 — verified: yes
-- knowledge-base: 934216520_Mastering_LangChain_A_Comprehensive_Guide_to_Building.pdf:37926 — query: "dense retrieval semantic similarity" — BM25: 24.120519498482583 — verified: yes
-- knowledge-base: 923991015_Generative_AI_With_LangChain_Build_Production_ready_LLM.pdf:26011 — query: "dense retrieval semantic similarity" — BM25: 23.387287506230457 — verified: yes
-- knowledge-base: 923991015_Generative_AI_With_LangChain_Build_Production_ready_LLM.pdf:26013 — query: "BM25 ranking" — BM25: 19.714764291301655 — verified: yes
-- knowledge-base: 923991015_Generative_AI_With_LangChain_Build_Production_ready_LLM.pdf:26006 — query: "BM25 ranking" — BM25: 13.666352175833016 — verified: yes
-- knowledge-base: 947059230_AI_Agents_and_Applications_Roberto_Infante_bibis_ir.pdf:23504 — query: "RAG retrieval" — BM25: 13.320964774336012 — verified: yes
-- knowledge-base: 908530342_Building_AI_Agents_With_LLMs_RAG_And_Knowledge_Graphs.pdf:39244 — query: "chunking document structure headings" — BM25: 24.68298434658531 — verified: yes
-- knowledge-base: 908530342_Building_AI_Agents_With_LLMs_RAG_And_Knowledge_Graphs.pdf:38743 — query: "multimodal embeddings image text" — BM25: 17.842685437373483 — verified: yes
-- **`fastembed-rs` (Qdrant, crates.io `fastembed = "4"`)** — symbol: `TextEmbedding::try_new(InitOptions { model_name: EmbeddingModel::MultilingualE5Small, ... })`, `embed(documents: Vec<&str>, batch_size: Option<usize>) -> Vec<Vec<f32>>` — source: https://github.com/Anush008/fastembed-rs — verified: **no — assumption**. Architect Slice 5 pre-review MUST verify e5-small is in fastembed's supported model list and the API shape matches. Risk: if fastembed does not support e5-small, fall back to raw `ort`.
-- **`sqlite-vec` extension** — symbol: `vec0` virtual table; `embedding float[384]` column declaration; `vec_distance_cosine(a, b)` distance function; static or runtime linking via `rusqlite` — source: https://github.com/asg017/sqlite-vec — verified: **no — assumption**. Architect Slice 2 pre-review MUST decide static-vs-runtime linking and verify cross-platform build. Risk: static linking may not be available on all platforms.
-- **`ort` Rust ONNX Runtime v2.x** — symbol: `ort::Session::builder().commit_from_file(path)`, `Session::run(inputs) -> Result<Outputs>` — source: https://docs.rs/ort/2 — verified: **no — assumption**. Used transitively by fastembed-rs and directly by PaddleOCR and Docling integrations. Risk: API shape may differ across minor versions.
-- **Docling (IBM, Apache-2.0)** — ONNX model artifacts at `https://huggingface.co/ds4sd/docling-models`; outputs structured Markdown + DocLink JSON — source: https://github.com/DS4SD/docling — verified: **no — assumption (CRITICAL)**. Docling has no first-class Rust SDK. Architect Slice 3 pre-review picks the integration strategy (direct ONNX, sidecar CLI, or alternative parser). Pragmatic fallback: if unfeasible, Slice 3 de-scopes and Docling defers to v2.
-- **PaddleOCR det+rec ONNX** — symbols: detection model `ch_PP-OCRv4_det_infer.onnx`, recognition model `ch_PP-OCRv4_rec_infer.onnx`, multilingual variant `ml_PP-OCRv4_*_infer.onnx` (~30 MB combined) — source: https://github.com/PaddlePaddle/PaddleOCR — verified: **no — assumption**. Architect Slice 6 picks between PaddleOCR, trocr, and Tesseract. Risk: model filenames and ONNX export format may differ from assumption.
-- **`intfloat/multilingual-e5-small` model card** — symbol: `"passage: "` prefix for indexed passages, `"query: "` prefix for search queries; 384-dimensional output; ONNX export available — source: https://huggingface.co/intfloat/multilingual-e5-small — verified: yes (documented on model card; plan.md entry marked `verified: yes`).
-- **Reciprocal Rank Fusion k=60** — symbol: `score(d) = Σ_i 1/(60 + rank_i(d))` — source: Cormack, Clarke, and Buettcher, "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods," SIGIR 2009 — verified: yes (plan.md entry marked `verified: yes`; canonical value in industry use).
-
-### Assumptions
-
-- ONNX runtime via `ort` works on all target platforms (macOS arm64/x64, Linux x64/arm64, Windows x64). ARM Windows and FreeBSD are not covered. Verify: build matrix in Slice 11 install scripts.
-- 51 K chunks at encode batch=32 on CPU (M1/M2 MacBook) takes ≤10 minutes for full re-ingest. Verify: time the actual re-ingest in Slice 8 and document in scratchpad.
-- 25 manually-curated queries are sufficient to detect a meaningful retrieval-quality difference between modes. Verify: spot-check qualitative samples; expand to 50 if benchmark results are inconclusive.
-- Image bytes as BLOB column add tolerable storage overhead (~4 MB per 50-page PDF with 20 figures; ~112 MB for 28 docs). Verify: measure DB file size growth in Slice 4.
-- e5-small embedding quality is sufficient on technical-book content in both English and Russian. Risk: bge-m3 (~2 GB) might be measurably better. Verify: benchmark Slice 10 — if hybrid recall is unimpressive, iter-2 may swap the encoder.
-- The `chunks_vec` row count equaling the `chunks` row count after ingest is a sufficient integrity check. Risk: rows could be inserted out of sync if a batch write fails partway. Verify: Slice 5 tests include a mid-batch failure injection.
-
-### Open questions
-
-- **OQ-1 (Docling integration strategy)** — load-bearing for Slice 3 architect pre-review. Three options: direct ONNX, Python sidecar, or alternative parser (Marker, MinerU, heuristic over pdfium). Decision must land before Slice 3 implementation. Pragmatic fallback is FR-VR-1.4.
-- **OQ-2 (sqlite-vec linking)** — static-link via rusqlite-bundled vs. runtime `load_extension`. Architect Slice 2 pre-review decides.
-- **OQ-3 (OCR model selection)** — PaddleOCR, trocr, or Tesseract. Architect Slice 6 pre-review decides and pins exact ONNX model filenames.
-- knowledge-base: searched "hybrid retrieval RRF reciprocal rank fusion" → 0 hits in any language; consider adding an information-retrieval reference (e.g., the Cormack 2009 paper or BEIR benchmark docs) to the knowledge-base corpus for future retrieval-engineering tasks. This is not a corpus gap for this PRD section — the RRF formula is verified directly from the canonical paper citation in plan.md.
+Last version published from this monorepo: `sdlc-knowledge-v0.4.0` (2026-05-10). Version-continues as `claudebase-v0.4.0` in the new repo so users upgrading don't see a regression. The CLI was renamed from `claudeknows` to `claudebase`; `install.sh` auto-migrates existing installations on next run.
 

@@ -14,6 +14,10 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Changed
+
+- Knowledge-base CLI extracted to a standalone repository at [github.com/codefather-labs/claudebase](https://github.com/codefather-labs/claudebase). Tool renamed from `claudeknows` to `claudebase`; install path moved from `~/.claude/tools/sdlc-knowledge/` to `~/.claude/tools/claudebase/`. Existing installations are auto-migrated by `install.sh` on next run — the old directory and the legacy `claudeknows` symlink are removed automatically. The binary is still downloaded from GitHub releases as before, just from the new repo's release pipeline. Version continuity preserved: the last `sdlc-knowledge-v0.4.0` release (published 2026-05-10) is succeeded by `claudebase-v0.4.0` with no version regression.
+
 ## [0.4.0] - 2026-05-10
 
 ### Added

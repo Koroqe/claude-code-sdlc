@@ -32,8 +32,8 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $Version = "3.0.0"
-$KnowledgeVersion = "0.4.0"
-$KnowledgePdfiumVersion = "chromium/7802"
+$ClaudebaseVersion = "0.4.0"
+$ClaudebasePdfiumVersion = "chromium/7802"
 $RepoUrl = "https://github.com/codefather-labs/claude-code-sdlc.git"
 $RepoOwnerRepo = "codefather-labs/claude-code-sdlc"
 $ClaudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -66,11 +66,11 @@ WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   agents\          17 specialized agent prompts
   commands\        7 SDLC pipeline commands
   rules\           4 process rules
-  tools\sdlc-knowledge\sdlc-knowledge.exe   Knowledge-base CLI binary
-  tools\sdlc-knowledge\pdfium\lib\pdfium.dll   PDFium runtime for PDF ingest
+  tools\claudebase\claudebase.exe   Knowledge-base CLI binary
+  tools\claudebase\pdfium\lib\pdfium.dll   PDFium runtime for PDF ingest
 
-GLOBAL ALIAS (claudeknows):
-  A claudeknows.cmd wrapper is created in %USERPROFILE%\.claude\bin\
+GLOBAL ALIAS (claudebase):
+  A claudebase.cmd wrapper is created in %USERPROFILE%\.claude\bin\
   and that directory is added to your User PATH (open a new shell after
   install for the PATH change to take effect).
 
@@ -207,35 +207,48 @@ function Install-UserConfig {
 }
 
 function Install-KnowledgeBinary {
-    if (-not (Test-Path (Join-Path $Script:ScriptDir "tools\sdlc-knowledge"))) {
-        Get-SourceDir
+    # Migration cleanup: remove the pre-2026-05-10 sdlc-knowledge install +
+    # legacy claudeknows.cmd wrapper. Idempotent — silently no-ops on a fresh
+    # install.
+    $oldDir = Join-Path $ClaudeDir "tools\sdlc-knowledge"
+    if (Test-Path $oldDir) {
+        Write-Info "migrating from claudeknows to claudebase: removing old install"
+        Remove-Item -Recurse -Force $oldDir -ErrorAction SilentlyContinue
+    }
+    $oldWrapper = Join-Path $ClaudeDir "bin\claudeknows.cmd"
+    if (Test-Path $oldWrapper) {
+        Remove-Item -Force $oldWrapper -ErrorAction SilentlyContinue
+        Write-Ok "removed legacy claudeknows.cmd wrapper"
     }
 
     if (-not [Environment]::Is64BitOperatingSystem) {
-        Write-Warn "32-bit Windows is not supported by sdlc-knowledge; skipping binary install"
+        Write-Warn "32-bit Windows is not supported by claudebase; skipping binary install"
         return
     }
     $platform = "windows-x64"
-    $targetDir = Join-Path $ClaudeDir "tools\sdlc-knowledge"
+    $targetDir = Join-Path $ClaudeDir "tools\claudebase"
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    $targetBin = Join-Path $targetDir "sdlc-knowledge.exe"
+    $targetBin = Join-Path $targetDir "claudebase.exe"
 
     # Idempotency check
     if (Test-Path $targetBin) {
         try {
             $verLine = & $targetBin --version 2>$null
             $existingVer = ($verLine -split '\s+')[-1]
-            if ($existingVer -eq $KnowledgeVersion) {
-                Write-Ok "sdlc-knowledge already at expected version $KnowledgeVersion"
+            if ($existingVer -eq $ClaudebaseVersion) {
+                Write-Ok "claudebase already at expected version $ClaudebaseVersion"
                 return
             }
         } catch { }
     }
 
-    $url = "https://github.com/$RepoOwnerRepo/releases/download/sdlc-knowledge-v$KnowledgeVersion/sdlc-knowledge-$platform.exe"
-    $tmp = Join-Path $env:TEMP ("sdlc-knowledge-" + [guid]::NewGuid().ToString() + ".exe")
+    # claudebase moved to its own repo on 2026-05-10. URL is hard-coded to
+    # codefather-labs/claudebase, NOT derived from $RepoOwnerRepo (which still
+    # points at the SDLC monorepo for the rest of the install).
+    $url = "https://github.com/codefather-labs/claudebase/releases/download/claudebase-v$ClaudebaseVersion/claudebase-$platform.exe"
+    $tmp = Join-Path $env:TEMP ("claudebase-" + [guid]::NewGuid().ToString() + ".exe")
 
-    Write-Info "Downloading sdlc-knowledge.exe v$KnowledgeVersion..."
+    Write-Info "Downloading claudebase.exe v$ClaudebaseVersion..."
     try {
         Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 120
     } catch {
@@ -257,52 +270,52 @@ function Install-KnowledgeBinary {
     }
 
     Move-Item -Force $tmp $targetBin
-    Write-Ok "tools\sdlc-knowledge\sdlc-knowledge.exe ($platform)"
+    Write-Ok "tools\claudebase\claudebase.exe ($platform)"
 }
 
 function Invoke-CargoSourceBuildFallback {
-    if (-not (Test-Path (Join-Path $Script:ScriptDir "tools\sdlc-knowledge"))) {
+    if (-not (Test-Path (Join-Path $Script:ScriptDir "tools\claudebase"))) {
         Get-SourceDir
     }
     if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
         Write-Warn "binary unavailable; install cargo (https://rustup.rs) or wait for the release to publish"
         return
     }
-    $cargoToml = Join-Path $Script:ScriptDir "tools\sdlc-knowledge\Cargo.toml"
+    $cargoToml = Join-Path $Script:ScriptDir "tools\claudebase\Cargo.toml"
     if (-not (Test-Path $cargoToml)) {
-        Write-Warn "binary unavailable; cannot find tools\sdlc-knowledge\Cargo.toml"
+        Write-Warn "binary unavailable; cannot find tools\claudebase\Cargo.toml"
         return
     }
-    Write-Info "Building sdlc-knowledge from source via cargo (fallback)..."
-    & cargo build --release -p sdlc-knowledge --manifest-path $cargoToml
+    Write-Info "Building claudebase from source via cargo (fallback)..."
+    & cargo build --release -p claudebase --manifest-path $cargoToml
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "cargo build failed; binary unavailable"
         return
     }
-    $built = Join-Path $Script:ScriptDir "tools\sdlc-knowledge\target\release\sdlc-knowledge.exe"
+    $built = Join-Path $Script:ScriptDir "tools\claudebase\target\release\claudebase.exe"
     if (-not (Test-Path $built)) {
         Write-Warn "cargo build did not produce expected binary at $built"
         return
     }
-    $targetDir = Join-Path $ClaudeDir "tools\sdlc-knowledge"
+    $targetDir = Join-Path $ClaudeDir "tools\claudebase"
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    Copy-Item -Force $built (Join-Path $targetDir "sdlc-knowledge.exe")
-    Write-Ok "tools\sdlc-knowledge\sdlc-knowledge.exe (built from source)"
+    Copy-Item -Force $built (Join-Path $targetDir "claudebase.exe")
+    Write-Ok "tools\claudebase\claudebase.exe (built from source)"
 }
 
 function Register-ClaudeknowsAlias {
-    $targetBin = Join-Path $ClaudeDir "tools\sdlc-knowledge\sdlc-knowledge.exe"
+    $targetBin = Join-Path $ClaudeDir "tools\claudebase\claudebase.exe"
     if (-not (Test-Path $targetBin)) {
-        Write-Warn "claudeknows alias: target binary not found at $targetBin; skipping"
+        Write-Warn "claudebase alias: target binary not found at $targetBin; skipping"
         return
     }
     $binDir = Join-Path $ClaudeDir "bin"
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
-    $wrapperPath = Join-Path $binDir "claudeknows.cmd"
+    $wrapperPath = Join-Path $binDir "claudebase.cmd"
     $wrapperContent = "@echo off`r`n`"$targetBin`" %*`r`n"
     Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding ASCII -NoNewline
-    Write-Ok "claudeknows alias: $wrapperPath -> $targetBin"
+    Write-Ok "claudebase alias: $wrapperPath -> $targetBin"
 
     # Add binDir to user PATH if not already there
     $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -361,7 +374,7 @@ function Update-AllowList {
 }
 
 function Register-BashAllowlist {
-    Update-AllowList -Entries @('~/.claude/tools/sdlc-knowledge/sdlc-knowledge *') -SuccessMsg "sdlc-knowledge allowlist"
+    Update-AllowList -Entries @('~/.claude/tools/claudebase/claudebase *') -SuccessMsg "claudebase allowlist"
 }
 
 function Register-ReleaseBashAllowlist {
@@ -372,24 +385,24 @@ function Register-ReleaseBashAllowlist {
         "git diff --name-only *",
         "git ls-remote --tags origin *",
         "git tag -a v* -F *",
-        "git tag -a sdlc-knowledge-v* -F *",
+        "git tag -a claudebase-v* -F *",
         "git tag -d v*",
-        "git tag -d sdlc-knowledge-v*",
+        "git tag -d claudebase-v*",
         "git push origin v*",
-        "git push origin sdlc-knowledge-v*"
+        "git push origin claudebase-v*"
     )
     Update-AllowList -Entries $entries -SuccessMsg "release-engineer allowlist"
 }
 
 function Install-PdfiumBinary {
-    $targetDir = Join-Path $ClaudeDir "tools\sdlc-knowledge\pdfium"
+    $targetDir = Join-Path $ClaudeDir "tools\claudebase\pdfium"
     $libDir = Join-Path $targetDir "lib"
     $sentinel = Join-Path $targetDir ".version"
 
     if (Test-Path $sentinel) {
         $existing = (Get-Content -Raw $sentinel).Trim()
-        if ($existing -eq $KnowledgePdfiumVersion) {
-            Write-Ok "pdfium binary already at version $KnowledgePdfiumVersion"
+        if ($existing -eq $ClaudebasePdfiumVersion) {
+            Write-Ok "pdfium binary already at version $ClaudebasePdfiumVersion"
             return
         }
     }
@@ -399,7 +412,7 @@ function Install-PdfiumBinary {
         return
     }
     $asset = "pdfium-win-x64.tgz"
-    $url = "https://github.com/bblanchon/pdfium-binaries/releases/download/$KnowledgePdfiumVersion/$asset"
+    $url = "https://github.com/bblanchon/pdfium-binaries/releases/download/$ClaudebasePdfiumVersion/$asset"
 
     if (-not (Get-Command tar.exe -ErrorAction SilentlyContinue)) {
         Write-Warn "tar.exe not found (Windows 10 1803+ required); skipping pdfium install"
@@ -411,7 +424,7 @@ function Install-PdfiumBinary {
     New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
     try {
-        Write-Info "Downloading pdfium ($KnowledgePdfiumVersion)..."
+        Write-Info "Downloading pdfium ($ClaudebasePdfiumVersion)..."
         try {
             Invoke-WebRequest -Uri $url -OutFile $tmpArchive -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 120
         } catch {
@@ -433,14 +446,14 @@ function Install-PdfiumBinary {
 
         New-Item -ItemType Directory -Path $libDir -Force | Out-Null
         Copy-Item -Force $pdfiumDll.FullName (Join-Path $libDir "pdfium.dll")
-        Set-Content -Path $sentinel -Value $KnowledgePdfiumVersion -Encoding ASCII
+        Set-Content -Path $sentinel -Value $ClaudebasePdfiumVersion -Encoding ASCII
 
         if (-not (Test-Path (Join-Path $libDir "pdfium.dll"))) {
             Write-Warn "pdfium post-install integrity check failed; cleaning up"
             Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
             return
         }
-        Write-Ok "pdfium binary installed: win-x64 (version $KnowledgePdfiumVersion)"
+        Write-Ok "pdfium binary installed: win-x64 (version $ClaudebasePdfiumVersion)"
     } finally {
         Remove-Item -ErrorAction SilentlyContinue $tmpArchive
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $staging
@@ -544,17 +557,17 @@ Register-ReleaseBashAllowlist
 Install-PdfiumBinary
 
 # Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
-# encoder so the first `claudeknows ingest` / `claudeknows search --mode hybrid`
+# encoder so the first `claudebase ingest` / `claudebase search --mode hybrid`
 # doesn't pay a ~30 s cold-start model-download stall. Idempotent (no-op
 # when model is already cached). Network failure is a warning, not a
 # fatal error — fastembed will lazy-download on first real use.
-$KnowledgeExe = Join-Path $ClaudeDir "tools\sdlc-knowledge\sdlc-knowledge.exe"
+$KnowledgeExe = Join-Path $ClaudeDir "tools\claudebase\claudebase.exe"
 if (Test-Path $KnowledgeExe) {
     Write-Info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
     try {
         & $KnowledgeExe warmup --quiet 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            Write-Ok "encoder ready (cached at $env:USERPROFILE\.claude\tools\sdlc-knowledge\models\)"
+            Write-Ok "encoder ready (cached at $env:USERPROFILE\.claude\tools\claudebase\models\)"
         } else {
             Write-Warn "encoder pre-load failed; fastembed will retry on first ingest"
         }
@@ -589,13 +602,13 @@ Write-Host "    /release            User-invoked release packaging"
 Write-Host "    /knowledge-ingest   Ingest into per-project knowledge base"
 Write-Host "    /context-refresh    Rebuild session context"
 Write-Host ""
-Write-Host "  Knowledge base CLI (also invokable as 'claudeknows' after a new shell):"
-Write-Host "    claudeknows ingest <path>"
-Write-Host "    claudeknows search '<query>' --json     # PDF hits include page citations"
-Write-Host "    claudeknows page --by-id <id> --page <N>  # Fetch full text of a cited PDF page"
-Write-Host "    claudeknows list  | status | delete"
+Write-Host "  Knowledge base CLI (also invokable as 'claudebase' after a new shell):"
+Write-Host "    claudebase ingest <path>"
+Write-Host "    claudebase search '<query>' --json     # PDF hits include page citations"
+Write-Host "    claudebase page --by-id <id> --page <N>  # Fetch full text of a cited PDF page"
+Write-Host "    claudebase list  | status | delete"
 Write-Host ""
-Write-Host "  Tip: re-ingest existing PDFs (claudeknows ingest <path>) to upgrade pre-v2"
+Write-Host "  Tip: re-ingest existing PDFs (claudebase ingest <path>) to upgrade pre-v2"
 Write-Host "  indexes to schema v2 — that's what unlocks per-page citations in search hits."
 Write-Host ""
 if (-not $InitProject) {

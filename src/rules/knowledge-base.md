@@ -1,6 +1,6 @@
-# Knowledge Base Rule — `sdlc-knowledge` Agent Activation
+# Knowledge Base Rule — `claudebase` Agent Activation
 
-This rule governs how SDLC thinking agents query the local `sdlc-knowledge`
+This rule governs how SDLC thinking agents query the local `claudebase`
 index and cite results. Activation is conditional on a sentinel file; absence
 is a silent no-op so the rule ships safely into opt-out projects.
 
@@ -22,41 +22,41 @@ for citation discipline.
 
 ## CLI invocation contract
 
-The `sdlc-knowledge` binary lives at `~/.claude/tools/sdlc-knowledge/sdlc-knowledge`.
+The `claudebase` binary lives at `~/.claude/tools/claudebase/claudebase`.
 After `bash install.sh --yes` registers the global alias, it is also invokable
-as `claudeknows` from any directory on PATH (the alias is a symlink in
+as `claudebase` from any directory on PATH (the alias is a symlink in
 `/usr/local/bin`, `/opt/homebrew/bin`, or `~/.local/bin` — whichever was the
 first writable PATH directory at install time). **Agents SHOULD use the short
-alias `claudeknows`** in citations and command examples; the absolute path
+alias `claudebase`** in citations and command examples; the absolute path
 remains valid as a backward-compat fallback for environments where the alias
 was not registered.
 
 Six subcommands — invoke verbatim:
 
-- `claudeknows ingest <path> [--project-root <dir>] [--json]`
-- `claudeknows search <query> [--top-k 5] [--mode lexical|dense|hybrid] [--context N] [--project-root <dir>] [--json]`
-- `claudeknows list [--project-root <dir>] [--json]`
-- `claudeknows status [--project-root <dir>] [--json]`
-- `claudeknows delete <source-id> [--project-root <dir>] [--json]`
-- `claudeknows page <doc> <N> [--range R] [--project-root <dir>] [--json]`
+- `claudebase ingest <path> [--project-root <dir>] [--json]`
+- `claudebase search <query> [--top-k 5] [--mode lexical|dense|hybrid] [--context N] [--project-root <dir>] [--json]`
+- `claudebase list [--project-root <dir>] [--json]`
+- `claudebase status [--project-root <dir>] [--json]`
+- `claudebase delete <source-id> [--project-root <dir>] [--json]`
+- `claudebase page <doc> <N> [--range R] [--project-root <dir>] [--json]`
   where `<doc>` is either an integer `documents.id` (from `list --json`) OR a
   basename matching `documents.source_path`. `--range R` returns `[N-R..N+R]`
   (default 0 = single page; max 20).
-- `claudeknows reindex-pages [--doc <id-or-name>] [--project-root <dir>] [--json]`
+- `claudebase reindex-pages [--doc <id-or-name>] [--project-root <dir>] [--json]`
   backfills the `pages` table for already-ingested PDFs without touching
   chunks_fts / chunks_vec — useful after upgrading from a pre-v3 index.
 
 The `--project-root <dir>` flag pins the index location to a specific project;
 omitted, the binary resolves the project root relative to the current working
 directory via `resolve_project_root` (the single path-from-user-input gate in
-`tools/sdlc-knowledge/src/cli.rs`). Agents SHOULD pass `--json` when consuming
+`https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/cli.rs`). Agents SHOULD pass `--json` when consuming
 output programmatically; humans get human-readable text by default.
 
 Typical agent query (the literal invocation referenced from per-agent
 `## Knowledge Base (when present)` activation blocks):
 
 ```
-claudeknows search "<query>" --top-k 5 --json
+claudebase search "<query>" --top-k 5 --json
 ```
 
 The `--mode` flag (iter-2 vector-retrieval-backend) selects retrieval strategy:
@@ -111,7 +111,7 @@ see a relevant snippet on page 127" to "show me the full page so I can
 quote / analyse the surrounding paragraph."
 
 ```
-claudeknows page <doc> <N> [--range R] --json
+claudebase page <doc> <N> [--range R] --json
 ```
 
 `<doc>` accepts either an integer `documents.id` (verbatim from a search
@@ -139,7 +139,7 @@ Exit codes:
 
 - `0` — page found, JSON / human text written to stdout.
 - `1` — document not found, page out of range, OR pages table not yet
-  backfilled (run `claudeknows reindex-pages --doc <id-or-name>` to fix).
+  backfilled (run `claudebase reindex-pages --doc <id-or-name>` to fix).
 
 Agents MUST NOT call `page` with `<N>` ≤ 0 — the schema is 1-indexed and
 the CLI rejects out-of-range values with the literal stderr line
@@ -181,12 +181,12 @@ prefix.
 citation in form (a) is the load-bearing breadcrumb that lets a human open
 the source document and verify the quote in seconds. Pre-v2 legacy chunks
 (form b on a PDF source) are a known degraded case — the user can re-run
-`claudeknows ingest <path>` on the document to upgrade it to schema v2 and
+`claudebase ingest <path>` on the document to upgrade it to schema v2 and
 restore page citations on subsequent searches.
 
 **BM25 score-direction convention (architect action item #3).** SQLite's FTS5
 `bm25()` function returns NEGATIVE values where smaller (more negative) indicates
-a better match. `tools/sdlc-knowledge/src/search.rs:75` selects
+a better match. `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs:75` selects
 `-bm25(chunks_fts) AS score` and orders by `score DESC` — flipping the sign so
 the JSON `score` field is always POSITIVE with larger-is-better. Agents cite the
 positive form verbatim from the JSON output. Do NOT re-negate, do NOT wrap, do
@@ -212,15 +212,15 @@ this file extends with the `knowledge-base:` source prefix).
 
 Three failure modes are pre-classified so agents handle them deterministically:
 
-- **Binary absent** — neither `claudeknows` (alias) nor
-  `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` (absolute path) is on PATH.
-  Detection: `command -v claudeknows` returns empty AND `[ -x ~/.claude/tools/sdlc-knowledge/sdlc-knowledge ]`
+- **Binary absent** — neither `claudebase` (alias) nor
+  `~/.claude/tools/claudebase/claudebase` (absolute path) is on PATH.
+  Detection: `command -v claudebase` returns empty AND `[ -x ~/.claude/tools/claudebase/claudebase ]`
   is false. Agent logs the literal line `knowledge-base: tool not installed; skipping`
   to stderr and proceeds without citation. Not a hard error; downstream gates
   do not flag it.
 - **Alias absent but binary present** (older install before the
-  `register_claudeknows_alias` step landed) — `command -v claudeknows`
-  returns empty but `~/.claude/tools/sdlc-knowledge/sdlc-knowledge` IS
+  `register_claudebase_alias` step landed) — `command -v claudebase`
+  returns empty but `~/.claude/tools/claudebase/claudebase` IS
   executable. Agent silently falls back to the absolute path; no log line.
   This is a backward-compat path; re-running `bash install.sh --yes`
   registers the alias.
@@ -281,7 +281,7 @@ iter-1 `pdf-extract` backend struggled with:
 
 The pdfium dynamic library (`libpdfium.dylib` / `libpdfium.so` /
 `libpdfium.dll`) is loaded at runtime via `Pdfium::bind_to_library` against
-the explicit path `~/.claude/tools/sdlc-knowledge/pdfium/lib/libpdfium.{dylib,so}`.
+the explicit path `~/.claude/tools/claudebase/pdfium/lib/libpdfium.{dylib,so}`.
 The library is downloaded and placed there by `bash install.sh --yes`. If the
 library is absent at PDF ingest time, the per-document load fails with the
 literal log line `pdfium dynamic library not found ... install via bash
@@ -289,7 +289,7 @@ install.sh --yes` and the ingest continues with the remaining sources —
 markdown and plain-text ingest are unaffected.
 
 **Encrypted / password-protected PDFs** — pdfium returns a clear error during
-open; `claudeknows ingest` surfaces the error and skips the document.
+open; `claudebase ingest` surfaces the error and skips the document.
 
 ## Facts
 
@@ -297,42 +297,42 @@ open; `claudeknows ingest` surfaces the error and skips the document.
 - The 8 sections of this rule and the activation sentinel path
   `<project>/.claude/knowledge/index.db` are mandated by PRD §11 line 2449 FR-7.1.
 - The `resolve_project_root` security backbone is the only path-from-user-input
-  gate in the binary — source: `tools/sdlc-knowledge/src/cli.rs:1-3, 37`.
+  gate in the binary — source: `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/cli.rs:1-3, 37`.
 - The BM25 score-direction convention (positive larger-is-better in JSON;
   `-bm25(chunks_fts) AS score` with `ORDER BY score DESC` in SQL) is
-  implemented at `tools/sdlc-knowledge/src/search.rs:1-18, 70-82`.
+  implemented at `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs:1-18, 70-82`.
 - The 12-agent / 5-executor split mirrors the cognitive-self-check rule —
   source: `~/.claude/rules/cognitive-self-check.md` `## Application Scope`.
 - Schema v2 adds nullable `chunks.page_start` / `chunks.page_end` columns and
   a `pages(doc_id, page_no, text)` table; PDF ingest tags every chunk with
   its 1-indexed page number and stores per-page extracted text — source:
-  `tools/sdlc-knowledge/src/store.rs` (`SCHEMA_V2_PAGES_TABLE`,
-  `replace_pages`, `get_page_by_id`), `tools/sdlc-knowledge/src/migrations.rs`
-  (`apply_v2`), and `tools/sdlc-knowledge/src/ingest.rs` (`chunk_pages`).
+  `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/store.rs` (`SCHEMA_V2_PAGES_TABLE`,
+  `replace_pages`, `get_page_by_id`), `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/migrations.rs`
+  (`apply_v2`), and `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/ingest.rs` (`chunk_pages`).
 - The `page` subcommand returns `{doc_id, source_path, page_no, text}` JSON
-  with exit 0/1/2 semantics defined in `tools/sdlc-knowledge/src/main.rs`
+  with exit 0/1/2 semantics defined in `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/main.rs`
   (`run_page`).
 
 ### External contracts
 - `rusqlite` — symbol: `Connection::prepare`, `params!`, `query_map` — source:
-  `tools/sdlc-knowledge/src/search.rs:26, 84-95` — verified: yes (read in this
+  `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs:26, 84-95` — verified: yes (read in this
   session).
 - SQLite FTS5 `bm25()` — symbol: `bm25(chunks_fts)` returns NEGATIVE scores
   (smaller = better) — source: SQLite FTS5 docs (referenced from
-  `tools/sdlc-knowledge/src/search.rs:5-6`); negation convention verified at
-  `tools/sdlc-knowledge/src/search.rs:75` — verified: yes.
+  `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs:5-6`); negation convention verified at
+  `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/search.rs:75` — verified: yes.
 - SQLite `ALTER TABLE ... ADD COLUMN` — symbol: schema migration primitive
   used by `apply_v2` to add nullable `page_start` / `page_end` to `chunks`
-  without rewriting the table — source: `tools/sdlc-knowledge/src/migrations.rs`
+  without rewriting the table — source: `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/migrations.rs`
   (idempotent via `pragma_table_info` probe) — verified: yes (live migration
   exercised by `tests/page_test.rs::v1_to_v2_migration_adds_page_columns_and_pages_table`
   and `migration_is_idempotent`).
 - `pdfium-render` crate v0.9 — symbol: `Pdfium::bind_to_library`,
   `load_pdf_from_byte_slice`, `pages()`, `text()` — source: pdfium-render
   rustdoc (referenced via Slice 1 architect pre-review of pdfium-pdf-extraction)
-  and `tools/sdlc-knowledge/src/pdf.rs` (Slice 1 implementation) — verified:
+  and `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/src/pdf.rs` (Slice 1 implementation) — verified:
   yes (Slice 1 of pdfium-pdf-extraction reverified the API symbols; the calibre
-  fixture in `tools/sdlc-knowledge/tests/fixtures/calibre-sample.pdf` exercises
+  fixture in `https://github.com/codefather-labs/claudebase/blob/claudebase-v0.4.0/tests/fixtures/calibre-sample.pdf` exercises
   multi-column and CID-font extraction successfully per TC-AAI-5).
 - GitHub Actions runner images — symbol: `ubuntu-latest`, `macos-latest`,
   `windows-latest` — source: GitHub Actions docs (not opened this session) —
@@ -354,7 +354,7 @@ open; `claudeknows ingest` surfaces the error and skips the document.
   in citation form (b) — risk: agents may not realise the source IS a PDF
   and miss an opportunity to follow up with `page --by-id` after a
   re-ingest — how to verify: when an agent cites form (b) for a `.pdf`
-  source path, surface a hint suggesting `claudeknows ingest <path>` to
+  source path, surface a hint suggesting `claudebase ingest <path>` to
   upgrade the document to v2.
 
 ### Open questions
