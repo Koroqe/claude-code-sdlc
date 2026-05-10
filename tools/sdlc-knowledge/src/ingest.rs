@@ -203,6 +203,12 @@ pub fn ingest_path(
     // dense_search JOIN with chunks filters non-existent ids out.
     let _ = try_populate_chunks_vec(conn, doc_id, &chunks);
 
+    // Slice 12: best-effort page extraction for PDFs. Populates the v3 pages
+    // table + documents.total_pages so `claudeknows page <doc> <N>` works on
+    // freshly-ingested documents without a separate `reindex-pages` step.
+    // Silent no-op for non-PDF sources, missing v3 schema, or pdfium errors.
+    let _ = try_populate_pages(conn, doc_id, p);
+
     Ok(IngestOutcome::Wrote {
         chunks: chunks.len(),
     })
@@ -271,6 +277,36 @@ fn try_populate_chunks_vec(
         }
     }
     tx.commit().map_err(|_| ())?;
+    Ok(())
+}
+
+/// Best-effort population of the `pages` table for a freshly-ingested PDF.
+/// Silent no-op when the source is not a PDF, the v3 `pages` table is
+/// absent (v1/v2 schema), or pdfium fails to extract pages.
+fn try_populate_pages(conn: &mut Connection, doc_id: i64, p: &Path) -> Result<(), ()> {
+    let is_pdf = p
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false);
+    if !is_pdf {
+        return Ok(());
+    }
+    let has_pages: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='pages'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+    if !has_pages {
+        return Err(());
+    }
+    let pages = match crate::pdf::extract_pages(p) {
+        Ok(v) => v,
+        Err(_) => return Err(()),
+    };
+    store::replace_pages(conn, doc_id, &pages).map_err(|_| ())?;
     Ok(())
 }
 

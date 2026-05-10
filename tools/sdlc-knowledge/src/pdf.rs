@@ -238,6 +238,68 @@ pub fn check_byte_budget_for_test(p: PathBuf, text: String) -> Result<String, In
     check_byte_budget(p, text)
 }
 
+/// Extract per-page text from a PDF. Returns `Vec<String>` indexed
+/// 0..N-1 where index `i` holds the text of pdfium-page `i + 1`
+/// (1-indexed conversion — see Slice 12 page-numbering convention).
+///
+/// Reuses the same panic-containment + byte-budget gate as `pdf::read`
+/// so a malformed PDF page surfaces as `IngestError::PdfDecode` rather
+/// than a process-level panic.
+///
+/// Used by:
+///   - `ingest::ingest_path` (Slice 12 production wiring) to populate
+///     the `pages` table during fresh ingest
+///   - `claudeknows reindex-pages` backfill subcommand to retrofit
+///     existing v2-ingested documents without re-chunking
+pub fn extract_pages(p: &Path) -> Result<Vec<String>, IngestError> {
+    let bytes = std::fs::read(p)
+        .map_err(|e| IngestError::PdfDecode(p.to_path_buf(), format!("read: {e}")))?;
+    let p_buf = p.to_path_buf();
+
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<Vec<String>, String> {
+        let mut guard = PDFIUM
+            .lock()
+            .map_err(|_| "pdfium singleton mutex poisoned".to_string())?;
+        if guard.is_none() {
+            let lib_path = resolve_pdfium_lib_path()?;
+            let bindings = pdfium_render::prelude::Pdfium::bind_to_library(&lib_path)
+                .map_err(|e| format!("pdfium bind_to_library: {e}"))?;
+            *guard = Some(pdfium_render::prelude::Pdfium::new(bindings));
+        }
+        let pdfium = guard
+            .as_ref()
+            .expect("pdfium singleton initialized just above");
+        let doc = pdfium
+            .load_pdf_from_byte_slice(&bytes, None)
+            .map_err(|e| format!("pdfium load_pdf: {e}"))?;
+        let mut pages_text = Vec::new();
+        for (i, page) in doc.pages().iter().enumerate() {
+            let text = page
+                .text()
+                .map_err(|e| format!("page {i} text: {e}"))?
+                .all();
+            pages_text.push(text);
+        }
+        Ok(pages_text)
+    }));
+    match result {
+        Ok(Ok(v)) => {
+            // Apply the same overall byte-budget as pdf::read — sum all
+            // pages and reject if the total exceeds PDF_BUDGET_BYTES.
+            let total: usize = v.iter().map(|t| t.len()).sum();
+            if total > PDF_BUDGET_BYTES {
+                return Err(IngestError::PdfBudgetExceeded(p_buf, total));
+            }
+            Ok(v)
+        }
+        Ok(Err(msg)) => Err(IngestError::PdfDecode(p_buf, msg)),
+        Err(_) => Err(IngestError::PdfDecode(
+            p_buf,
+            "panic during pdfium-render page extraction".to_string(),
+        )),
+    }
+}
+
 /// Extract all image objects from a PDF as `(page_idx, png_bytes)` tuples
 /// (Slice 4 of vector-retrieval-backend).
 ///

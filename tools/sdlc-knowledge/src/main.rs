@@ -9,7 +9,7 @@
 use clap::Parser;
 
 use sdlc_knowledge::cli::{self, Cli, Command};
-use sdlc_knowledge::{encoder, ingest, migrations, output, search, store};
+use sdlc_knowledge::{encoder, ingest, migrations, output, pdf, search, store};
 
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
@@ -27,6 +27,8 @@ fn main() -> std::process::ExitCode {
         // gate uniform for all subcommands) but the resolved root is unused.
         Command::Warmup(_) => None,
         Command::Compare(a) => a.project_root.as_deref(),
+        Command::Page(a) => a.project_root.as_deref(),
+        Command::ReindexPages(a) => a.project_root.as_deref(),
     };
 
     let root = match cli::resolve_project_root(project_root_arg) {
@@ -47,7 +49,236 @@ fn main() -> std::process::ExitCode {
         Command::Delete(args) => run_delete(&root, &args),
         Command::Warmup(args) => run_warmup(&args),
         Command::Compare(args) => run_compare(&root, &args),
+        Command::Page(args) => run_page(&root, &args),
+        Command::ReindexPages(args) => run_reindex_pages(&root, &args),
     }
+}
+
+/// `page <doc> <page> [--range N] [--json]` — Slice 12 page-level navigation.
+///
+/// Resolves the doc identifier (integer id OR basename match), looks up
+/// the page in the `pages` table, and emits either the raw text (human
+/// mode) or a structured JSON envelope including doc metadata and the
+/// page neighborhood. Out-of-range page numbers exit 1 with the literal
+/// `error: page number out of range` per the architect-resolved contract.
+fn run_page(root: &std::path::Path, args: &cli::PageArgs) -> std::process::ExitCode {
+    let (conn, _db_path) = match open_and_validate(root) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    let resolved = match store::resolve_doc_id(&conn, &args.doc) {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            eprintln!("error: document not found: {}", args.doc);
+            return std::process::ExitCode::from(1);
+        }
+        Err(e) => {
+            eprintln!("error: doc lookup failed: {e}");
+            return std::process::ExitCode::from(1);
+        }
+    };
+    let (doc_id, source_path, total_pages) = resolved;
+    // Out-of-range gate: when total_pages is known, validate the requested
+    // page falls within [1..total_pages]. When total_pages is NULL (pages
+    // table not yet backfilled for this doc), fall through to the
+    // pages-table lookup which will return None and we surface the same
+    // error message.
+    if let Some(tp) = total_pages {
+        if args.page < 1 || args.page > tp {
+            eprintln!("error: page number out of range");
+            return std::process::ExitCode::from(1);
+        }
+    }
+    let range = args.range.max(0).min(20);
+    let lo = (args.page - range).max(1);
+    let hi = args.page + range;
+    let pages = match store::fetch_page_range(&conn, doc_id, lo, hi) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: page fetch failed: {e}");
+            return std::process::ExitCode::from(1);
+        }
+    };
+    if pages.is_empty() {
+        // Either the page IS out of range (and total_pages was NULL so we
+        // couldn't gate above) OR the pages table hasn't been backfilled
+        // for this doc — both surface the same user-facing error.
+        eprintln!(
+            "error: page number out of range (or pages not yet backfilled — run `claudeknows reindex-pages --doc {}`)",
+            args.doc
+        );
+        return std::process::ExitCode::from(1);
+    }
+    if args.json {
+        let payload = serde_json::json!({
+            "doc_id": doc_id,
+            "source_path": source_path,
+            "total_pages": total_pages,
+            "requested_page": args.page,
+            "range": range,
+            "pages": pages.iter().map(|p| serde_json::json!({
+                "page_num": p.page_num,
+                "text": p.text,
+            })).collect::<Vec<_>>(),
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
+    } else {
+        let basename = std::path::Path::new(&source_path)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| source_path.clone());
+        println!("# {} — pages {}–{}", basename, lo, hi);
+        if let Some(tp) = total_pages {
+            println!("# (document has {} total pages)", tp);
+        }
+        for p in &pages {
+            println!();
+            println!("──── PAGE {} ────", p.page_num);
+            println!();
+            println!("{}", p.text);
+        }
+    }
+    std::process::ExitCode::SUCCESS
+}
+
+/// `reindex-pages [--doc X] [--json]` — Slice 12 backfill subcommand.
+///
+/// For each ingested document (or just the one selected via `--doc`),
+/// re-parses the source PDF via `pdf::extract_pages` and populates the
+/// `pages` table + `documents.total_pages`. Does NOT touch chunks /
+/// chunks_fts / chunks_vec — preserves existing BM25 + embedding state.
+/// Skips non-PDF sources (text/markdown documents have no concept of
+/// pages) and missing-on-disk sources (logged as skipped, not failed).
+fn run_reindex_pages(
+    root: &std::path::Path,
+    args: &cli::ReindexPagesArgs,
+) -> std::process::ExitCode {
+    let (mut conn, _db_path) = match open_and_validate(root) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    // Build the list of (doc_id, source_path) tuples to process.
+    let docs: Vec<(i64, String)> = {
+        let sql = if args.doc.is_some() {
+            "SELECT id, source_path FROM documents WHERE id = ?1 OR source_path = ?1 OR source_path LIKE ?2"
+        } else {
+            "SELECT id, source_path FROM documents ORDER BY id"
+        };
+        let mut stmt = match conn.prepare(sql) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: prepare failed: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        };
+        let rows: Result<Vec<(i64, String)>, _> = if let Some(d) = &args.doc {
+            stmt.query_map(rusqlite::params![d, format!("%/{d}")], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .and_then(|it| it.collect())
+        } else {
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .and_then(|it| it.collect())
+        };
+        match rows {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error: query failed: {e}");
+                return std::process::ExitCode::from(1);
+            }
+        }
+    };
+    if docs.is_empty() {
+        eprintln!("error: no matching documents");
+        return std::process::ExitCode::from(1);
+    }
+    let mut succeeded: Vec<serde_json::Value> = Vec::new();
+    let mut skipped: Vec<serde_json::Value> = Vec::new();
+    let mut failed: Vec<serde_json::Value> = Vec::new();
+    for (doc_id, source_path) in &docs {
+        let path = std::path::PathBuf::from(source_path);
+        let basename = path
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| source_path.clone());
+        // Skip non-PDF — we can't extract pages from .md / .txt.
+        let is_pdf = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("pdf"))
+            .unwrap_or(false);
+        if !is_pdf {
+            if !args.json {
+                eprintln!("skip: {basename} (not a PDF)");
+            }
+            skipped.push(serde_json::json!({
+                "doc_id": doc_id, "source": basename, "reason": "not a PDF"
+            }));
+            continue;
+        }
+        if !path.exists() {
+            if !args.json {
+                eprintln!("skip: {basename} (source no longer on disk)");
+            }
+            skipped.push(serde_json::json!({
+                "doc_id": doc_id, "source": basename, "reason": "missing on disk"
+            }));
+            continue;
+        }
+        if !args.json {
+            eprintln!("processing: {basename}");
+        }
+        match pdf::extract_pages(&path) {
+            Ok(pages) => {
+                let n = pages.len();
+                if let Err(e) = store::replace_pages(&mut conn, *doc_id, &pages) {
+                    if !args.json {
+                        eprintln!("FAIL: {basename}: {e}");
+                    }
+                    failed.push(serde_json::json!({
+                        "doc_id": doc_id, "source": basename, "error": e.to_string()
+                    }));
+                } else {
+                    if !args.json {
+                        eprintln!("  ok ({n} pages)");
+                    }
+                    succeeded.push(serde_json::json!({
+                        "doc_id": doc_id, "source": basename, "pages": n
+                    }));
+                }
+            }
+            Err(e) => {
+                if !args.json {
+                    eprintln!("FAIL: {basename}: {e}");
+                }
+                failed.push(serde_json::json!({
+                    "doc_id": doc_id, "source": basename, "error": e.to_string()
+                }));
+            }
+        }
+    }
+    if args.json {
+        let payload = serde_json::json!({
+            "succeeded": succeeded,
+            "skipped": skipped,
+            "failed": failed,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
+    } else {
+        eprintln!(
+            "summary: {} succeeded, {} skipped, {} failed",
+            succeeded.len(),
+            skipped.len(),
+            failed.len()
+        );
+    }
+    std::process::ExitCode::SUCCESS
 }
 
 /// `compare <query> [--top-k N] [--max-chars N] [--json]` — A/B test all

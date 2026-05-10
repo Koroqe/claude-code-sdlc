@@ -146,6 +146,55 @@ pub struct WarmupArgs {
     pub quiet: bool,
 }
 
+/// `claudeknows page <doc> <page>` — fetch raw text of a specific page
+/// from a specific document, exposing the LLM-navigable page-flip surface
+/// described in Slice 12 of vector-retrieval-backend. Page numbering is
+/// pdfium 1-indexed; out-of-range page numbers exit 1 with the literal
+/// stderr line `error: page number out of range`.
+#[derive(Args, Debug)]
+pub struct PageArgs {
+    /// Document identifier — either an integer `documents.id` (returned
+    /// in `claudeknows list --json`) OR a string matching `documents.source_path`
+    /// by basename (e.g. `Mastering LangChain.pdf`).
+    pub doc: String,
+    /// 1-indexed page number per the pdfium convention. Independent of
+    /// any "printed" numbering the document might use (Roman vs Arabic
+    /// for preface vs body) — always counts physical pages 1..N.
+    pub page: i64,
+    /// Fetch ±N neighbor pages around `page` so the LLM can see a
+    /// page-spread instead of a single page. Default 0 (single page).
+    /// Capped at 20 (40-page neighborhood) for safety.
+    #[arg(long, default_value_t = 0)]
+    pub range: i64,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON `{doc, total_pages, pages: [{page_num, text}, …]}` instead
+    /// of the human-readable concatenated form.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// `claudeknows reindex-pages` — backfill the `pages` table for documents
+/// already ingested under v2 schema (i.e., chunks + embeddings populated
+/// but pages table empty). Re-parses each PDF via pdfium and populates
+/// pages without touching chunks_fts or chunks_vec — preserves existing
+/// embeddings + BM25 index. Idempotent: re-runs replace existing pages
+/// rows for each document.
+#[derive(Args, Debug)]
+pub struct ReindexPagesArgs {
+    /// Restrict backfill to a specific document (basename or integer id).
+    /// When omitted, backfills every document whose source_path is still
+    /// readable on disk.
+    #[arg(long = "doc")]
+    pub doc: Option<String>,
+    #[arg(long)]
+    pub project_root: Option<PathBuf>,
+    /// Emit JSON summary `{succeeded: [...], skipped: [...], failed: [...]}`
+    /// instead of human text.
+    #[arg(long)]
+    pub json: bool,
+}
+
 /// `claudeknows compare <query>` — A/B-test all 3 search modes side-by-side.
 /// Runs the same query through lexical / dense / hybrid and prints the
 /// FULL chunk text (not the FTS5 snippet) for each hit so the operator
@@ -218,6 +267,15 @@ pub enum Command {
     /// judge retrieval quality + preview exactly what an LLM would receive
     /// as context-augmentation input.
     Compare(CompareArgs),
+    /// Fetch raw text of a specific page from a specific document.
+    /// Lets the LLM navigate the source book by page number when a search
+    /// hit's chunk doesn't carry enough context. Page numbering is pdfium
+    /// 1-indexed; out-of-range page exits 1 with `error: page number out of range`.
+    Page(PageArgs),
+    /// Backfill the `pages` table for documents already ingested under v2
+    /// schema. Re-parses each PDF via pdfium and populates pages without
+    /// touching chunks_fts / chunks_vec — preserves embeddings.
+    ReindexPages(ReindexPagesArgs),
 }
 
 #[derive(clap::Parser, Debug)]

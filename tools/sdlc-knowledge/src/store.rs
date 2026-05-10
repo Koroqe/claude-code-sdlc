@@ -136,6 +136,34 @@ ALTER TABLE chunks ADD COLUMN image_bytes BLOB;
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);
 "#;
 
+/// V3 schema delta — page-level addressing. Additive and non-destructive:
+///   - `chunks.page_start` / `page_end` (NULL for legacy rows; populated
+///     by future Slice 12 chunker that tracks per-page char-offsets)
+///   - `documents.total_pages` (NULL until first `reindex-pages` run)
+///   - `pages(doc_id, page_num, text)` table — raw per-page text exposed
+///     to the LLM via `claudeknows page <doc> <page>` so it can navigate
+///     the source book the same way a human flips pages
+///
+/// Page numbering is **pdfium 1-indexed** (the convention `wallet/getpages`
+/// returns) — independent of any "printed" page numbering the document
+/// might use (Roman for preface, Arabic for body). Out-of-range page
+/// lookups return exit 1 with the literal stderr line
+/// `error: page number out of range` (no silent fallback).
+///
+/// SQL discipline: static `&str` literal, no user-data interpolation.
+const SCHEMA_V3_DELTA: &str = r#"
+ALTER TABLE chunks ADD COLUMN page_start INTEGER;
+ALTER TABLE chunks ADD COLUMN page_end INTEGER;
+ALTER TABLE documents ADD COLUMN total_pages INTEGER;
+CREATE TABLE IF NOT EXISTS pages (
+  doc_id   INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_num INTEGER NOT NULL,
+  text     TEXT NOT NULL,
+  PRIMARY KEY (doc_id, page_num)
+);
+CREATE INDEX IF NOT EXISTS idx_pages_doc ON pages(doc_id);
+"#;
+
 /// Open (or create) the SQLite database at `db_path` with v2 schema enabled.
 /// Loads the sqlite-vec extension at connection-open time (architect OQ-2
 /// resolution: `sqlite_vec::load(&conn)` registers vec0 without enabling
@@ -157,7 +185,7 @@ pub fn open_or_init_v2(db_path: &Path) -> Result<Connection, StoreError> {
     // SQL function. Per architect OQ-2 this uses sqlite3_auto_extension (NOT
     // rusqlite's `load_extension` feature, which stays OFF — security posture).
     ensure_sqlite_vec_registered();
-    let conn = Connection::open(db_path)?;
+    let mut conn = Connection::open(db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA_V1)?;
@@ -169,16 +197,39 @@ pub fn open_or_init_v2(db_path: &Path) -> Result<Connection, StoreError> {
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .unwrap_or(0);
     if v == 0 {
-        // Fresh DB — apply delta and stamp version=2.
+        // Fresh DB — apply v2 + v3 deltas and stamp version=3.
         conn.execute_batch(SCHEMA_V2_DELTA)?;
+        conn.execute_batch(SCHEMA_V3_DELTA)?;
         conn.execute(
             "INSERT INTO schema_version(version) VALUES (?1)",
-            rusqlite::params![2i64],
+            rusqlite::params![3i64],
         )?;
     } else if v == 2 {
-        // Already at v2 — only ensure chunks_vec exists (CREATE IF NOT EXISTS).
+        // v2 → v3 progression. Additive + non-destructive: ALTER TABLE adds
+        // the page columns, CREATE TABLE IF NOT EXISTS adds the pages table.
+        // Existing chunks keep NULL page_start/page_end until backfilled
+        // (pages table is empty until `claudeknows reindex-pages` runs).
+        // Wrap in a transaction so a partially-failed v2→v3 rolls back.
+        let tx = conn.transaction()?;
+        tx.execute_batch(SCHEMA_V3_DELTA)?;
+        tx.execute(
+            "UPDATE schema_version SET version = ?1",
+            rusqlite::params![3i64],
+        )?;
+        tx.commit()?;
+    } else if v == 3 {
+        // Already at v3 — ensure forward-compat objects exist (CREATE IF NOT
+        // EXISTS for both vec0 and pages so a corruption-free re-open is
+        // idempotent).
         conn.execute_batch(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]);",
+            "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(embedding float[384]); \
+             CREATE TABLE IF NOT EXISTS pages ( \
+               doc_id   INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, \
+               page_num INTEGER NOT NULL, \
+               text     TEXT NOT NULL, \
+               PRIMARY KEY (doc_id, page_num) \
+             ); \
+             CREATE INDEX IF NOT EXISTS idx_pages_doc ON pages(doc_id);",
         )?;
     }
     // v == 1: caller runs migrate_v1_to_v2 explicitly. We don't auto-migrate
@@ -243,9 +294,10 @@ fn validate_schema_inner(conn: &Connection) -> Result<(), rusqlite::Error> {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
-    // schema_version row exists and is in 1..=2 (forward-compat for iter-2).
+    // schema_version row exists and is in 1..=3 (forward-compat through v3
+    // page-level addressing).
     let v: i64 = conn.query_row("SELECT version FROM schema_version", [], |r| r.get(0))?;
-    if !(1..=2).contains(&v) {
+    if !(1..=3).contains(&v) {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
 
@@ -426,6 +478,133 @@ pub fn delete_by_id_with_summary(
         source_path,
         chunks_removed,
     }))
+}
+
+// ===========================================================================
+// Schema v3 — page-level addressing helpers (Slice 12 of vector-retrieval-backend).
+// ===========================================================================
+
+/// One page of raw extracted text from a source document. `page_num` is
+/// 1-indexed per the pdfium convention (pages numbered 1..N where N is
+/// the PDF's reported page count, independent of any "printed" numbering
+/// like Roman numerals for preface).
+#[derive(Debug, Clone)]
+pub struct PageRow {
+    pub page_num: i64,
+    pub text: String,
+}
+
+/// Replace all `pages` rows for a document and update `documents.total_pages`.
+/// Idempotent — used by both fresh ingest and `reindex-pages` backfill.
+/// Wraps the multi-statement update in a `BEGIN IMMEDIATE` transaction so
+/// readers never see a half-populated pages table for the document.
+pub fn replace_pages(
+    conn: &mut Connection,
+    doc_id: i64,
+    pages: &[String],
+) -> Result<(), rusqlite::Error> {
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute(
+        "DELETE FROM pages WHERE doc_id = ?1",
+        rusqlite::params![doc_id],
+    )?;
+    {
+        let mut stmt =
+            tx.prepare("INSERT INTO pages(doc_id, page_num, text) VALUES (?1, ?2, ?3)")?;
+        for (i, text) in pages.iter().enumerate() {
+            // pdfium 1-indexed convention: page_num = i + 1.
+            stmt.execute(rusqlite::params![doc_id, (i as i64) + 1, text])?;
+        }
+    }
+    tx.execute(
+        "UPDATE documents SET total_pages = ?1 WHERE id = ?2",
+        rusqlite::params![pages.len() as i64, doc_id],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Resolve a doc identifier to a `documents.id`. The user-facing form is
+/// either an integer (the documents.id directly) or a string that
+/// matches `documents.source_path` by basename. Used by the `page`
+/// subcommand so the LLM can request pages from a specific book by its
+/// printed filename without knowing the integer id.
+pub fn resolve_doc_id(
+    conn: &Connection,
+    identifier: &str,
+) -> Result<Option<(i64, String, Option<i64>)>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    // Case 1: numeric id.
+    if let Ok(id) = identifier.parse::<i64>() {
+        let row: Option<(String, Option<i64>)> = conn
+            .query_row(
+                "SELECT source_path, total_pages FROM documents WHERE id = ?1",
+                rusqlite::params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        return Ok(row.map(|(p, t)| (id, p, t)));
+    }
+    // Case 2: basename match against source_path. Multiple docs with the
+    // same basename → return the most-recently-ingested one.
+    let mut stmt = conn.prepare(
+        "SELECT id, source_path, total_pages FROM documents \
+         WHERE source_path = ?1 OR source_path LIKE ?2 \
+         ORDER BY ingested_at DESC LIMIT 1",
+    )?;
+    let row: Option<(i64, String, Option<i64>)> = stmt
+        .query_row(
+            rusqlite::params![identifier, format!("%/{identifier}")],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    Ok(row)
+}
+
+/// Fetch one page's raw text. Returns `None` when the document exists
+/// but the page number is out of the [1..total_pages] range, OR when
+/// the pages table has not yet been populated for the document
+/// (`reindex-pages` not run yet).
+pub fn fetch_page(
+    conn: &Connection,
+    doc_id: i64,
+    page_num: i64,
+) -> Result<Option<String>, rusqlite::Error> {
+    use rusqlite::OptionalExtension;
+    conn.query_row(
+        "SELECT text FROM pages WHERE doc_id = ?1 AND page_num = ?2",
+        rusqlite::params![doc_id, page_num],
+        |r| r.get::<_, String>(0),
+    )
+    .optional()
+}
+
+/// Fetch a page range `[lo..=hi]` (1-indexed, inclusive) joined into one
+/// blob with `\n\n--- page break ---\n\n` between pages. Used by
+/// `claudeknows page <doc> <page> --range N` so the LLM can pull a
+/// neighborhood of pages around a specific page in a single call.
+pub fn fetch_page_range(
+    conn: &Connection,
+    doc_id: i64,
+    lo: i64,
+    hi: i64,
+) -> Result<Vec<PageRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT page_num, text FROM pages \
+         WHERE doc_id = ?1 AND page_num BETWEEN ?2 AND ?3 \
+         ORDER BY page_num",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![doc_id, lo, hi], |r| {
+        Ok(PageRow {
+            page_num: r.get(0)?,
+            text: r.get(1)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
 }
 
 /// Delete a documents row by exact `source_path` string. Returns rows deleted.
