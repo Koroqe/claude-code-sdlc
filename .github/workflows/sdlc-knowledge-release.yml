@@ -66,13 +66,15 @@ jobs:
     name: build (${{ matrix.platform }})
     needs: lint
     runs-on: ${{ matrix.runs-on }}
-    # Windows-x64 is best-effort per iter-3 / iter-3.1 — pdfium-render +
-    # MSVC target combination has unresolved compile-time issues on the
-    # GHA windows-latest runner. The matrix entry stays so the workflow
-    # exercises the Windows path; continue-on-error lets the release job
-    # publish with the 4 GA platforms even when Windows fails. Local
-    # mingw-based GNU builds are the maintainer fallback.
-    continue-on-error: ${{ matrix.platform == 'windows-x64' }}
+    # iter-2 best-effort platforms (continue-on-error so release job still
+    # publishes with the GA platforms even when these fail):
+    #   - windows-x64: pdfium-render + MSVC target combination has unresolved
+    #     compile-time issues on the windows-latest runner
+    #   - darwin-x64 + linux-arm64: ort-sys 2.0.0-rc.12 (transitive via
+    #     fastembed) does not ship prebuilt ONNX Runtime binaries for these
+    #     targets; building ORT from source needs a separate CMake step
+    #     deferred to iter-2.1
+    continue-on-error: ${{ matrix.platform == 'windows-x64' || matrix.platform == 'darwin-x64' || matrix.platform == 'linux-arm64' }}
     permissions:
       contents: read
     strategy:
@@ -142,13 +144,14 @@ jobs:
           ls -la "$HOME/.claude/tools/sdlc-knowledge/pdfium/lib/"
 
       - name: Cargo build (release)
+        shell: bash
         run: |
           cargo build --release \
             -p sdlc-knowledge \
             --manifest-path tools/sdlc-knowledge/Cargo.toml \
             --target ${{ matrix.target }}
 
-      - name: Assert binary size <= 10 MB (NFR-1.1)
+      - name: Assert binary size <= 35 MB (iter-2 NFR-1.1)
         shell: bash
         run: |
           # Windows Cargo emits `sdlc-knowledge.exe`; unix targets emit `sdlc-knowledge`.
@@ -165,8 +168,11 @@ jobs:
           # Windows Git Bash has neither — fall back to `wc -c`.
           size=$(stat -f%z "$BIN" 2>/dev/null || stat -c%s "$BIN" 2>/dev/null || wc -c < "$BIN")
           echo "Binary size: $size bytes"
-          # 10485760 = 10 * 1024 * 1024 (NFR-1.1 budget).
-          test "$size" -le 10485760
+          # 36700160 = 35 * 1024 * 1024. Iter-2 raised the budget from the
+          # iter-1 10 MB cap because the binary now bundles fastembed-rs +
+          # ort + sqlite-vec + ocr-rs (PaddleOCR runtime) + bundled-sqlite.
+          # Typical observed sizes: linux-x64 ~29 MB, darwin-arm64 ~24 MB.
+          test "$size" -le 36700160
 
       - name: Smoke test (--version exits 0)
         shell: bash
