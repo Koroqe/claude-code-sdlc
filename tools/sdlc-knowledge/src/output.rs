@@ -136,6 +136,10 @@ mod tests {
             score: 1.5,
             snippet: "the cat".to_string(),
             context: None,
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let s = render_search_json(&[hit]);
         for f in ["source", "chunk_id", "ord", "score", "snippet"] {
@@ -154,6 +158,10 @@ mod tests {
             score: 1.5,
             snippet: "the cat".to_string(),
             context: Some("para1\npara2\npara3".to_string()),
+            mode_used: None,
+            bm25_score: None,
+            dense_score: None,
+            rrf_score: None,
         };
         let s = render_search_json(&[hit]);
         assert!(s.contains("\"context\""), "context field must appear: {s}");
