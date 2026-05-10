@@ -102,6 +102,12 @@ pub fn open_or_init(db_path: &Path) -> Result<Connection, StoreError> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    // Register sqlite-vec auto-extension here too (Slice 7 CLI-wiring fix):
+    // the extension is process-global once registered, and registering on the
+    // v1 path means hybrid search on a v2 DB opened via this entry point still
+    // sees vec0. v1 DBs simply won't have chunks_vec — vec0 SQL fails cleanly
+    // and the search fallback to lexical fires per design.
+    ensure_sqlite_vec_registered();
     let conn = Connection::open(db_path)?;
     // WAL is per-database persistent so this only matters first-run, but the call is
     // idempotent and very cheap.

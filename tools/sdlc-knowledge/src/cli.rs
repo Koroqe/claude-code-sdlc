@@ -15,9 +15,30 @@
 //!   6. Map ALL `canonicalize` errors uniformly to `EscapesCwd` (no info leak).
 //!   7. Callers receive the canonicalized `PathBuf`, never the original arg (TOCTOU discipline).
 
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+
+/// Search mode (Slice 7 of vector-retrieval-backend). Default is `hybrid` —
+/// best quality when the e5-multilingual-small model is installed; falls
+/// back to `lexical` automatically when the encoder model is missing or
+/// the schema is at v1 (no chunks_vec virtual table).
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SearchMode {
+    /// BM25-only via FTS5 (iter-1 baseline; works on v1 + v2 DBs without encoder)
+    Lexical,
+    /// Pure dense via sqlite-vec K-NN; requires e5 encoder + v2 schema
+    Dense,
+    /// BM25 ⊕ dense fused via RRF k=60; default mode (auto-fallback to lexical
+    /// when encoder unavailable)
+    Hybrid,
+}
+
+impl Default for SearchMode {
+    fn default() -> Self {
+        SearchMode::Hybrid
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum ProjectRootError {
@@ -90,6 +111,12 @@ pub struct SearchArgs {
     /// field, omitted when N=0.
     #[arg(long, default_value_t = 0)]
     pub context: usize,
+    /// Search mode: `lexical` (BM25 FTS5), `dense` (sqlite-vec K-NN), or
+    /// `hybrid` (BM25 ⊕ dense via RRF k=60). Default `hybrid` — auto-falls-back
+    /// to lexical when the e5 encoder model or chunks_vec virtual table is
+    /// unavailable, with a warning printed to stderr.
+    #[arg(long, value_enum, default_value_t = SearchMode::Hybrid)]
+    pub mode: SearchMode,
     #[arg(long)]
     pub project_root: Option<PathBuf>,
     #[arg(long)]

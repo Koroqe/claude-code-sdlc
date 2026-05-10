@@ -41,9 +41,7 @@ pub enum OcrError {
 ///
 /// Callers (ingest pipeline, integration tests) MUST handle the error by
 /// substituting the canonical placeholder text:
-///
-///     [image: figure N from <doc-basename>]
-///
+/// `[image: figure N from <doc-basename>]`
 /// where N is a 1-based figure index within the document and
 /// <doc-basename> is the source file's basename. The placeholder is
 /// embedded by the e5 encoder so image chunks remain dense-searchable

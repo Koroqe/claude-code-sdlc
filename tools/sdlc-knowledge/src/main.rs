@@ -9,7 +9,7 @@
 use clap::Parser;
 
 use sdlc_knowledge::cli::{self, Cli, Command};
-use sdlc_knowledge::{ingest, migrations, output, search, store};
+use sdlc_knowledge::{encoder, ingest, migrations, output, search, store};
 
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
@@ -151,16 +151,41 @@ fn run_ingest(root: &std::path::Path, args: &cli::IngestArgs) -> std::process::E
     std::process::ExitCode::SUCCESS
 }
 
-/// `search <query> [--top-k N] [--json]` — BM25-ranked FTS5 query.
+/// `search <query> [--top-k N] [--mode lexical|dense|hybrid] [--json]`.
+///
+/// Mode dispatch (Slice 7 + technical-debt CLI wiring):
+/// - `lexical` (iter-1 baseline): FTS5 BM25 only, works on v1 + v2 schemas
+///   without requiring the e5 encoder model
+/// - `dense`: sqlite-vec K-NN, requires v2 schema (chunks_vec) AND e5 model
+/// - `hybrid` (default): BM25 ⊕ dense fused via RRF k=60; falls back to
+///   lexical with a stderr warning when encoder unavailable OR chunks_vec
+///   missing on a v1 DB
+///
+/// Corrupt-DB (AC-7) handling is uniform across modes — open + validate
+/// happens BEFORE any mode-specific dispatch so a truncated index.db
+/// always exits 1 with the canonical literal stderr message.
 fn run_search(root: &std::path::Path, args: &cli::SearchArgs) -> std::process::ExitCode {
+    let top_k = args.top_k as u32;
+    let context_radius = args.context as u32;
+
+    // Step 1: open + validate. Use the v1 entry point regardless of mode so
+    // a truncated index.db trips AC-7 (`index database invalid; re-ingest
+    // required`) BEFORE any vector-search dispatch attempts to query
+    // chunks_vec. This preserves the corrupt-index test contract for
+    // lexical, dense, AND hybrid modes uniformly.
     let (conn, _db_path) = match open_and_validate(root) {
         Ok(t) => t,
         Err(code) => return code,
     };
 
-    let top_k = args.top_k as u32;
-    let context_radius = args.context as u32;
-    let hits = match search::search(&conn, &args.query, top_k, context_radius) {
+    let hits_result = match args.mode {
+        cli::SearchMode::Lexical => search::search(&conn, &args.query, top_k, context_radius),
+        cli::SearchMode::Dense | cli::SearchMode::Hybrid => {
+            run_search_with_encoder(&conn, args, top_k, context_radius)
+        }
+    };
+
+    let hits = match hits_result {
         Ok(h) => h,
         Err(search::SearchError::FtsSyntax(msg)) => {
             eprintln!("error: invalid search query: {msg}");
@@ -178,6 +203,56 @@ fn run_search(root: &std::path::Path, args: &cli::SearchArgs) -> std::process::E
         print!("{}", output::render_search_human(&hits));
     }
     std::process::ExitCode::SUCCESS
+}
+
+/// Dense / hybrid search dispatch with graceful fallback to lexical.
+///
+/// Caller has already opened + validated the connection; this function
+/// owns the encoder + vec-query lifecycle plus the two fallback paths:
+/// 1. `encoder::encode_query` produces the 384-dim query vector. Failure
+///    (model missing / runtime error) → fall back to lexical with stderr
+///    warning. Most common during initial install before
+///    `bash install.sh --yes` has populated `~/.claude/tools/sdlc-knowledge/models/`.
+/// 2. `dense_search` or `hybrid_search` runs the vector query. Failure
+///    (chunks_vec missing on a v1 DB / SQLite error) → fall back to
+///    lexical with a stderr warning. Most common when the user has a
+///    pre-existing v1 corpus and hasn't yet re-ingested under v2.
+fn run_search_with_encoder(
+    conn: &rusqlite::Connection,
+    args: &cli::SearchArgs,
+    top_k: u32,
+    context_radius: u32,
+) -> Result<Vec<search::SearchHit>, search::SearchError> {
+    let embedding = match encoder::encode_query(&args.query) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!(
+                "warning: encoder unavailable ({e}); falling back to lexical mode. Run `bash install.sh --yes` to install the e5-multilingual-small model."
+            );
+            return search::search(conn, &args.query, top_k, context_radius);
+        }
+    };
+
+    let result = match args.mode {
+        cli::SearchMode::Dense => search::dense_search(conn, &embedding, top_k),
+        cli::SearchMode::Hybrid => search::hybrid_search(conn, &args.query, &embedding, top_k),
+        cli::SearchMode::Lexical => unreachable!("lexical handled by caller"),
+    };
+
+    match result {
+        Ok(h) => Ok(h),
+        Err(search::SearchError::Db(e)) => {
+            // Most likely "no such table: chunks_vec" on a v1 DB OR
+            // sqlite-vec extension not registered (auto-extension load
+            // race with the v1-only open path). Fall back to lexical
+            // with a clear warning explaining the migration path.
+            eprintln!(
+                "warning: vector search failed ({e}); falling back to lexical mode. Run `claudeknows ingest <path>` to populate the v2 schema with embeddings."
+            );
+            search::search(conn, &args.query, top_k, context_radius)
+        }
+        Err(other) => Err(other),
+    }
 }
 
 /// `list [--json]` — list ingested documents with chunk counts.
