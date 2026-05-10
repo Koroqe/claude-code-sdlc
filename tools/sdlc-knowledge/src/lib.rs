@@ -5,6 +5,7 @@
 //! target without any Cargo.toml edits (architect-approved invariant for
 //! Slice 2).
 
+pub mod chunker;
 pub mod cli;
 pub mod ingest;
 pub mod migrations;

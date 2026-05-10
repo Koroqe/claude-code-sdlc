@@ -1,0 +1,5 @@
+This is a fixture for the structural chunker's no-headings fallback path. The file is deliberately authored without any Markdown heading markers (no leading hashes) and without prose markers like Chapter or Section followed by a digit. The structural chunker MUST detect zero heading boundaries and route to the byte-for-byte iter-1 fallback: 500-char sliding window with 100-char overlap.
+
+The text continues here with regular paragraph content. The point of this fixture is regression-safety: the no-headings path must produce IDENTICAL output to the iter-1 chunker. If a future refactor changes the fallback path, this fixture's expected chunk count will diverge and the regression test will fail loudly.
+
+A third paragraph rounds out the content so the total character count exceeds the 500-char window and forces the chunker to emit at least two chunks. This verifies the sliding-window step (400 chars) and overlap (100 chars) behavior on a real input rather than a degenerate single-window case.
