@@ -22,6 +22,92 @@
 | Image storage | `chunks.image_bytes BLOB` inside `index.db` | Co-located figure files in `<project>/.claude/knowledge/figures/` | Preserves NFR-1.5 single-file invariant; ~28 MB BLOB overhead per typical book |
 | HTTP for model auto-download | Deferred to operator (manual model placement) | `ureq`, `reqwest`, `hf-hub` | Fastembed handles e5 lifecycle transparently; PaddleOCR `.mnn` files lack stable mirror as of 2026-05 |
 
+## How vector search works end-to-end
+
+This is the foundational mental model — every other section in this document builds on it. If you're reading this for the first time, start here.
+
+### Step 1 — Ingest-time encoding (one-time, per chunk)
+
+Every chunk goes through the e5-multilingual-small encoder once during `claudeknows ingest`:
+
+```
+chunk_text  →  encoder.encode_passage("passage: " + chunk_text)  →  vec[384]
+                                                                       ↓
+                                            INSERT INTO chunks_vec(rowid, embedding) ...
+```
+
+The 384-dimensional vector is L2-normalized (length = 1) and persisted in the `chunks_vec` virtual table (sqlite-vec). On the current corpus that's 75 895 vectors stored alongside the chunk text + FTS5 index, all in a single `index.db` file.
+
+The encoder is loaded lazily — first ingest pays a ~30 s cold-start cost while fastembed downloads the ONNX model into `~/.claude/tools/sdlc-knowledge/models/`; subsequent calls reuse the in-memory singleton.
+
+### Step 2 — Query-time encoding + K-NN search
+
+```
+query_text  →  encoder.encode_query("query: " + query_text)  →  vec[384]
+                                                                    ↓
+                                              sqlite-vec K-NN over chunks_vec
+                                                                    ↓
+                                      top-K nearest neighbors by L2 distance
+```
+
+The same encoder produces the query vector, then sqlite-vec performs an exact K-NN scan: it computes the L2 distance from the query vector to every stored chunk vector and returns the K closest. There is no approximate-nearest-neighbor index (HNSW / IVF) — at 75 k vectors × 384 dims an exhaustive scan completes in 6–7 ms on an M-series Mac, well under our 500 ms p95 budget.
+
+### Step 3 — What "nearest" means (L2 vs cosine)
+
+sqlite-vec measures **L2 (Euclidean) distance**: `√(Σ (aᵢ − bᵢ)²)`, smaller = better. Because e5 outputs **L2-normalized** vectors (∥x∥ = 1 by construction, verified at runtime in `encoder_test.rs`), the algebra collapses neatly:
+
+```
+L2² = ∥a − b∥² = ∥a∥² + ∥b∥² − 2·a·b = 2 − 2·cos(θ)
+```
+
+Two consequences:
+
+- **Ranking order by L2 is identical to ranking order by cosine similarity.** The bijection `cos = 1 − L2² / 2` is monotonically decreasing in L2, so sorting by either distance produces the same chunk order. We don't need to convert.
+- **L2 is faster on SIMD** and avoids the `a·b / (∥a∥ · ∥b∥)` divisions that explicit cosine would compute (those divisions are mathematically redundant when both norms are already 1.0).
+
+So sqlite-vec runs L2 under the hood, and we get cosine-equivalent semantics for free. The `dense_score` field in JSON output is `−L2_distance` (negated so larger = better, matching the BM25 convention); `dense_score = −0.43` corresponds to cosine similarity ≈ 0.91.
+
+### Step 4 — Why two prefixes (`passage:` vs `query:`)
+
+The e5-multilingual-small model was trained **asymmetrically**: documents are encoded with one prefix, queries with another. This is the model's published contract on its Hugging Face card. Forgetting the discipline silently degrades retrieval quality by 5–10% — the model still produces vectors, they're just in a slightly mis-aligned subspace.
+
+We enforce the discipline at two levels:
+
+1. **API design**: `encoder.rs` exposes only `encode_passages()` (auto-prefixes `"passage: "`) and `encode_query()` (auto-prefixes `"query: "`); there is no raw-string entry point. The asymmetry is impossible to forget in callsite code.
+2. **Runtime regression test**: `tests/encoder_prefix_test.rs` encodes the same string both ways and asserts cosine similarity < 0.99 — proving the prefixes are actually being applied (would fail if a refactor accidentally short-circuited them).
+
+### Step 5 — Hybrid: BM25 ⊕ dense ⊕ RRF
+
+Dense retrieval alone misses two important cases:
+
+- **Out-of-distribution tokens**: rare API names, error codes, version strings, identifiers. The encoder hasn't seen enough training data to embed them reliably. BM25 handles these trivially via literal token matching.
+- **Score-comparable to BM25**: dense and BM25 produce scores in completely different scales (cosine ∈ [−1, 1] vs BM25 ∈ [0, ∞)). Naive score-summing requires per-corpus calibration that fails on domain shift.
+
+Reciprocal Rank Fusion (Cormack/Clarke/Buttcher 2009) sidesteps both problems by ranking on **rank position**, not score:
+
+```
+score_RRF(d) = Σᵢ  1 / (k + rankᵢ(d))
+```
+
+with k = 60 (canonical from the original paper). The k value flattens the contribution of low-ranked hits so a chunk that's #1 in BM25 but #50 in dense isn't dragged down by the dense ranker's noise tail.
+
+Concretely, `hybrid_search()` in `search.rs` runs BM25 over FTS5 and dense over chunks_vec **in sequence** (single thread, single connection — sqlite-vec is in-process), takes the top-(K·4) from each, computes the RRF sum, and returns the top-K of the fused ranking.
+
+On the 12-query golden set, hybrid recovered +75% Recall@5 over lexical-only and +94% MRR — see `docs/benchmarks/2026-05-10-vector-retrieval-backend.md` for the full numbers.
+
+### Code path summary
+
+| Concern | Function | File |
+|---|---|---|
+| Encode chunks at ingest | `encode_passages(&[&str])` | `src/encoder.rs` |
+| Encode query at search | `encode_query(&str)` | `src/encoder.rs` |
+| Dense K-NN over `chunks_vec` | `dense_search(conn, embedding, k)` | `src/search.rs:255` |
+| BM25 over `chunks_fts` | `lexical_search(conn, query, k)` | `src/search.rs` |
+| Fuse rankings | `rrf_fuse(&[Vec<SearchHit>], k)` with `RRF_K = 60.0` | `src/search.rs` |
+| Top-level entry point | `hybrid_search(conn, query, k)` | `src/search.rs` |
+
+CLI dispatch: `claudeknows search <query> --mode hybrid|dense|lexical [--top-k N]`. Default mode is `hybrid`.
+
 ## Why hybrid retrieval (not dense-only)
 
 Dense retrieval has a known weakness: **out-of-distribution queries**. When
