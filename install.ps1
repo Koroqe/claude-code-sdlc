@@ -11,7 +11,7 @@ param(
 # Claude Code SDLC Windows Installer (PowerShell)
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 17 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 18 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install (PowerShell, run from any directory after cloning):
@@ -49,7 +49,7 @@ function Show-Help {
     @"
 Claude Code SDLC Installer v$Version (Windows)
 
-Turn Claude Code into a full dev team with 17 specialized AI agents.
+Turn Claude Code into a full dev team with 18 specialized AI agents.
 
 USAGE:
   install.bat [OPTIONS]
@@ -63,8 +63,8 @@ OPTIONS:
 
 WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   claude.md        Main workflow instructions
-  agents\          17 specialized agent prompts
-  commands\        7 SDLC pipeline commands
+  agents\          18 specialized agent prompts
+  commands\        8 SDLC pipeline commands
   rules\           4 process rules
   tools\claudebase\claudebase.exe   Knowledge-base CLI binary
   tools\claudebase\pdfium\lib\pdfium.dll   PDFium runtime for PDF ingest
@@ -92,7 +92,12 @@ COMMANDS AVAILABLE:
   /develop-feature    Full autonomous pipeline
   /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
   /implement-slice    Implement next TDD slice
-  /merge-ready        Run all 9 quality gates (does NOT cut a release)
+  /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
+                      documented QA plan with Playwright MCP for UI/UX evidence;
+                      FAIL spawns implementer with fix directives; BLOCKED halts
+                      and surfaces a fact-grounded argument to the human. Run
+                      BEFORE /merge-ready; /develop-feature chains it automatically.
+  /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
   /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
   /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
   /context-refresh    Rebuild session context
@@ -164,7 +169,7 @@ function Install-UserConfig {
     Write-Host "============================================" -ForegroundColor White
     Write-Host ""
     Write-Host "  Turn Claude Code into a full dev team" -ForegroundColor Cyan
-    Write-Host "  17 AI agents | Documentation-first | TDD"
+    Write-Host "  18 AI agents | Documentation-first | TDD"
     Write-Host ""
     Write-Host "  This will install to $ClaudeDir"
     Write-Host ""
@@ -597,7 +602,8 @@ Write-Host "  Commands:"
 Write-Host "    /develop-feature    Full autonomous pipeline"
 Write-Host "    /bootstrap-feature  Documentation phases only"
 Write-Host "    /implement-slice    Implement next TDD slice"
-Write-Host "    /merge-ready        Run all 9 quality gates"
+Write-Host "    /qa-cycle           Strict QA/Dev iteration loop (Playwright + evidence)"
+Write-Host "    /merge-ready        Run all 9 quality gates (assumes /qa-cycle passed)"
 Write-Host "    /release            User-invoked release packaging"
 Write-Host "    /knowledge-ingest   Ingest into per-project knowledge base"
 Write-Host "    /context-refresh    Rebuild session context"

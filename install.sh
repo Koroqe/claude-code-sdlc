@@ -5,7 +5,7 @@ set -euo pipefail
 # Claude Code SDLC Installer
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 17 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 18 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install:
@@ -49,7 +49,7 @@ print_help() {
   cat << 'HELPEOF'
 Claude Code SDLC Installer v3.0.0
 
-Turn Claude Code into a full dev team with 17 specialized AI agents.
+Turn Claude Code into a full dev team with 18 specialized AI agents.
 
 USAGE:
   bash install.sh [OPTIONS]
@@ -67,8 +67,8 @@ OPTIONS:
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
-  agents/          17 specialized agent prompts
-  commands/        5 SDLC pipeline commands
+  agents/          18 specialized agent prompts
+  commands/        8 SDLC pipeline commands
   rules/           4 process rules
   tools/claudebase/claudebase   Knowledge-base CLI binary
 
@@ -94,7 +94,12 @@ COMMANDS AVAILABLE:
   /develop-feature    Full autonomous pipeline
   /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
   /implement-slice    Implement next TDD slice
-  /merge-ready        Run all 9 quality gates (does NOT cut a release)
+  /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
+                      documented QA plan with Playwright MCP for UI/UX evidence;
+                      FAIL spawns implementer with fix directives; BLOCKED halts
+                      and surfaces a fact-grounded argument to the human. Run
+                      BEFORE /merge-ready; /develop-feature chains it automatically.
+  /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
   /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
   /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
   /context-refresh    Rebuild session context
@@ -200,12 +205,12 @@ install_user_config() {
   echo -e "${BOLD}============================================${NC}"
   echo ""
   echo -e "  ${CYAN}Turn Claude Code into a full dev team${NC}"
-  echo -e "  17 AI agents | Documentation-first | TDD"
+  echo -e "  18 AI agents | Documentation-first | TDD"
   echo ""
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
-  echo "    agents/  (17 files — specialized agent prompts)"
-  echo "    commands/ (5 files — SDLC pipeline commands)"
+  echo "    agents/  (18 files — specialized agent prompts)"
+  echo "    commands/ (8 files — SDLC pipeline commands)"
   echo "    rules/   (4 files — process rules)"
   echo ""
 
@@ -1045,7 +1050,8 @@ echo "  Commands:"
 echo "    /develop-feature    Full autonomous pipeline"
 echo "    /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)"
 echo "    /implement-slice    Implement next TDD slice"
-echo "    /merge-ready        Run all 9 quality gates (does NOT cut a release)"
+echo "    /qa-cycle           Strict QA/Dev iteration loop — qa-engineer with Playwright MCP + evidence"
+echo "    /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)"
 echo "    /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow"
 echo "    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base"
 echo "    /context-refresh    Rebuild session context"

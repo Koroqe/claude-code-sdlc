@@ -14,6 +14,10 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Added
+
+- New `qa-engineer` agent and `/qa-cycle` slash command. After implementation completes, `/qa-cycle` spawns `qa-engineer` to execute the documented QA plan against the running implementation — Playwright MCP for UI/UX (navigate / snapshot / click / take_screenshot / console_messages / network_requests + visual examination of screenshots for layout / overflow / z-index / color defects), Bash for API / DB / CLI / file-system checks. The agent emits a per-test-case PASS / FAIL / BLOCKED verdict with concrete evidence (every PASS cites a tool invocation; every FAIL cites expected-vs-actual mismatch + fix directive). FAIL spawns the implementer with directives — the cycle repeats. BLOCKED halts and surfaces a fact-grounded `exit_argument` + `human_needs_to` directive via `AskUserQuestion`. No iteration cap — exit only via PASS, BLOCKED, or implementer FAIL. Run before `/merge-ready`; `/develop-feature` chains it automatically as Phase 2.75. `qa-planner` updated to require an `Evidence Required` column on every test case and a `Verification Class` (UI/UX | API | DB | CLI | FS | Mixed); the strict-evidence-execution pass catches visual / UX defects that automated E2E typically misses. Adds the 18th agent (`qa-engineer`) and 8th slash command (`/qa-cycle`).
+
 ### Changed
 
 - Knowledge-base CLI extracted to a standalone repository at [github.com/codefather-labs/claudebase](https://github.com/codefather-labs/claudebase). Tool renamed from `claudeknows` to `claudebase`; install path moved from `~/.claude/tools/sdlc-knowledge/` to `~/.claude/tools/claudebase/`. Existing installations are auto-migrated by `install.sh` on next run — the old directory and the legacy `claudeknows` symlink are removed automatically. The binary is still downloaded from GitHub releases as before, just from the new repo's release pipeline. Version continuity preserved: the last `sdlc-knowledge-v0.4.0` release (published 2026-05-10) is succeeded by `claudebase-v0.4.0` with no version regression.

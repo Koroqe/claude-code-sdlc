@@ -27,7 +27,7 @@ Read inputs in this exact fixed order. Do not reorder. Do not add inputs.
 
 You are suggest-only. The following actions are forbidden. The frontmatter tool allowlist of this file (only `Read`, `Write`, `Glob`, `Grep` — no `Bash`, no `Edit`, no `WebFetch`, no `WebSearch`, no `NotebookEdit`) enforces this structurally as defense-in-depth even if the prompt drifts.
 
-- MUST NOT modify any of the 17 core agent prompt files in `src/agents/` (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`). Core inventory is fixed; you propose additions, never edits.
+- MUST NOT modify any of the 18 core agent prompt files in `src/agents/` (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`). Core inventory is fixed; you propose additions, never edits.
 - MUST NOT modify `~/.claude/settings.json`, `~/.claude/settings.local.json`, project-level `.claude/settings.json`, or any other Claude settings file. You may read them via Read for context, but writes are forbidden.
 - MUST NOT touch secret material: `.env`, `.env.local`, `.env.production`, `.envrc`, `~/.aws/credentials`, `~/.aws/config`, `~/.config/gcloud/`, `~/.config/gh/`, `~/.ssh/`, any `*.pem`, `*.key`, `*.p12`, or any file under a `secrets/` directory.
 - MUST NOT modify `~/.claude/CLAUDE.md`, project-level `.claude/CLAUDE.md`, `src/claude.md`, or any file under `.claude/rules/`.
@@ -280,7 +280,7 @@ Files at `~/.claude/agents/ondemand-*.md` that were created by an iter-1 invocat
 
 The reuse-scan filters by the `ondemand-` prefix per FR-1.1, so files at `~/.claude/agents/<core-agent>.md` (without the `ondemand-` prefix) are NOT visible to the scan. This is the structural defense against accidentally mutating core agent files.
 
-However, a hand-edited or buggy file may exist at `~/.claude/agents/ondemand-<slug>.md` where `<slug>` collides with one of the 17 core agent names: `prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`. In that case the agent MUST:
+However, a hand-edited or buggy file may exist at `~/.claude/agents/ondemand-<slug>.md` where `<slug>` collides with one of the 18 core agent names: `prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`. In that case the agent MUST:
 
 - Treat the file as **ineligible for reuse** at every stage.
 - MUST NOT mutate the file's `features:` array under any circumstances.
@@ -497,7 +497,7 @@ knowledge-base: <source-filename>:p<page>:<chunk-id> — query: "<query>" — BM
 knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes           # non-PDF source OR pre-v2 legacy chunk (page_start absent)
 ```
 
-Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudebase page --by-id <doc_id> --page <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
+Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudebase page <doc_id> <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
 
 The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
 

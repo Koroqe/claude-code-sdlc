@@ -67,6 +67,16 @@ Delegate to `refactor-cleaner` agent to review the accumulated changes:
 - Improve type safety where obvious
 Then commit cleanup as a single `chore(core): clean up <feature> implementation` commit.
 
+### Phase 2.75: QA Cycle (strict evidence-based execution)
+
+Follow the `/qa-cycle` workflow. The `qa-engineer` agent executes the documented QA plan against the running implementation, gathers concrete evidence per test case (Playwright MCP for UI/UX, Bash for API/DB/CLI), and emits PASS/FAIL/BLOCKED verdicts. FAIL spawns the implementer with fix directives — the cycle repeats until overall PASS or until BLOCKED surfaces a fact-grounded human-needed action.
+
+- If overall PASS → proceed to Phase 3
+- If overall BLOCKED → halt `/develop-feature` entirely; the human resolves the surfaced action, then re-runs `/develop-feature` (which restarts at Phase 2.75 with iteration N+1)
+- If implementer FAIL → halt `/develop-feature`; surface the implementer's report; the human investigates
+
+**Why this phase exists:** the standard `e2e-runner` pass that lives inside `/merge-ready` Gate 5 is a CODE-AUTHORING check (writes E2E tests, runs the suite). It does NOT examine screenshots visually, does NOT enforce Playwright-MCP-backed evidence per case, does NOT flag visual defects observed but not in the test plan. `/qa-cycle` is the STRICT pass that catches the visual / UX defects that automated E2E typically misses — the user-experienced load-bearing failure mode.
+
 ### Phase 3: Quality Gates
 Follow the `/merge-ready` workflow to run all quality gates.
 - If any gate FAILS: the main agent reads the gate's output and fixes the issues directly, then reruns only the failed gate(s)

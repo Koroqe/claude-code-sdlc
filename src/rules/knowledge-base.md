@@ -235,7 +235,7 @@ Three failure modes are pre-classified so agents handle them deterministically:
 
 ## Application Scope
 
-The 12 in-scope thinking agents — same set as the cognitive-self-check protocol
+The 13 in-scope thinking agents — same set as the cognitive-self-check protocol
 (`~/.claude/rules/cognitive-self-check.md` `## Application Scope`) — MUST query
 the index before authoring domain-bearing content when the sentinel is present:
 
@@ -251,6 +251,7 @@ the index before authoring domain-bearing content when the sentinel is present:
 - `resource-architect`
 - `role-planner`
 - `release-engineer`
+- `qa-engineer`
 
 The 5 exempt executor agents are deterministic spec-followers and do NOT query
 the knowledge base — their inputs are already fact-cited by upstream thinking
@@ -352,7 +353,7 @@ open; `claudebase ingest` surfaces the error and skips the document.
 - Pre-v2 legacy chunks (PDF chunks ingested before the page-tracking
   migration) appear in search results without `page_start` and are cited
   in citation form (b) — risk: agents may not realise the source IS a PDF
-  and miss an opportunity to follow up with `page --by-id` after a
+  and miss an opportunity to follow up with `page <doc> <N>` after a
   re-ingest — how to verify: when an agent cites form (b) for a `.pdf`
   source path, surface a hint suggesting `claudebase ingest <path>` to
   upgrade the document to v2.

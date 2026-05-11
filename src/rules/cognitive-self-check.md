@@ -72,7 +72,7 @@ If you cannot verify (no docs available, the integration is undocumented, the AP
 
 ## Application Scope
 
-**In-scope (12 thinking agents — MUST follow this protocol on every output):**
+**In-scope (13 thinking agents — MUST follow this protocol on every output):**
 
 - `prd-writer` — embeds `## Facts` inside the new PRD section
 - `ba-analyst` — emits `## Facts` at the end of the use-cases file
@@ -86,6 +86,7 @@ If you cannot verify (no docs available, the integration is undocumented, the AP
 - `resource-architect` — emits `## Facts` inside `.claude/resources-pending.md` after `## Auto-Install Results`
 - `role-planner` — emits `## Facts` inside `.claude/roles-pending.md` after `## Reuse Decisions`
 - `release-engineer` — emits `## Facts` inside the release-notes file (`.claude/release-notes-X.Y.Z.md` or canonical release-notes path)
+- `qa-engineer` — prepends `## Facts` to its stdout verdict report; per-test-case PASS verdicts MUST cite the tool invocation that produced the evidence (Playwright MCP screenshot path, command stdout, SQL row output); FAIL verdicts MUST cite the expected-vs-actual mismatch with evidence artifact; BLOCKED verdicts MUST cite fact-grounded reasoning under `exit_argument`. A QA verdict without evidence is fact-shaped lie that the cognitive-self-check protocol is designed to prevent.
 
 **Exempt (5 executor agents — deterministic spec-followers, no fact-checking required):**
 

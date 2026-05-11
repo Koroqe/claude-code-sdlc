@@ -9,7 +9,7 @@ A local Rust CLI binary `claudebase` installed at `~/.claude/tools/claudebase/cl
 - Reads PDF / Markdown / plain-text documents from `<project>/.claude/knowledge/sources/` (or any path under the project root)
 - Splits each document into ~500-character overlapping chunks (UTF-8 boundary safe). For PDFs the chunker is **per-page**: each chunk is tagged with the 1-indexed source page so search hits cite the exact page they came from.
 - Stores chunks in a SQLite FTS5 virtual table at `<project>/.claude/knowledge/index.db` (one file per project). Schema v2 also stores per-page extracted PDF text in a `pages(doc_id, page_no, text)` table so the `page` subcommand can return the full text of any cited page in O(1) without re-running PDFium.
-- Serves BM25-ranked full-text queries via `claudebase search "<query>"` — search hits expose `doc_id`, `page_start`, `page_end` so agents can pivot to `claudebase page --by-id <doc_id> --page <page_start>` to read the surrounding paragraph.
+- Serves BM25-ranked full-text queries via `claudebase search "<query>"` — search hits expose `doc_id`, `page_start`, `page_end` so agents can pivot to `claudebase page <doc_id> <page_start>` to read the surrounding paragraph.
 - Per-document transactional ingest with sha256 + mtime idempotency — re-running is a no-op when sources are unchanged
 
 No vector embeddings — pure lexical retrieval via SQLite's FTS5 `bm25()` function. Deterministic output, ~5-10 ms per query over 17 000-chunk indexes on a 2024 laptop.
@@ -30,7 +30,7 @@ When `<project>/.claude/knowledge/index.db` exists, every in-scope thinking agen
 3. **If results are returned and load-bearing**, integrate them into the output AND cite them under `## Facts → ### External contracts` using the literal citation format from `~/.claude/rules/knowledge-base.md`. **When the JSON hit contains a `page_start` field, agents MUST use citation form (a) — `<source>:p<page>:<chunk-id>` — rather than the legacy chunk-only form.** Page citations are load-bearing: they let a human reviewer open the cited PDF and verify the quote in seconds.
 4. **If a search returns zero results** for a concept that should plausibly be in the base, document the negative search under `### Open questions` (e.g., `knowledge-base: searched "<query>" → 0 hits; consider adding domain reference for <topic>`). Do NOT silently skip — surfacing gaps is how the user knows what to add to the corpus. **Before logging a zero-result, the agent MUST have tried the same concept in every detected language** — a query that returns 0 in English but ≥1 in Russian is NOT a corpus gap, it is a translation gap in the agent's query phrasing.
 5. **NEVER fabricate citations.** Only cite hits that `claudebase search` actually returned in this session. The cognitive-self-check rule treats fabricated citations as the load-bearing failure mode it was designed to prevent.
-6. **Quoting prose? Pull the full page first.** When the agent intends to quote, paraphrase, or analyse more than one sentence from a PDF hit, follow up the search with `claudebase page --by-id <doc_id> --page <page_start> --json` to fetch the full extracted page. The 500-char snippet returned by `search` is for ranking, not for quotation — quoting from the snippet alone risks clipping mid-sentence or misattributing surrounding context. The `page` call is cheap (single SQLite indexed lookup, no PDFium re-run) so the latency cost is negligible.
+6. **Quoting prose? Pull the full page first.** When the agent intends to quote, paraphrase, or analyse more than one sentence from a PDF hit, follow up the search with `claudebase page <doc_id> <page_start> --json` to fetch the full extracted page. The 500-char snippet returned by `search` is for ranking, not for quotation — quoting from the snippet alone risks clipping mid-sentence or misattributing surrounding context. The `page` call is cheap (single SQLite indexed lookup, no PDFium re-run) so the latency cost is negligible.
 
 ## Concrete triggers — when you MUST query
 
@@ -166,7 +166,7 @@ When the agent quotes, paraphrases, or analyses more than one sentence
 from the hit, it MUST follow up with:
 
 ```
-claudebase page --by-id 3 --page 88 --json
+claudebase page 3 88 --json
 ```
 
 returning:
@@ -196,7 +196,7 @@ A hit without `page_start` came from either:
   on subsequent searches. Do NOT block the artifact on this — citation
   form (b) is still valid for legacy chunks.
 
-### When `--page <N>` is out of range
+### When `<N>` is out of range
 
 `claudebase page` returns exit 1 with `error: page <N> out of range
 (document has <total> page(s)): <source>`. The agent treats this as a
@@ -217,9 +217,9 @@ If unsure whether a concept is "domain-bearing", default to running the search �
 
 ## Application Scope
 
-In-scope (12 thinking agents — MUST follow the mandate above):
+In-scope (13 thinking agents — MUST follow the mandate above):
 
-`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `code-reviewer`, `verifier`, `refactor-cleaner`, `resource-architect`, `role-planner`, `release-engineer`.
+`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `code-reviewer`, `verifier`, `refactor-cleaner`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`.
 
 Exempt (5 executor agents — deterministic spec-followers, no authoring discretion):
 
@@ -237,7 +237,7 @@ User-driven (agents NEVER mutate the index):
 - **`claudebase list --json`** — audit what is currently indexed.
 - **`claudebase delete <source-id>`** — remove a stale source. The FTS5 trigger cascades chunk deletion (and the `pages` rows cascade-delete via the foreign-key constraint).
 - **`claudebase status --json`** — return `{schema_version, doc_count, chunk_count, db_path}` for quick health check. `schema_version` should be `2` after iter-2 page-tracking; older indexes report `1` and silently skip page citations.
-- **`claudebase page --by-id <ID> --page <N> --json`** (or positional `<source-path> --page <N>`) — fetch the full extracted text of one PDF page. Used as the second step of the search → page pivot described above.
+- **`claudebase page <doc-id-or-basename> <N> --json`** (or positional `<basename> <N>` (basename matches `documents.source_path`)) — fetch the full extracted text of one PDF page. Used as the second step of the search → page pivot described above.
 
 ## PDF extraction backend
 

@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-17 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+18 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.0.0-green.svg)]()
@@ -106,7 +106,7 @@ MERGE READY
 
 ---
 
-## The 17 Agents
+## The 18 Agents
 
 | Agent | Role |
 |-------|------|
@@ -119,7 +119,8 @@ MERGE READY
 | `planner` | Breaks features into 5-9 executable slices with verification commands |
 | `security-auditor` | Vulnerability audit, auth boundaries |
 | `test-writer` | TDD — tests before implementation |
-| `e2e-runner` | End-to-end tests from use-case scenarios |
+| `e2e-runner` | Writes end-to-end tests from use-case scenarios (code authoring) |
+| `qa-engineer` | Executes the QA plan against the running implementation. Uses Playwright MCP for UI/UX (screenshots, console, network), Bash for API/DB/CLI. Emits per-test-case PASS/FAIL/BLOCKED verdicts with concrete evidence. Strict — no evidence = automatic FAIL. Drives the `/qa-cycle` iteration loop. |
 | `code-reviewer` | Quality, security, architecture compliance |
 | `build-runner` | Typecheck, tests, build verification |
 | `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
@@ -137,7 +138,8 @@ MERGE READY
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
 | `/bootstrap-feature [--with-resources]` | Documentation phases only — PRD, use cases, architecture, QA, plan. Pass `--with-resources` to force-run resource-architect (otherwise auto-detected from PRD/use-cases keywords). |
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
-| `/merge-ready` | All 9 quality gates (release packaging is NOT a gate — see `/release`) |
+| `/qa-cycle` | Strict QA/Dev iteration loop — `qa-engineer` executes the QA plan against the running implementation with Playwright MCP for UI/UX evidence; FAIL spawns the implementer with fix directives; BLOCKED halts and surfaces a fact-grounded argument to the human. Run BEFORE `/merge-ready`; `/develop-feature` chains it automatically between implementation and quality gates. |
+| `/merge-ready` | All 9 quality gates (release packaging is NOT a gate — see `/release`) — assumes `/qa-cycle` has run and passed |
 | `/release` | User-invoked release packaging — semver bump, CHANGELOG date stamp, release-notes file, GHA release workflow. Run after `/merge-ready` when ready to publish. |
 | `/knowledge-ingest` | Ingest a folder/file into the per-project knowledge base |
 | `/context-refresh` | Rebuild session context from scratchpad |
@@ -226,9 +228,9 @@ A **Bash whitelist** acts as defense-in-depth on top of the per-tier approvals: 
 
 ## On-demand role recommendations at bootstrap
 
-The 17 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 17 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 17. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
+The 18 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 18 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 18. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
 
-Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 17 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`); the Plan Critic flags collisions as MAJOR.
+Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 18 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`); the Plan Critic flags collisions as MAJOR.
 
 Because on-demand subagent types are not registered with Claude Code at session start, they cannot be invoked via `subagent_type: ondemand-<slug>`. Instead, the bootstrap pipeline reads the prompt body from `~/.claude/agents/ondemand-<slug>.md`, strips the frontmatter, and spawns the role using the **general-purpose** subagent type with the body passed verbatim as the prompt. This frontmatter-extraction-and-invocation contract is documented in detail in `src/commands/bootstrap-feature.md` (see the `### On-Demand Role Invocation` section). The `tools:` frontmatter field is not runtime-enforced for general-purpose subagents — the prompt body itself must self-restrict authority and tool usage.
 
@@ -304,7 +306,7 @@ Thinking agents in the SDLC pipeline can build verdicts on memory of similar sys
 
 Every thinking agent runs a 4-question protocol — what is this claim based on? did I verify it in this session? what am I assuming without proof? if it's an assumption, is it labelled? — and emits a mandatory `## Facts` block with four subsections: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. The block makes evidence auditable: a downstream agent or human reviewer can challenge any claim against its cited source. Memory of training-data is explicitly NOT a valid source.
 
-The rule applies to **12 thinking agents** (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, code-reviewer, verifier, refactor-cleaner, resource-architect, role-planner, release-engineer). The **5 executor agents** (test-writer, build-runner, e2e-runner, doc-updater, changelog-writer) are exempt — they execute deterministic specs and don't make discretionary claims that need fact-checking.
+The rule applies to **13 thinking agents** (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, code-reviewer, verifier, refactor-cleaner, resource-architect, role-planner, release-engineer, qa-engineer). The **5 executor agents** (test-writer, build-runner, e2e-runner, doc-updater, changelog-writer) are exempt — they execute deterministic specs and don't make discretionary claims that need fact-checking.
 
 **Enforcement split:** Plan Critic mechanically enforces the rule on **file-based artifacts** (PRD sections, use-case files, QA test-case files, plan.md, resources-pending.md, roles-pending.md, release-notes files) — missing block is a MAJOR finding, vague external-contract citation is a MINOR finding. **Stdout-only agents** (architect, security-auditor, code-reviewer, verifier, refactor-cleaner) emit `## Facts` to stdout via their own prompt instructions, since Plan Critic cannot read transcript content.
 
@@ -314,7 +316,7 @@ The rule applies to **12 thinking agents** (prd-writer, ba-analyst, architect, q
 
 ## Local knowledge base
 
-Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 12 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/claudebase/claudebase` (also invokable as `claudebase` from any directory on PATH after `install.sh` registers the global alias); the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
+Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 13 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/claudebase/claudebase` (also invokable as `claudebase` from any directory on PATH after `install.sh` registers the global alias); the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
 
 The CLI exposes 5 subcommands — `ingest`, `search`, `list`, `status`, `delete`. **Iter-2 (vector-retrieval-backend) added a hybrid retrieval backend** alongside the existing FTS5 BM25 ranker: a `chunks_vec` virtual table (sqlite-vec extension) populated with 384-dim e5-multilingual-small embeddings during ingest, plus three search modes:
 
@@ -324,7 +326,7 @@ The CLI exposes 5 subcommands — `ingest`, `search`, `list`, `status`, `delete`
 
 Hybrid captures both exact-keyword and semantic recall in a single ranking — cross-lingual queries (RU→EN, EN→RU), paraphrase robustness, and concept-level retrieval all work. Image content from PDFs is extracted at ingest time (figures stored as PNG BLOBs in the same `index.db`) and embedded via the canonical placeholder text `[image: figure N from <doc>]` so it remains searchable until Slice 6b lands a real OCR engine.
 
-Populate the base via `/knowledge-ingest <path>` (or `claudebase ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 12 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+Populate the base via `/knowledge-ingest <path>` (or `claudebase ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 13 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
 
 Activation is opt-in: without `index.db`, every agent prompt behaves identically to current `main`. Without the e5 model OR on a v1 schema, hybrid/dense modes auto-fall-back to lexical with a stderr warning. Without the binary, install.sh degrades gracefully (cargo source-build fallback when cargo is on PATH). See `src/rules/knowledge-base.md` for the full CLI contract and citation discipline.
 

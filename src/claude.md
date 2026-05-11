@@ -19,7 +19,8 @@ This workflow mirrors a professional software development team:
 | Tech Lead | `planner` | Implementation plan (5-9 slices) |
 | Security Engineer | `security-auditor` | Security review for sensitive slices |
 | Developer | `test-writer` | TDD test implementation |
-| QA Engineer | `e2e-runner` | E2E tests from use-case scenarios |
+| E2E Test Author | `e2e-runner` | Writes E2E tests from use-case scenarios (code authoring, not strict verification) |
+| QA Engineer | `qa-engineer` | Executes the QA plan against the running implementation, gathers concrete evidence (Playwright MCP screenshots, console logs, network responses, command output, DB rows), emits per-test-case PASS/FAIL/BLOCKED verdicts. Drives the `/qa-cycle` iteration loop. Strict — a case without evidence is automatic FAIL. |
 | Code Reviewer | `code-reviewer` | Code quality and standards |
 | DevOps | `build-runner` | Typecheck, tests, build verification |
 | Verification Engineer | `verifier` | Goal-backward integration verification (wiring, data flow, stub detection) |
@@ -45,8 +46,11 @@ When planning ANY feature — whether in plan mode, responding to a request, or 
 **Phase 3: Implementation**
 7-N. TDD slices: tests first → implement → verify → commit
 
+**Phase 3.5: QA Cycle (strict evidence-based execution)**
+N+1. `qa-engineer` executes the documented QA plan against the running implementation — Playwright MCP for UI/UX (screenshots, console, network, visual-defect flagging), Bash for API / DB / CLI / FS — and emits a per-test-case PASS / FAIL / BLOCKED verdict with concrete evidence. FAIL spawns the implementer with fix directives; the cycle iterates until overall PASS. BLOCKED halts with a fact-grounded `exit_argument` + `human_needs_to` surfaced via `AskUserQuestion`. `/qa-cycle` is the load-bearing strict-evidence pass that catches visual / UX defects automated E2E typically misses.
+
 **Phase 4: Quality Gates**
-N+1. Code review, security audit, build, E2E, docs verification
+N+2. Code review, security audit, build, E2E, docs verification
 
 **A plan without documentation phases is INCOMPLETE. Do not proceed to implementation without them.**
 
@@ -64,15 +68,19 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 2. **Loop `/implement-slice`** for each slice — TDD for each:
    - Tests first → implement → verify → commit → scratchpad
 
-3. **Run `/merge-ready`** — all quality gates
+3. **Run `/qa-cycle`** — strict QA/Dev iteration loop. The `qa-engineer` agent executes the documented QA plan against the running implementation (Playwright MCP for UI/UX, Bash for API/DB/CLI), emits per-test-case PASS/FAIL/BLOCKED verdicts with concrete evidence, and spawns the implementer with fix directives on FAIL. Cycle iterates until overall PASS or until BLOCKED surfaces a fact-grounded human-needed action.
+
+4. **Run `/merge-ready`** — all 9 quality gates (assumes `/qa-cycle` has passed)
 
 **Do NOT skip step 1. Do NOT start writing code before `/bootstrap-feature` completes.**
+**Do NOT skip step 3. `/merge-ready` enforces `/qa-cycle` as a hard pre-requisite — running it without prior QA-Cycle evidence reports `NOT MERGE READY — run /qa-cycle first` and exits before Gate 0.**
 **Do NOT write PRD, use cases, or test cases yourself — delegate to the specialized agents.**
 
 ### Pipeline Commands
 - `/develop-feature` — Full autonomous pipeline (steps 1-3 above)
 - `/bootstrap-feature [--with-resources] <description>` — Documentation phases only (step 1). `--with-resources` forces Step 3.5 resource-architect dispatch (otherwise auto-detected via PRD/use-cases keywords).
 - `/implement-slice` — Single TDD slice (step 2, one iteration)
+- `/qa-cycle` — QA/Dev iteration loop. The `qa-engineer` agent executes the documented QA plan against the running implementation (Playwright MCP for UI/UX, Bash for API/DB/CLI), gathers concrete evidence per case, and emits PASS/FAIL/BLOCKED verdicts. FAIL spawns the implementer with fix directives and the cycle repeats. BLOCKED halts and surfaces a fact-grounded argument to the human via AskUserQuestion. No iteration cap — exit only via PASS, BLOCKED, or implementer FAIL. Run BEFORE `/merge-ready`; `/develop-feature` chains it automatically.
 - `/merge-ready` — 9 quality gates (step 3) — does NOT cut a release
 - `/release` — User-invoked release packaging (semver bump + CHANGELOG date stamp + release-notes file + GHA release workflow). Use after `/merge-ready` reports MERGE READY when ready to publish.
 - `/knowledge-ingest <path>` — Ingest folder/file into per-project knowledge base
@@ -87,7 +95,7 @@ Even though plan mode is read-only and agents don't run during it, the plan file
    - [ ] PRD section in `docs/PRD.md`
    - [ ] Use cases in `docs/use-cases/<feature>_use_cases.md`
    - [ ] Architecture review verdict
-   - [ ] QA test cases in `docs/qa/<feature>_test_cases.md`
+   - [ ] QA test cases in `docs/qa/<feature>_test_cases.md` — each row MUST carry the `Verification Class` (UI/UX | API | DB | CLI | FS | Mixed) and `Evidence Required` columns so the qa-engineer's `/qa-cycle` execution pass has unambiguous artifact targets
 3. **Implementation slices** — preliminary breakdown (refined by planner agent in bootstrap)
 4. **Files likely affected**
 5. **Risks and dependencies**
@@ -117,7 +125,7 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Risks and dependencies section exists and is substantive
 > - The `## Recommended Resources` section (if present at the top of the plan, before `## Prerequisites verified`) is a valid top-level section produced by `resource-architect` at bootstrap Step 3.5 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed recommendation entries missing any of the six fields (Category, Name, Why, Install/activate, Cost/complexity, Reversibility) MAY be raised as MINOR — not CRITICAL, not MAJOR.
 > - The `## Auto-Install Results` section (if present at the top of the plan, after `## Recommended Resources` and before `## Additional Roles` or `## Prerequisites verified`) is a valid top-level section produced by `resource-architect` at bootstrap Step 3.5 auto-install phase — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans, headless contexts, no-installable cases, or "no to all" replies all legitimately omit it). Malformed status strings not in the 10-enum (auto-applied, approved-and-applied, approved-but-failed, skipped-already-present, aborted-version-conflict, aborted-sensitive, aborted-whitelist-violation, aborted-batch-halted, aborted-detection-failed, not-approved) MAY be raised as MINOR — not CRITICAL, not MAJOR.
-> - The `## Additional Roles` section (if present at the top of the plan, after `## Recommended Resources` if any and before `## Prerequisites verified`) is a valid top-level section produced by `role-planner` at bootstrap Step 3.75 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed per-role entries missing any of the 5 fields (Role title, Slug, Why, Pipeline step, Purpose) MAY be raised as MINOR. Slug inconsistency between per-role block and call plan MAY be MINOR. **If per-role slug matches any core 17 agent name (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, test-writer, code-reviewer, build-runner, e2e-runner, verifier, doc-updater, refactor-cleaner, changelog-writer, resource-architect, role-planner, release-engineer), flag as MAJOR — semantic collision indicates FR-1.8 overlap-check failure.**
+> - The `## Additional Roles` section (if present at the top of the plan, after `## Recommended Resources` if any and before `## Prerequisites verified`) is a valid top-level section produced by `role-planner` at bootstrap Step 3.75 — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans lack it per backward compat). Malformed per-role entries missing any of the 5 fields (Role title, Slug, Why, Pipeline step, Purpose) MAY be raised as MINOR. Slug inconsistency between per-role block and call plan MAY be MINOR. **If per-role slug matches any core 18 agent name (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, test-writer, code-reviewer, build-runner, e2e-runner, verifier, doc-updater, refactor-cleaner, changelog-writer, resource-architect, role-planner, release-engineer, qa-engineer), flag as MAJOR — semantic collision indicates FR-1.8 overlap-check failure.**
 > - The `## Reuse Decisions` subsection (if present in `.claude/plan.md` after `## Additional Roles` and `## Role invocation plan`) is a valid plan subsection produced by `role-planner` at bootstrap Step 3.75 reuse mode — do NOT flag its presence as a finding. Absence is also NOT a finding (legacy plans, plans where every recommendation hit Stage 3, and plans with "No additional roles required" do not have meaningful reuse decisions). Status strings outside the 8-enum (`stage-1-exact-slug-match`, `stage-2-purpose-match-approved`, `stage-2-purpose-match-declined`, `stage-3-no-match-created`, `headless-default-create`, `legacy-migrated`, `malformed-yaml-skipped`, `migration-failed-malformed-yaml`) MAY be raised as MINOR — not CRITICAL, not MAJOR.
 > - The `## Facts` section MUST be present in any current-cycle file-based artifact (`docs/PRD.md` section whose `Date:` is on or after `MERGE_DATE`, the current `docs/use-cases/<feature>_use_cases.md`, the current `docs/qa/<feature>_test_cases.md`, `.claude/plan.md`, `.claude/resources-pending.md`, `.claude/roles-pending.md`, the current release-notes file). Missing block = **MAJOR**. Empty subsection lacking the literal `(none)` placeholder = **MINOR**. Pre-existing artifacts (Date predates `MERGE_DATE`, or files not being re-edited in the current cycle) are EXEMPT — see `~/.claude/rules/cognitive-self-check.md` `## Backward Compatibility`.
 > - Any plan slice, PRD requirement, use case, or test case that mentions a specific external API/SDK/library identifier (dotted method names like `express.Router()`, quoted enum/status strings like `"PENDING"`, capitalized class/type names matching `^[A-Z][A-Za-z0-9]+$` in code-formatting backticks) MUST have a matching entry in the artifact's `### External contracts` subsection citing the source (docs URL, SDK version + symbol path, OpenAPI/proto file:line, or the literal label `verified: no — assumption`). Missing citation = **MAJOR**. Citation present but vague (e.g., "documentation" without identifying which) = **MINOR**.
@@ -128,6 +136,12 @@ Launch a `Plan` subagent with this prompt (substitute the actual plan file path)
 > - Dependency ordering is correct (no slice requires work from a later slice)
 > - Each slice adding API endpoints includes input validation requirements
 > - Each slice touching the database mentions the schema change
+>
+> **QA Test-Case Strictness (the qa-engineer / `/qa-cycle` interface):**
+> - Each row in `docs/qa/<feature>_test_cases.md` MUST have a `Verification Class` column with one of: `UI/UX`, `API`, `DB`, `CLI`, `FS`, `Mixed`. Missing column on any row = **MAJOR** (qa-engineer cannot route cases without classification).
+> - Each row MUST have an `Evidence Required` column with concrete artifact names (`screenshot tc-X.Y.Z-after.png showing toast text 'Welcome!'`, `curl HTTP 200 + body literal match`, `SQL row count = 1 with column user_id = ?`). Vague entries like "result is correct", "behaves as expected", "no errors" = **MAJOR** — qa-engineer's strict-fact-check protocol would mark such cases as FAIL/BLOCKED at execution time.
+> - For UI/UX cases, evidence MUST include at least one of: screenshot path, `browser_console_messages` reference, `browser_network_requests` reference. UI/UX rows without these = **MAJOR**.
+> - For features with a visible browser surface, the QA plan MUST include at least 2 visual-quality cases (explicit screenshot-based assertions about layout / no-overflow / no-z-index-bugs / loading states). Missing visual-quality coverage = **MINOR** (qa-engineer still flags visual defects observed, but the test plan should anticipate them).
 >
 > **File Path Verification (MANDATORY — use Glob and Grep):**
 > - Verify every file path in "Files likely affected" exists (or is explicitly marked "new file")

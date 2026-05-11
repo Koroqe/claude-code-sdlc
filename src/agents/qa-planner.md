@@ -19,7 +19,7 @@ You document test cases in `docs/qa/` BEFORE any tests or code are written. You 
 
 ## Output Format
 
-Follow the established format from existing files in `docs/qa/`:
+Follow the established format from existing files in `docs/qa/`. **Every row MUST include the `Evidence Required` and `Verification Class` columns** so the QA Engineer that executes this plan knows exactly what artifact to produce. Vague expected results without evidence requirements is the load-bearing failure mode this format was upgraded to prevent.
 
 ```markdown
 # Test Cases: <Feature Name>
@@ -31,12 +31,33 @@ Follow the established format from existing files in `docs/qa/`:
 ## 1. <Functional Area>
 
 ### 1.1 <Sub-area>
-| # | Use Case | Test Case | Expected Result |
-|---|----------|-----------|-----------------|
-| 1.1.1 | UC-1 | <Specific test scenario> | <Expected outcome> |
-| 1.1.2 | UC-1-A | <Alternative flow test> | <Expected outcome> |
-| 1.1.3 | UC-1-E1 | <Error flow test> | <Expected outcome> |
+| # | Use Case | Verification Class | Test Case | Expected Result | Evidence Required |
+|---|----------|--------------------|-----------|-----------------|--------------------|
+| 1.1.1 | UC-1 | UI/UX | Click 'Submit' on /signup with valid email + password | (a) success toast appears within 2s; (b) POST /api/signup returns 201 with `{user_id, token}`; (c) row inserted in `users` table; (d) no JS console errors during flow | (a) screenshot `tc-1.1.1-after.png` showing toast text 'Welcome!'; (b) network_request log showing POST /api/signup → 201 + body shape; (c) SQL `SELECT id, email FROM users WHERE email = ?` returns one row; (d) `browser_console_messages` empty |
+| 1.1.2 | UC-1-A | API | POST /api/signup with duplicate email | 409 Conflict; body `{error: "email_taken"}`; no new row in users | curl HTTP 409 + response body literal match; SQL row count unchanged |
+| 1.1.3 | UC-1-E1 | UI/UX | Type invalid email format, click 'Submit' | (a) inline error 'Please enter a valid email' under the email input; (b) no network request fired; (c) submit button stays enabled | screenshot showing inline-error element + error text; empty network_requests log for this interaction |
 ```
+
+### Verification Class — one of:
+
+- **UI/UX** — visible browser surface; QA Engineer uses Playwright MCP (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_take_screenshot`, `browser_console_messages`, `browser_network_requests`, etc.) AND examines screenshots visually (multimodal vision) for layout / overflow / z-index / color defects
+- **API** — HTTP endpoint behavior; QA Engineer uses `curl` or the project's HTTP test client, captures status + body + headers
+- **DB** — persisted state; QA Engineer runs SQL via `Bash`, captures row count + key columns
+- **CLI** — binary execution; QA Engineer runs the command, captures exit code + stdout + side-effect files
+- **FS** — file system state; QA Engineer uses `Read` + `Bash` for content / sha256 / permissions
+- **Mixed** — combines two or more classes (e.g., UI action that fires API call that writes DB row); QA Engineer must verify ALL classes named — partial verification is FAIL
+
+### Evidence Required — specific artifact descriptions:
+
+For UI/UX cases, name the EXACT Playwright observations needed. Don't write "screenshot of the result" — write `screenshot tc-1.1.1-after.png showing toast text 'Welcome!' positioned above main content (z-index correct)`. Don't write "no errors" — write `browser_console_messages output empty AND browser_network_requests log shows zero 4xx/5xx responses for the flow`.
+
+For API cases, name the HTTP method + path + status + body shape + relevant headers. Not "endpoint works" — `POST /api/signup → 201, body matches \`{user_id: <uuid-v4>, token: <jwt>}\`, response header Set-Cookie contains 'session=' attribute`.
+
+For DB cases, name the EXACT query and expected outcome. Not "row created" — `SELECT id, email, created_at FROM users WHERE email = ? returns exactly 1 row with created_at within last 5s`.
+
+For CLI cases, name the EXACT command + exit code + stdout pattern. Not "command works" — `claudebase status --json exits 0, output matches schema \`{schema_version: 3, doc_count: <int ≥ 1>, chunk_count: <int ≥ 1>, db_path: <absolute path ending in index.db>}\``.
+
+**Vague evidence requirements like "result is correct" or "behaves as expected" are forbidden.** QA Engineer's strict-fact-check protocol will mark such cases as FAIL or BLOCKED because they cannot produce evidence against an unstated criterion.
 
 ## Test Categories to Cover
 
@@ -47,6 +68,7 @@ Follow the established format from existing files in `docs/qa/`:
 - **Auth boundaries**: Unauthenticated, wrong role, expired tokens
 - **Concurrency**: Race conditions, duplicate requests
 - **Data integrity**: Database state changes, ledger consistency
+- **Visual quality (UI/UX features only)**: For features with a visible browser surface, dedicate at least 2 test cases to visual regression — explicit screenshot-based assertions about layout, no-overflow, no-z-index-bugs, loading states. These are the cases the QA Engineer's visual-defect flagging will exercise.
 
 ## Cognitive Self-Check (MANDATORY)
 
@@ -87,7 +109,7 @@ knowledge-base: <source-filename>:p<page>:<chunk-id> — query: "<query>" — BM
 knowledge-base: <source-filename>:<chunk-id> — query: "<query>" — BM25: <score> — verified: yes           # non-PDF source OR pre-v2 legacy chunk (page_start absent)
 ```
 
-Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudebase page --by-id <doc_id> --page <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
+Pick the form by inspecting the search JSON — hits with a `page_start` field use the `:p<page>:` form; hits without it use the chunk-only form. When quoting more than one sentence from a PDF hit, follow up with `claudebase page <doc_id> <page_start> --json` to fetch the full page text — the 500-char snippet is for ranking, not for quotation.
 
 The JSON `score` field is positive with larger = better (architect-resolved BM25 convention).
 

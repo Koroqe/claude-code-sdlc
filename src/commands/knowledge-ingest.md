@@ -1,6 +1,6 @@
 # Command: Knowledge Ingest
 
-Ingest a folder or file of domain sources (books, articles, regulatory PDFs, plain-text docs, markdown) into the per-project local knowledge base. Once ingested, all 12 thinking agents in the SDLC pipeline query the base before authoring domain-bearing content and cite hits in their `## Facts → ### External contracts` block per the cognitive-self-check rule.
+Ingest a folder or file of domain sources (books, articles, regulatory PDFs, plain-text docs, markdown) into the per-project local knowledge base. Once ingested, all 13 thinking agents in the SDLC pipeline query the base before authoring domain-bearing content and cite hits in their `## Facts → ### External contracts` block per the cognitive-self-check rule.
 
 ## Required argument
 
@@ -99,4 +99,4 @@ The literal phrase `bash install.sh --yes` MUST appear verbatim in the message s
 
 ## Reference
 
-The full CLI contract — all 5 subcommands (`ingest`, `search`, `list`, `status`, `delete`), the JSON output schemas, the BM25 ranking convention, the `knowledge-base:` citation prefix the 12 thinking agents use in `## Facts → ### External contracts`, and the known limitations of `pdf-extract` (scanned PDFs, multi-column layouts, form fields) — is documented in `~/.claude/rules/knowledge-base.md`. Read that rule before authoring any agent prompt that consumes the base.
+The full CLI contract — all 5 subcommands (`ingest`, `search`, `list`, `status`, `delete`), the JSON output schemas, the BM25 ranking convention, the `knowledge-base:` citation prefix the 13 thinking agents use in `## Facts → ### External contracts`, and the known limitations of `pdf-extract` (scanned PDFs, multi-column layouts, form fields) — is documented in `~/.claude/rules/knowledge-base.md`. Read that rule before authoring any agent prompt that consumes the base.
