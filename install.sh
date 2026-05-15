@@ -5,7 +5,7 @@ set -euo pipefail
 # Claude Code SDLC Installer
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 18 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 21 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install:
@@ -49,7 +49,7 @@ print_help() {
   cat << 'HELPEOF'
 Claude Code SDLC Installer v3.0.0
 
-Turn Claude Code into a full dev team with 18 specialized AI agents.
+Turn Claude Code into a full dev team with 21 specialized AI agents.
 
 USAGE:
   bash install.sh [OPTIONS]
@@ -67,8 +67,8 @@ OPTIONS:
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
-  agents/          18 specialized agent prompts
-  commands/        8 SDLC pipeline commands
+  agents/          21 specialized agent prompts
+  commands/        10 SDLC pipeline commands
   rules/           4 process rules
   tools/claudebase/claudebase   Knowledge-base CLI binary
 
@@ -96,9 +96,16 @@ COMMANDS AVAILABLE:
   /implement-slice    Implement next TDD slice
   /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
                       documented QA plan with Playwright MCP for UI/UX evidence;
-                      FAIL spawns implementer with fix directives; BLOCKED halts
-                      and surfaces a fact-grounded argument to the human. Run
-                      BEFORE /merge-ready; /develop-feature chains it automatically.
+                      FAIL spawns implementer with fix directives (deliberate-mode
+                      on iter N+1); 3 non-converging iters triggers sunk-cost
+                      circuit breaker. BLOCKED halts with fact-grounded argument.
+                      Run BEFORE /merge-ready; /develop-feature chains it automatically.
+  /consolidate        Cross-artifact drift detection (hippocampal sleep-replay
+                      analogue). 6 fixed passes via consolidator agent. Auto-chained
+                      between waves in /develop-feature; manually invokable.
+  /reflect            DMN unfocused observation pass via reflection agent. No specific
+                      task — wanders project state for non-obvious observations.
+                      User-invoked only; never auto-chained.
   /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
   /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
   /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
@@ -205,12 +212,12 @@ install_user_config() {
   echo -e "${BOLD}============================================${NC}"
   echo ""
   echo -e "  ${CYAN}Turn Claude Code into a full dev team${NC}"
-  echo -e "  18 AI agents | Documentation-first | TDD"
+  echo -e "  21 AI agents | Documentation-first | TDD"
   echo ""
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
-  echo "    agents/  (18 files — specialized agent prompts)"
-  echo "    commands/ (8 files — SDLC pipeline commands)"
+  echo "    agents/  (21 files — specialized agent prompts)"
+  echo "    commands/ (10 files — SDLC pipeline commands)"
   echo "    rules/   (4 files — process rules)"
   echo ""
 
@@ -1051,6 +1058,8 @@ echo "    /develop-feature    Full autonomous pipeline"
 echo "    /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)"
 echo "    /implement-slice    Implement next TDD slice"
 echo "    /qa-cycle           Strict QA/Dev iteration loop — qa-engineer with Playwright MCP + evidence"
+echo "    /consolidate        Cross-artifact drift detection (auto-chained between waves)"
+echo "    /reflect            DMN unfocused observation pass — user-invoked only"
 echo "    /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)"
 echo "    /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow"
 echo "    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base"

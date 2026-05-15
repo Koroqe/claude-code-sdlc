@@ -73,6 +73,51 @@ For each FAIL case in the qa-engineer report, the report contains:
 - A `fix_directive` pointing at file:line or symptom
 - Evidence artifacts (screenshot paths, console logs, network responses)
 
+**Deliberate-mode injection (neuroscience: post-error slowing).** On iteration N+1 after a FAIL — i.e., every implementer spawn EXCEPT the first one — the orchestrator MUST prepend the following directive to the implementer's prompt, in addition to the fix directives:
+
+```
+DELIBERATE MODE — this is iteration <N+1> after qa-engineer FAIL on iteration <N>.
+The post-error-slowing protocol from `~/.claude/rules/error-recovery.md` applies:
+
+- Read every file you intend to edit BEFORE making the first edit (no working from
+  memory of earlier reads; the prior iteration may have invalidated your mental model)
+- Target a SMALLER diff than the prior iteration produced — aim ≤ 50% of prior
+  iteration's line count; if you cannot, that is a load-bearing signal that the
+  fix-directive is mis-scoped and you should surface BLOCKED with that argument
+- Run the project's typecheck command BEFORE committing (pre-flight, not post-commit)
+- Apply exactly the fix_directives below — do NOT take the opportunity to refactor
+  adjacent code, even if it looks like it needs work; scope discipline matters here
+- If you find yourself making the same edit you made on the previous iteration to
+  the same file lines, STOP and report BLOCKED with the diff history attached —
+  this is the sunk-cost detection working
+```
+
+**Sunk-cost circuit breaker (neuroscience: OFC sunk-cost detection).** Before spawning the implementer on iteration N+1, the orchestrator checks the diff-progression signal:
+
+1. Compute the file list + total line count of the implementer's commit from iteration N
+2. Compare to iterations N-1 and N-2 if they exist
+3. If the last 3 implementer commits all touch the SAME files AND the total line counts are within ±20% of each other (the implementer is making variations on the same edit without converging), trigger the **Sunk Cost Audit** pause
+
+The Sunk Cost Audit:
+
+```
+SUNK COST AUDIT — iteration <N+1> would be the 4th consecutive attempt with
+non-converging diffs (same files, similar line counts):
+
+  iter <N-2>: files=[...], lines=±M
+  iter <N-1>: files=[...], lines=±M (Δ=<%>)
+  iter <N>  : files=[...], lines=±M (Δ=<%>)
+
+The implementer appears to be stuck on this slice. Halting before spawning iter <N+1>.
+```
+
+Then invoke `AskUserQuestion` with three options:
+1. **Continue iterating** — proceed to iter N+1 anyway (user judges the implementer is close)
+2. **Pivot to alternative approach** — the human revises the fix_directives with a different angle, then `/qa-cycle` resumes with the revised directives
+3. **Kill this slice / escalate** — the slice is abandoned or escalated; `/qa-cycle` halts and returns control
+
+The diff-progression check is ONLY armed after 3 consecutive iterations. The "3" is the minimum signal; fewer iterations may not reflect a stuck state.
+
 Spawn the implementer (the same general-purpose `Agent` invocation used by `/implement-slice` — NOT a separate dedicated agent). Pass it:
 
 ```

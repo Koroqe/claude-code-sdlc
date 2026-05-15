@@ -11,7 +11,7 @@ param(
 # Claude Code SDLC Windows Installer (PowerShell)
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 18 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 21 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install (PowerShell, run from any directory after cloning):
@@ -49,7 +49,7 @@ function Show-Help {
     @"
 Claude Code SDLC Installer v$Version (Windows)
 
-Turn Claude Code into a full dev team with 18 specialized AI agents.
+Turn Claude Code into a full dev team with 21 specialized AI agents.
 
 USAGE:
   install.bat [OPTIONS]
@@ -63,8 +63,8 @@ OPTIONS:
 
 WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   claude.md        Main workflow instructions
-  agents\          18 specialized agent prompts
-  commands\        8 SDLC pipeline commands
+  agents\          21 specialized agent prompts
+  commands\        10 SDLC pipeline commands
   rules\           4 process rules
   tools\claudebase\claudebase.exe   Knowledge-base CLI binary
   tools\claudebase\pdfium\lib\pdfium.dll   PDFium runtime for PDF ingest
@@ -169,7 +169,7 @@ function Install-UserConfig {
     Write-Host "============================================" -ForegroundColor White
     Write-Host ""
     Write-Host "  Turn Claude Code into a full dev team" -ForegroundColor Cyan
-    Write-Host "  18 AI agents | Documentation-first | TDD"
+    Write-Host "  21 AI agents | Documentation-first | TDD"
     Write-Host ""
     Write-Host "  This will install to $ClaudeDir"
     Write-Host ""

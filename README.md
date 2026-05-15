@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-18 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+21 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-3.0.0-green.svg)]()
@@ -106,7 +106,7 @@ MERGE READY
 
 ---
 
-## The 18 Agents
+## The 21 Agents
 
 | Agent | Role |
 |-------|------|
@@ -116,14 +116,17 @@ MERGE READY
 | `resource-architect` | Recommends external resources at bootstrap Step 3.5 and auto-installs Trivial/Moderate items after user approval (MCP, dev dependencies); Sensitive items escalate via Rule 4 |
 | `role-planner` | Recommend project-specific on-demand roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 — suggest-only |
 | `qa-planner` | Test cases in `docs/qa/` before any code |
-| `planner` | Breaks features into 5-9 executable slices with verification commands |
+| `planner` | Breaks features into 5-9 executable slices with verification commands; each slice carries a `Predicted outcome:` field for Friston-style prediction-error checking |
+| `red-team` | Devil's-advocate adversarial review of the plan after planner emits it — 6 attack vectors (premise / approach / scope / dependency / failure-mode / maintenance). Chained from `/bootstrap-feature` Step 5.25 and `/develop-feature` Phase 1.5. Catches confirmation bias. |
 | `security-auditor` | Vulnerability audit, auth boundaries |
 | `test-writer` | TDD — tests before implementation |
 | `e2e-runner` | Writes end-to-end tests from use-case scenarios (code authoring) |
 | `qa-engineer` | Executes the QA plan against the running implementation. Uses Playwright MCP for UI/UX (screenshots, console, network), Bash for API/DB/CLI. Emits per-test-case PASS/FAIL/BLOCKED verdicts with concrete evidence. Strict — no evidence = automatic FAIL. Drives the `/qa-cycle` iteration loop. |
+| `consolidator` | Memory-consolidation pass (hippocampal sleep-replay analogue). 6 drift-detection passes (PRD↔plan / use-case↔test↔impl / decision drift / hack accumulation / verdict↔reality / pattern observations). Auto-chained between waves in `/develop-feature`; manually via `/consolidate`. |
+| `reflection` | Default Mode Network analogue. No specific task — wanders the project state and surfaces non-obvious observations. Exclusively user-invoked via `/reflect`. Catches focus-induced blindness. |
 | `code-reviewer` | Quality, security, architecture compliance |
 | `build-runner` | Typecheck, tests, build verification |
-| `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
+| `verifier` | Goal-backward checks: file existence, stubs, wiring, prediction-error (predicted-vs-actual delta per slice), data flow |
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
 | `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
@@ -138,7 +141,9 @@ MERGE READY
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
 | `/bootstrap-feature [--with-resources]` | Documentation phases only — PRD, use cases, architecture, QA, plan. Pass `--with-resources` to force-run resource-architect (otherwise auto-detected from PRD/use-cases keywords). |
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
-| `/qa-cycle` | Strict QA/Dev iteration loop — `qa-engineer` executes the QA plan against the running implementation with Playwright MCP for UI/UX evidence; FAIL spawns the implementer with fix directives; BLOCKED halts and surfaces a fact-grounded argument to the human. Run BEFORE `/merge-ready`; `/develop-feature` chains it automatically between implementation and quality gates. |
+| `/qa-cycle` | Strict QA/Dev iteration loop — `qa-engineer` executes the QA plan against the running implementation with Playwright MCP for UI/UX evidence; FAIL spawns the implementer with fix directives (deliberate-mode injection on iter N+1 per the post-error-slowing protocol); after 3 non-converging iterations, the sunk-cost circuit breaker pauses for human input. BLOCKED halts and surfaces a fact-grounded argument. Run BEFORE `/merge-ready`; `/develop-feature` chains it automatically. |
+| `/consolidate` | Cross-artifact drift detection (hippocampal sleep-replay analogue). 6 fixed passes via the `consolidator` agent. Auto-chained between waves in `/develop-feature`; manually invokable. Halts the calling orchestrator on critical/major drift via AskUserQuestion. |
+| `/reflect` | Default Mode Network unfocused observation pass. The `reflection` agent reads project state and surfaces non-obvious observations (unused exports, duplicated implementations, dead code paths, PRD-requirements-without-slices). Exclusively user-invoked; never auto-chained. |
 | `/merge-ready` | All 9 quality gates (release packaging is NOT a gate — see `/release`) — assumes `/qa-cycle` has run and passed |
 | `/release` | User-invoked release packaging — semver bump, CHANGELOG date stamp, release-notes file, GHA release workflow. Run after `/merge-ready` when ready to publish. |
 | `/knowledge-ingest` | Ingest a folder/file into the per-project knowledge base |
@@ -228,9 +233,9 @@ A **Bash whitelist** acts as defense-in-depth on top of the per-tier approvals: 
 
 ## On-demand role recommendations at bootstrap
 
-The 18 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 18 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 18. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
+The 21 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 21 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 21. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
 
-Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 18 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`); the Plan Critic flags collisions as MAJOR.
+Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 21 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`, `red-team`, `consolidator`, `reflection`); the Plan Critic flags collisions as MAJOR.
 
 Because on-demand subagent types are not registered with Claude Code at session start, they cannot be invoked via `subagent_type: ondemand-<slug>`. Instead, the bootstrap pipeline reads the prompt body from `~/.claude/agents/ondemand-<slug>.md`, strips the frontmatter, and spawns the role using the **general-purpose** subagent type with the body passed verbatim as the prompt. This frontmatter-extraction-and-invocation contract is documented in detail in `src/commands/bootstrap-feature.md` (see the `### On-Demand Role Invocation` section). The `tools:` frontmatter field is not runtime-enforced for general-purpose subagents — the prompt body itself must self-restrict authority and tool usage.
 

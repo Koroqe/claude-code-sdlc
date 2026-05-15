@@ -20,11 +20,12 @@ Implement only the next smallest slice from the plan using TDD.
 
 Read the current slice from the implementation plan. Two formats are supported:
 
-**Executable format** (preferred — when the slice has `Files:`, `Changes:`, `Verify:`, `Done when:` fields):
+**Executable format** (preferred — when the slice has `Files:`, `Changes:`, `Verify:`, `Done when:`, `Predicted outcome:` fields):
 - Use the `Files:` list directly — these are the exact files to create/modify
 - Use the `Changes:` descriptions as implementation guidance
 - Use the `Verify:` commands in step 4
 - Use the `Done when:` condition to confirm completion
+- Read the `Predicted outcome:` field (neuroscience: Friston predictive-coding prior) — this is the planner's expected end-state. If at any point during implementation you observe a divergence from the predicted outcome (the diff is becoming much larger than predicted, a new file is needed that wasn't predicted, the export signature has to change in a way that wasn't predicted), STOP and surface the deviation under `### Inbound validation` in your scratchpad note OR via BLOCKED. The verifier will compare actual-vs-predicted at Level 3.5 — flagging the deviation now is cheaper than letting it surface as a large delta then.
 - List the use-case scenarios this slice covers (from `Use cases:` field)
 - Re-read each file from the `Files:` list before modifying
 

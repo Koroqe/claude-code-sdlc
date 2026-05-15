@@ -183,6 +183,24 @@ Delegate to `planner` agent:
 - Flag slices needing architect or security pre-review
 - Reference actual project files discovered during exploration
 
+### Step 5.25: Red Team — Plan Adversarial Review (neuroscience: confirmation-bias debias)
+
+Delegate to `red-team` agent. The agent reads `.claude/plan.md` (just written by the planner at Step 5), `docs/PRD.md` (current feature section), and `docs/use-cases/<feature>_use_cases.md`. It runs the 6 attack vectors (premise / approach / scope / dependency / failure-mode / maintenance) and emits a stdout report ranking objections by severity (CRITICAL / MAJOR / MINOR).
+
+**Why this step exists:** the planner just authored a plan it believes is correct. Every downstream agent that reads the plan will accept it as the foundation. Nobody is arguing against it. `red-team` is the brain's "devil's advocate" — the deliberately-adversarial pass that catches confirmation bias before implementation amplifies the cost of fixing it.
+
+**Outputs:**
+- A `## Red Team Objections` stdout report — written to the conversation, NOT to a file.
+- Objections at CRITICAL or MAJOR severity require planner revision OR explicit defense.
+
+**Routing branch:**
+
+1. **Zero CRITICAL/MAJOR objections** — append a short summary to `.claude/plan.md` `## Review Notes` (red-team verdict: clean) and proceed to Step 5.5.
+2. **CRITICAL or MAJOR objections present** — re-spawn `planner` with the red-team report and instruct it to either (a) revise `.claude/plan.md` to address each objection OR (b) add an explicit defense to `.claude/plan.md` `## Review Notes` (with the objection verbatim + the planner's counter-argument). Both outcomes are acceptable — the requirement is that no CRITICAL/MAJOR objection is silently ignored. After planner revision, Step 5.25 is complete (NO red-team re-run; one pass is sufficient — repeated adversarial passes drift toward bikeshedding).
+3. **Agent failure** — log error, proceed to Step 5.5. This step is informational; agent failure does NOT block bootstrap (per the same non-blocking pattern as Step 5.5 changelog-writer).
+
+The red-team report MUST NOT modify the plan file directly — `red-team` is stdout-only. The planner is the only agent permitted to mutate `.claude/plan.md`.
+
 ### Step 5.5: Release Scribe — Initial Changelog Stub
 Delegate to `changelog-writer` agent with no arguments beyond the project CWD context (per FR-4.6). This is the first lifecycle hook — it produces an initial `[Unreleased]` stub (or, more commonly, returns `no-op: already in sync` / `no-op: no eligible entries` when the branch has no prior eligible commits). A `no-op: not configured` response is expected when running inside the SDLC repo itself and is treated as success. This hook is non-blocking per FR-4.5: if the agent fails, log the error and continue to Step 6.
 
