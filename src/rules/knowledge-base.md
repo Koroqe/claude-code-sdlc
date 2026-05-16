@@ -145,6 +145,42 @@ Agents MUST NOT call `page` with `<N>` ≤ 0 — the schema is 1-indexed and
 the CLI rejects out-of-range values with the literal stderr line
 `error: page number out of range`.
 
+## `insight` subcommand — the agent-written cognitive corpus
+
+Companion to the books-corpus subcommands above. The `insight` tree
+operates against `<project>/.claude/knowledge/insights.db` exclusively
+(opt-in per project; created on first `insight create`). The full
+WHEN / WHAT / HOW protocol lives in
+`~/.claude/rules/knowledge-base-tool.md` § Insights corpus — this section
+documents the CLI contract only.
+
+Seven subcommands:
+
+- `claudebase insight create "<body>" --type <kind> --agent <agent> [--session ID] [--feature SLUG] [--salience high|medium|low] [--source-artifact REF] [--json]`
+  - Persists one insight. Body via positional, `-`, or piped stdin (TTY refused).
+  - Exact-sha dedup: same `(agent, sha256)` within 30 days → `status: deduped`.
+  - Semantic dedup: cosine > 0.92 paraphrase from same agent within 30 days → `status: near-duplicate`.
+  - Cross-agent agreement on same body is intentionally NOT deduped (load-bearing signal).
+- `claudebase insight search "<query>" [--mode hybrid|dense|lexical] [--top-k N] [--type T] [--agent A] [--salience S] [--feature F] [--since <Nd|Nh|Nm|Nw>] [--json]`
+  - Hybrid retrieval against `insights.db`. Default mode `hybrid` (BM25 ⊕ dense RRF k=60).
+  - Metadata filters apply after ranking (over-fetch x4, capped at 100).
+  - `--since` format: `<integer><unit>` where unit ∈ {s,m,h,d,w}.
+- `claudebase insight list [--offset N] [--page-size N] [filters] [--json]` — newest-first paginated summaries; default page size 10.
+- `claudebase insight random [filters] [--json]` — uniform-sample one insight; exit 1 on empty corpus / no match.
+- `claudebase insight get <ident> [--json]` — integer `documents.id` OR hex sha prefix (≥4 chars, matched as `LIKE 'prefix%'`).
+- `claudebase insight gc [--dry-run] [--json]` — TTL purge (high=∞ / medium=365d / low=90d) + VACUUM. Reports `{medium_deleted, low_deleted, chunks_vec_orphans_cleared, freed_bytes}`.
+- `claudebase insight delete <id> [--json]` — single-row delete with chunks + chunks_vec cascade. Refuses non-insight rows (books-corpus protection).
+
+Exit codes are uniform across the family:
+
+- `0` — success (including `deduped` and `near-duplicate` statuses on `create`).
+- `1` — runtime error (DB open failure, query failure, unknown id, empty corpus on `random`, etc.).
+- `2` — usage error (empty body, TTY without body, malformed `--since`, sha prefix < 4 chars, non-hex ident on `get`, attempt to `delete` a books-corpus row).
+
+Path-canonicalization: same `cli::resolve_project_root` gate as the books corpus subcommands. The corpus file selector for the `insight` family is hardcoded to `insights.db` — `--db-name` is accepted on subcommands for test/admin overrides but agents SHOULD always use the default.
+
+JSON shape for `insight search` hits is identical to books-corpus `search` hits (`SearchHit` struct) — same `chunk_id / doc_id / score / snippet` fields. Citation format for load-bearing hits is `insights-base: doc#<id> sha=<prefix> agent=<author> type=<kind> — query: "<q>" — verified: yes` (see `knowledge-base-tool.md` for the full protocol).
+
 ## Citation format
 
 When a search hit load-bears on a decision (i.e., the agent would have written

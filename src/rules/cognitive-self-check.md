@@ -108,6 +108,16 @@ The `### External contracts` subsection is mandatory whenever the artifact refer
 
 Downstream agents (verifier, code-reviewer, security-auditor, consolidator) MUST sort by salience descending and audit **high** entries first when time-boxed. The salience tag mirrors how the brain's salience network gates attention — not all facts are equal; surface the ones that matter most. Default to `medium` when uncertain; explicit `low` is preferred over omission.
 
+**Salience also drives retention in the agent-insights corpus** (`claudebase insight create --salience <tag>`). When the file `<project>/.claude/knowledge/insights.db` exists, agents surface load-bearing cognitive insights into the corpus and the salience tag chosen here is the SAME tag that controls how long the insight survives:
+
+| Salience | Insights-corpus retention | When to use |
+|---|---|---|
+| `high` | indefinite — never gc'd | Insight whose loss would degrade the entire pipeline. Use sparingly. |
+| `medium` | 365 days from ingestion | Insight affecting correctness of a slice or single decision. Default. |
+| `low` | 90 days from ingestion | Context-setting / ambient observation only. Cheap to lose. |
+
+`claudebase insight gc` purges rows past their salience-driven TTL. Marking everything `high` defeats the gc — be honest about which insights are truly load-bearing across sessions and which fade after a quarter. See `~/.claude/rules/knowledge-base-tool.md` § Insights corpus for the retrieval + surfacing protocol.
+
 **Cognitive-load constraint:** list only facts that load-bear on the decision being made — not every file the agent read. The point is a navigable evidence trail for the load-bearing claims, not a comprehensive read-log. If a fact can be removed without changing the verdict, it does not belong in `### Verified facts`.
 
 ## Mandatory Decisions Section
