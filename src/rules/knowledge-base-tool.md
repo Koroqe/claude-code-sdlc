@@ -204,6 +204,104 @@ sign the search hit's `page_start` is stale (e.g., the corpus was
 re-ingested with a different version of the document) and re-runs the
 search before continuing.
 
+## Insights corpus — the agent-written cognitive memory
+
+The activation sentinel `<project>/.claude/knowledge/index.db` documented earlier refers to the **books corpus** — user-curated PDFs / markdown / plain text. Claudebase ships a second, parallel corpus called the **insights corpus**, stored at `<project>/.claude/knowledge/insights.db`, which is **written by agents, not by the user**, and persists cognitive insights across sessions.
+
+### Why two corpora
+
+The books corpus is a static reference (RAG-style): the user drops documents, the agent retrieves from them. The insights corpus is a dynamic log: each agent's load-bearing observations from one session feed the next session's agents. The hippocampal analogue is exact — without insights persistence every Claude session re-discovers what previous sessions already learned.
+
+### Activation
+
+The insights corpus is opt-in per project. There is no separate sentinel — the file `<project>/.claude/knowledge/insights.db` is created automatically on the first `claudebase insight create` call. When the file does not exist, retrieval calls return zero results (silent no-op) and agents simply proceed without cited insights. This means a project that has never run `insight create` is byte-identical to a project that never adopted the feature.
+
+### Scope — three-axis cognitive taxonomy (MANDATORY)
+
+The corpus accepts ONLY cognitive insights along the three axes listed below. Factual findings, mechanical execution narration, restatements of input, and generic best-practice claims do NOT belong in the corpus — they go to PRs, scratchpads, issue trackers, or stay silent. This is the load-bearing scope constraint; an agent that writes a factual bug report as an insight is misusing the corpus.
+
+| Axis | `source_type` values | Surface when |
+|---|---|---|
+| **1. Self-learning** | `agent-learned`, `self-bias-caught` | The agent noticed it learned something new (a domain concept, a prompting technique, a blind spot in its own past reasoning). |
+| **2. Peer-bias detection** | `peer-bias-observed`, `red-team-objection`, `consolidator-drift` | The agent observed a cognitive bias in another agent's output (or in upstream artifacts). Includes adversarial objections and cross-artifact drift findings. |
+| **3. Prediction-reality mismatch** | `prediction-error`, `assumption-falsified`, `plan-reality-gap` | What was planned / expected / predicted did not match what actually happened (Friston-style prediction error). |
+| **Special axes** | `reflection-observation`, `operator-correction` | Reflection-agent DMN observations; insights from operator corrections worth carrying forward. |
+
+### Retrieval protocol (MANDATORY at task receipt)
+
+Before producing the first paragraph of output for a new task, every in-scope thinking agent MUST query prior-session insights filtered by the current feature slug and load-bearing salience:
+
+```
+claudebase insight search "<feature-keywords>" --feature "$FEATURE_SLUG" --salience high --top-k 5 --json
+```
+
+Load-bearing hits MUST be cited in `## Facts → ### Verified facts` using the literal format:
+
+```
+insights-base: doc#<id> sha=<sha-prefix> agent=<author-agent> type=<source-type> — query: "<q>" — verified: yes
+```
+
+The `insights-base:` prefix is the parallel of `knowledge-base:` (books corpus) and is greppable for reviewer audits. When a recall returns zero hits, no entry is required — the books-corpus zero-result negative-search-logging convention does NOT apply to the insights corpus because the corpus is dynamic and an empty corpus on a fresh project is expected.
+
+### Surfacing protocol (MANDATORY at task end, when applicable)
+
+Agents emit an insight ONLY when an observation matches one of the three axes. The invocation:
+
+```
+claudebase insight create "<body>" \
+    --type <source-type> \
+    --agent <self-agent-name> \
+    --feature "$FEATURE_SLUG" \
+    --salience <high|medium|low> \
+    [--session "$CLAUDE_SESSION_ID"] \
+    [--source-artifact "<file:line | docs/PRD.md#FR-X.Y>"]
+```
+
+The body can also come from stdin (`echo "<body>" | claudebase insight create ...`) — agents that already buffer multi-line content use this form. Empty bodies are rejected with exit 2. A TTY without a body is also rejected (the surface is designed for non-interactive agent use).
+
+**Dedup happens automatically.** Two layers:
+
+1. **Exact-sha** — same `(agent_name, sha256(body))` within the last 30 days returns `status: deduped` without writing.
+2. **Semantic (cosine > 0.92)** — paraphrased near-duplicates from the SAME agent within 30 days return `status: near-duplicate` without writing. Cross-agent agreement on the same observation is intentionally NOT deduped — that's load-bearing signal.
+
+### Salience and retention
+
+The `--salience` tag drives TTL per `~/.claude/rules/cognitive-self-check.md` § Salience:
+
+- `high` — retained indefinitely. Use ONLY for insights whose loss degrades the entire pipeline.
+- `medium` — 365 days. Default for slice / decision-level insights.
+- `low` — 90 days. Ambient / context-setting only.
+
+`claudebase insight gc` purges rows past their TTL. Be honest with the tag — marking everything `high` defeats the purge and turns the corpus into a write-only log.
+
+### Admin surface — for the operator, not for agents
+
+The agent uses `insight create` and `insight search`. The operator additionally has:
+
+- `claudebase insight list [--offset N] [--page-size N] [filters]` — paginated newest-first, 10/page default.
+- `claudebase insight random [filters]` — uniform-sample one insight.
+- `claudebase insight get <id|sha-prefix>` — fetch one insight by integer `documents.id` or hex sha prefix (≥4 chars).
+- `claudebase insight gc [--dry-run]` — salience-TTL purge + VACUUM.
+- `claudebase insight delete <id>` — single-row delete; refuses to touch books-corpus rows.
+
+Agents MUST NOT call the admin surface as part of their normal workflow — it exists for the operator to audit, prune, and curate the corpus manually.
+
+### Books vs insights — which to query for what
+
+| Question | Right corpus | Rationale |
+|---|---|---|
+| "What does the SQL spec say about FTS5?" | books (`claudebase search`) | External reference material |
+| "What did Reflection notice last session about the consent flow?" | insights (`claudebase insight search`) | Agent-emitted observation from this project |
+| "How does Kafka's exactly-once delivery work?" | books | Domain knowledge |
+| "Did a prior planner flag this scope as oversized?" | insights | Cross-session memory |
+| "Both" (e.g., a feature touching domain + prior-session experience) | `claudebase search --corpus all` | RRF-fused cross-corpus |
+
+The `--corpus all` flag on the standalone `search` subcommand RRF-fuses hits from both DBs and tags each with `source_corpus`. Use it when a question genuinely spans both — don't reflexively switch from `books` to `all` "to be safe", because the insights corpus drowns out the books corpus when filters are loose.
+
+### Backward compatibility
+
+Agents authored before the insights corpus existed treat its absence as silent no-op. The protocol above is mandatory ONLY when the insights.db file exists. The companion CLI contract is in `~/.claude/rules/knowledge-base.md` § `insight` subcommand.
+
 ## When you MAY skip
 
 The mandate covers domain-bearing content. You MAY skip a query when authoring:

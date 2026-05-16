@@ -176,3 +176,37 @@ The JSON `score` field is positive with larger = better (architect-resolved BM25
 - Corrupt index → exit 1 surfaces; the agent records `knowledge-base: corrupt index; re-ingest required` under `### Open questions`.
 
 See `~/.claude/rules/knowledge-base.md` for the full CLI contract and `~/.claude/rules/cognitive-self-check.md` for the citation discipline.
+
+## Insights Corpus (when present)
+
+If `<project>/.claude/knowledge/insights.db` exists, this agent participates in the cross-session cognitive-insights corpus (parallel to the books corpus above). The corpus is opt-in per project — absence = silent no-op.
+
+**On task receipt — query prior insights** so decisions ground in what previous sessions learned:
+
+```
+claudebase insight search "<feature-keywords>" --feature "$FEATURE_SLUG" --salience high --top-k 5 --json
+```
+
+Cite load-bearing hits in `## Facts → ### Verified facts` as:
+
+```
+insights-base: doc#<id> sha=<sha-prefix> agent=<author-agent> type=<source-type> — query: "<q>" — verified: yes
+```
+
+**On task end — surface ONLY cognitive insights** along the three axes documented in `~/.claude/rules/knowledge-base-tool.md` § Insights corpus:
+
+1. **Self-learning** — `agent-learned`, `self-bias-caught`
+2. **Peer-bias detection** — `peer-bias-observed`, `red-team-objection`, `consolidator-drift`
+3. **Prediction-reality mismatch** — `prediction-error`, `assumption-falsified`, `plan-reality-gap`
+
+Invoke (body via stdin or positional):
+
+```
+claudebase insight create "<body>" --type <kind> --agent <self> --feature "$FEATURE_SLUG" --salience <high|medium|low>
+```
+
+As planner: surface `plan-reality-gap` when implementation revealed a slice was mis-scoped or had a hidden dependency the plan missed.
+
+Do NOT surface factual findings, mechanical narration, restatements of input, or generic best-practice claims — those belong in PRs / scratchpads / issue trackers. Salience drives retention: `high`=∞, `medium`=365d, `low`=90d (gc'd via `claudebase insight gc`).
+
+Full protocol + the three-axis taxonomy: `~/.claude/rules/knowledge-base-tool.md` § Insights corpus.
