@@ -5,7 +5,7 @@ set -euo pipefail
 # Claude Code SDLC Installer
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 21 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 20 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install:
@@ -19,9 +19,8 @@ set -euo pipefail
 #   bash install.sh --help         # Show help
 # ============================================================================
 
-VERSION="3.0.0"
-CLAUDEBASE_VERSION="0.5.0"
-CLAUDEBASE_PDFIUM_VERSION="chromium/7802"  # bblanchon/pdfium-binaries tag (verified latest stable as of 2026-04-25)
+VERSION="3.1.0"
+CLAUDEBASE_INSTALLER_URL="https://raw.githubusercontent.com/codefather-labs/claudebase/main/install.sh"
 REPO_URL="https://github.com/codefather-labs/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
@@ -47,9 +46,9 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 print_help() {
   cat << 'HELPEOF'
-Claude Code SDLC Installer v3.0.0
+Claude Code SDLC Installer v3.1.0
 
-Turn Claude Code into a full dev team with 21 specialized AI agents.
+Turn Claude Code into a full dev team with 20 specialized AI agents.
 
 USAGE:
   bash install.sh [OPTIONS]
@@ -66,16 +65,19 @@ OPTIONS:
   --help                      Show this help message
 
 WHAT GETS INSTALLED (~/.claude/):
-  claude.md        Main workflow instructions
-  agents/          21 specialized agent prompts
-  commands/        10 SDLC pipeline commands
-  rules/           4 process rules
-  tools/claudebase/claudebase   Knowledge-base CLI binary
+  claude.md        Main workflow instructions (includes Mira orchestrator persona)
+  agents/          20 specialized agent prompts (SDLC pipeline)
+  commands/        7 SDLC pipeline commands
+  rules/           4 process rules (cognitive-self-check, error-recovery, scratchpad, git)
 
-GLOBAL ALIAS (auto-installed if a writable PATH dir exists):
-  claudebase      Short-name symlink to claudebase — invokes the tool
-                   without the absolute path. Probed in order:
-                   /usr/local/bin → /opt/homebrew/bin → ~/.local/bin
+CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
+  This installer curls and runs claudebase's standalone installer, which
+  additionally installs:
+    tools/claudebase/        CLI binary + PDFium + e5 encoder
+    rules/                   knowledge-base, knowledge-base-tool, tool-limitations
+    commands/                /knowledge-ingest, /reflect, /consolidate
+    agents/                  reflection (Drift), consolidator (Mnem)
+  Source: https://github.com/codefather-labs/claudebase
 
 WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
@@ -91,25 +93,24 @@ AFTER INSTALL:
   The autonomous pipeline kicks in automatically.
 
 COMMANDS AVAILABLE:
-  /develop-feature    Full autonomous pipeline
-  /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
-  /implement-slice    Implement next TDD slice
-  /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
-                      documented QA plan with Playwright MCP for UI/UX evidence;
-                      FAIL spawns implementer with fix directives (deliberate-mode
-                      on iter N+1); 3 non-converging iters triggers sunk-cost
-                      circuit breaker. BLOCKED halts with fact-grounded argument.
-                      Run BEFORE /merge-ready; /develop-feature chains it automatically.
-  /consolidate        Cross-artifact drift detection (hippocampal sleep-replay
-                      analogue). 6 fixed passes via consolidator agent. Auto-chained
-                      between waves in /develop-feature; manually invokable.
-  /reflect            DMN unfocused observation pass via reflection agent. No specific
-                      task — wanders project state for non-obvious observations.
-                      User-invoked only; never auto-chained.
-  /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
-  /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
-  /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
-  /context-refresh    Rebuild session context
+  SDLC pipeline (this repo):
+    /develop-feature    Full autonomous pipeline
+    /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
+    /implement-slice    Implement next TDD slice
+    /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
+                        documented QA plan with Playwright MCP for UI/UX evidence;
+                        FAIL spawns implementer with fix directives (deliberate-mode
+                        on iter N+1); 3 non-converging iters triggers sunk-cost
+                        circuit breaker. BLOCKED halts with fact-grounded argument.
+                        Run BEFORE /merge-ready; /develop-feature chains it automatically.
+    /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
+    /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
+    /context-refresh    Rebuild session context
+
+  Memory + observation (from claudebase):
+    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
+    /consolidate        Cross-artifact drift detection (auto-chained between waves)
+    /reflect            DMN unfocused observation pass — user-invoked only
 HELPEOF
 }
 
@@ -212,12 +213,12 @@ install_user_config() {
   echo -e "${BOLD}============================================${NC}"
   echo ""
   echo -e "  ${CYAN}Turn Claude Code into a full dev team${NC}"
-  echo -e "  21 AI agents | Documentation-first | TDD"
+  echo -e "  20 AI agents | Documentation-first | TDD"
   echo ""
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
-  echo "    agents/  (21 files — specialized agent prompts)"
-  echo "    commands/ (10 files — SDLC pipeline commands)"
+  echo "    agents/  (20 files — specialized agent prompts; +2 from claudebase: reflection, consolidator)"
+  echo "    commands/ (7 files — SDLC pipeline commands (+ 3 from claudebase: knowledge-ingest, reflect, consolidate))"
   echo "    rules/   (4 files — process rules)"
   echo ""
 
@@ -383,201 +384,47 @@ EOF
 }
 
 # ============================================================================
-# Install claudebase binary (downloads from github.com/codefather-labs/claudebase)
+# Chain to the standalone claudebase installer
 # ============================================================================
-install_knowledge_binary() {
-  # Migration cleanup: remove the pre-2026-05-10 sdlc-knowledge install + old
-  # claudeknows symlink. Idempotent — silently no-ops on a fresh install.
-  if [ -d "$CLAUDE_DIR/tools/sdlc-knowledge" ]; then
-    log_info "migrating from claudeknows to claudebase: removing old install"
-    rm -rf "$CLAUDE_DIR/tools/sdlc-knowledge"
-  fi
-  for dir in /usr/local/bin /opt/homebrew/bin "$HOME/.local/bin"; do
-    if [ -L "$dir/claudeknows" ]; then
-      rm -f "$dir/claudeknows" && log_ok "removed legacy claudeknows alias from $dir"
+# claudebase lives in its own GitHub repo with its own installer that ships
+# the CLI binary, PDFium native library, e5 encoder, plus the agent toolkit
+# (rules: knowledge-base, knowledge-base-tool, tool-limitations;
+# commands: knowledge-ingest, reflect, consolidate;
+# agents: reflection, consolidator). Calling its installer keeps the
+# boundary clean — claudebase owns its install surface.
+#
+# In --local mode AND with a sibling claudebase/ checkout (the dev path —
+# e.g., when working from the SDLC monorepo with a nested claudebase clone),
+# run the local installer directly. Otherwise pipe curl to bash.
+# ============================================================================
+chain_claudebase_installer() {
+  if [ "$LOCAL_MODE" = true ] && [ -f "$SCRIPT_DIR/claudebase/install.sh" ]; then
+    log_info "Chaining to local claudebase installer at $SCRIPT_DIR/claudebase/install.sh"
+    if bash "$SCRIPT_DIR/claudebase/install.sh" --yes --local; then
+      log_ok "claudebase installed (local checkout)"
+    else
+      log_warn "claudebase installer exited non-zero; SDLC will degrade gracefully (no knowledge base)"
     fi
-  done
-
-  local target_dir="$CLAUDE_DIR/tools/claudebase"
-  mkdir -p "$target_dir"
-
-  # Validate uname -ms against fixed allowlist BEFORE URL interpolation.
-  # Windows variants (Git Bash / MSYS2 / Cygwin) report uname -s as MINGW64_NT-*,
-  # MSYS_NT-*, or CYGWIN_NT-*; arch comes from uname -m. The combined uname -ms
-  # therefore starts with one of those prefixes — match the prefix glob, then
-  # gate arch separately via uname -m for safety.
-  local platform exe_ext=""
-  case "$(uname -ms)" in
-    "Darwin arm64")  platform="darwin-arm64"  ;;
-    "Darwin x86_64") platform="darwin-x64"    ;;
-    "Linux x86_64")  platform="linux-x64"     ;;
-    "Linux aarch64") platform="linux-arm64"   ;;
-    MINGW*|MSYS*|CYGWIN*)
-      case "$(uname -m)" in
-        x86_64) platform="windows-x64"; exe_ext=".exe" ;;
-        *)
-          log_warn "unsupported Windows arch: $(uname -m); skipping"
-          return 0
-          ;;
-      esac
-      ;;
-    *)
-      log_warn "binary unavailable; install cargo or wait for first release"
-      return 0
-      ;;
-  esac
-
-  local target_bin="$target_dir/claudebase${exe_ext}"
-
-  # Idempotency: skip if already at expected version.
-  if [ -x "$target_bin" ]; then
-    local existing_ver
-    existing_ver="$("$target_bin" --version 2>/dev/null | awk '{print $2}' || true)"
-    if [ "$existing_ver" = "$CLAUDEBASE_VERSION" ]; then
-      log_ok "claudebase already at expected version $CLAUDEBASE_VERSION"
-      return 0
-    fi
+    return 0
   fi
 
-  # claudebase lives in its own GitHub repo (extracted from this monorepo on
-  # 2026-05-10). The download URL is hard-coded to that repo — NOT derived from
-  # REPO_URL, which still points at the SDLC monorepo for the rest of the
-  # install (agents/commands/rules).
-  local url="https://github.com/codefather-labs/claudebase/releases/download/claudebase-v${CLAUDEBASE_VERSION}/claudebase-${platform}${exe_ext}"
-
-  local tmp
-  tmp="$(mktemp)"
-
-  # TLS-only download. NEVER -k / --insecure. Try curl first, then wget.
-  # Slice 2 security pre-review MEDIUM: --max-redirs 5 / --max-time 120 (curl) and
-  # --max-redirect=5 / --timeout=120 / --secure-protocol=TLSv1_2 (wget) for parity
-  # with the pdfium download path (install_pdfium_binary lines 545/550). Mitigates
-  # redirect-loop DoS and infinite-stall scenarios on attacker-controlled URLs.
-  # TODO(iter-2): add claudebase-<platform>.sha256 sidecar download + shasum -a 256 -c verification
+  log_info "Chaining to claudebase installer at $CLAUDEBASE_INSTALLER_URL"
   if command -v curl >/dev/null 2>&1; then
-    if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp"; then
-      rm -f "$tmp"
-      cargo_source_build_fallback
-      return $?
+    if curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 300 "$CLAUDEBASE_INSTALLER_URL" | bash -s -- --yes; then
+      log_ok "claudebase installed"
+    else
+      log_warn "claudebase installer failed; SDLC will degrade gracefully (no knowledge base)"
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if ! wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=120 -q -O "$tmp" "$url"; then
-      rm -f "$tmp"
-      cargo_source_build_fallback
-      return $?
+    if wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=300 -qO- "$CLAUDEBASE_INSTALLER_URL" | bash -s -- --yes; then
+      log_ok "claudebase installed"
+    else
+      log_warn "claudebase installer failed; SDLC will degrade gracefully"
     fi
   else
-    rm -f "$tmp"
-    log_warn "binary unavailable; install cargo or wait for first release"
-    return 0
+    log_warn "neither curl nor wget available; cannot chain claudebase installer"
+    log_warn "  install manually: bash <(curl -fsSL $CLAUDEBASE_INSTALLER_URL)"
   fi
-
-  chmod +x "$tmp"
-
-  # Verify --version exits 0 BEFORE writing allowlist entry.
-  if ! "$tmp" --version >/dev/null 2>&1; then
-    log_warn "downloaded binary failed --version smoke; falling back"
-    rm -f "$tmp"
-    cargo_source_build_fallback
-    return $?
-  fi
-
-  mv "$tmp" "$target_bin"
-  chmod +x "$target_bin"
-  log_ok "tools/claudebase/claudebase ($platform)"
-}
-
-# ============================================================================
-# Register `claudebase` global alias — symlink the installed binary into a
-# writable PATH directory so the tool can be invoked by short name without
-# the absolute `~/.claude/tools/claudebase/claudebase` path.
-#
-# Probe order (first writable, on-PATH directory wins):
-#   1. /usr/local/bin       — classic Unix system bin (Intel macOS, many Linuxes)
-#   2. /opt/homebrew/bin    — Apple Silicon Homebrew default
-#   3. ~/.local/bin         — XDG user-bin (created if absent)
-#
-# Idempotent — if the symlink already points at the right target, nothing
-# changes. If a stale file exists at the alias path, it is replaced (symlink
-# only; never overwrite a regular file).
-# ============================================================================
-register_claudebase_alias() {
-  # Re-derive the binary path (matches install_knowledge_binary's exe_ext logic).
-  local exe_ext=""
-  case "$(uname -ms)" in
-    MINGW*|MSYS*|CYGWIN*) exe_ext=".exe" ;;
-  esac
-  local target_bin="$CLAUDE_DIR/tools/claudebase/claudebase${exe_ext}"
-
-  if [ ! -x "$target_bin" ]; then
-    log_warn "claudebase alias: target binary not found at $target_bin; skipping"
-    return 0
-  fi
-
-  # Find the first writable directory on PATH.
-  local link_dir=""
-  for dir in "/usr/local/bin" "/opt/homebrew/bin" "$HOME/.local/bin"; do
-    if [ -d "$dir" ] && [ -w "$dir" ]; then
-      link_dir="$dir"
-      break
-    fi
-  done
-  # If nothing writable was found, try to create ~/.local/bin (XDG default).
-  if [ -z "$link_dir" ]; then
-    if mkdir -p "$HOME/.local/bin" 2>/dev/null && [ -w "$HOME/.local/bin" ]; then
-      link_dir="$HOME/.local/bin"
-    fi
-  fi
-
-  if [ -z "$link_dir" ]; then
-    log_warn "claudebase alias: no writable PATH directory found"
-    log_warn "  manual setup: ln -sf $target_bin /usr/local/bin/claudebase"
-    return 0
-  fi
-
-  local link_path="$link_dir/claudebase"
-
-  # Refuse to overwrite a regular file (could be a user-installed tool with
-  # the same name). Replace existing symlinks freely.
-  if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
-    log_warn "claudebase alias: $link_path exists as a regular file; refusing to overwrite"
-    log_warn "  remove or rename it, then re-run install.sh"
-    return 0
-  fi
-
-  # Idempotency: if the symlink already points where we want, nothing to do.
-  if [ -L "$link_path" ] && [ "$(readlink "$link_path")" = "$target_bin" ]; then
-    log_ok "claudebase alias already in place ($link_path)"
-    return 0
-  fi
-
-  rm -f "$link_path"
-  ln -s "$target_bin" "$link_path"
-  log_ok "claudebase alias: $link_path -> $target_bin"
-
-  # Warn if the chosen directory is not currently on PATH (rare — we picked
-  # from a writable list, but ~/.local/bin can be off-PATH on bare macOS).
-  case ":$PATH:" in
-    *":$link_dir:"*) ;;
-    *)
-      log_warn "  NOTE: $link_dir is not on PATH for the current shell"
-      log_warn "  add to your shell rc (~/.zshrc, ~/.bashrc, etc.):"
-      log_warn "    export PATH=\"$link_dir:\$PATH\""
-      ;;
-  esac
-}
-
-# ============================================================================
-# Cargo source-build fallback (deprecated — claudebase source no longer in this
-# monorepo; use github.com/codefather-labs/claudebase if you need to build from
-# source). Retained as a stub so call-sites in install_knowledge_binary still
-# compile cleanly during the deprecation window.
-# ============================================================================
-cargo_source_build_fallback() {
-  log_warn "claudebase binary unavailable for this platform; the source moved to"
-  log_warn "github.com/codefather-labs/claudebase on 2026-05-10. To build from"
-  log_warn "source: git clone github.com/codefather-labs/claudebase && cd claudebase && cargo build --release"
-  return 0
 }
 
 # ============================================================================
@@ -611,40 +458,6 @@ _jq_merge_allow_entries() {
   else
     rm -f "$tmp"
     return 1
-  fi
-}
-
-# ============================================================================
-# Register Bash allowlist for claudebase in ~/.claude/settings.json (Slice 5)
-# ============================================================================
-register_bash_allowlist() {
-  local settings="$CLAUDE_DIR/settings.json"
-  local entry='~/.claude/tools/claudebase/claudebase *'
-
-  # Missing-file create case: write minimal literal JSON.
-  if [ ! -f "$settings" ]; then
-    mkdir -p "$CLAUDE_DIR"
-    cat > "$settings" <<'EOF'
-{"permissions":{"allow":["~/.claude/tools/claudebase/claudebase *"]}}
-EOF
-    chmod 0644 "$settings"
-    log_ok "settings.json (created with claudebase allowlist)"
-    return 0
-  fi
-
-  # File exists: prefer atomic jq-based merge; fail-closed if jq absent.
-  if command -v jq >/dev/null 2>&1; then
-    if _jq_merge_allow_entries "$entry"; then
-      log_ok "settings.json (claudebase allowlist merged)"
-    else
-      log_warn "settings.json merge failed; please add manually: $entry"
-    fi
-  else
-    if grep -Fq "$entry" "$settings"; then
-      log_ok "settings.json already contains claudebase allowlist"
-    else
-      log_warn "jq required for safe settings.json merge — install jq or merge manually: $entry"
-    fi
   fi
 }
 
@@ -865,135 +678,6 @@ bootstrap_release() {
 }
 
 # ============================================================================
-# Install pdfium dynamic library (Slice 3 — pdfium-pdf-extraction)
-# ============================================================================
-install_pdfium_binary() {
-  # M9: graceful failure — wrap in subshell to insulate from set -e
-  (
-    set +e
-
-    # M10: ordering — re-invoke get_source_dir if SCRIPT_DIR was cleaned up
-    if [ ! -d "$SCRIPT_DIR/templates" ]; then
-      get_source_dir
-    fi
-
-    # M16: deterministic mode bits
-    umask 0022
-
-    local target_dir="$CLAUDE_DIR/tools/claudebase/pdfium"
-    local lib_dir="$target_dir/lib"
-    local sentinel="$target_dir/.version"
-
-    # M8: idempotency — skip if existing version matches
-    if [ -f "$sentinel" ]; then
-      local existing
-      existing=$(cat "$sentinel" 2>/dev/null)
-      if [ "$existing" = "$CLAUDEBASE_PDFIUM_VERSION" ]; then
-        log_ok "pdfium binary already at version $CLAUDEBASE_PDFIUM_VERSION"
-        return 0
-      fi
-    fi
-
-    # M12: uname allowlist — fail closed before URL interpolation
-    local platform asset
-    case "$(uname -s)/$(uname -m)" in
-      Darwin/arm64)   platform=darwin-arm64;  asset=pdfium-mac-arm64.tgz   ;;
-      Darwin/x86_64)  platform=darwin-x64;    asset=pdfium-mac-x64.tgz     ;;
-      Linux/x86_64)   platform=linux-x64;     asset=pdfium-linux-x64.tgz   ;;
-      Linux/aarch64)  platform=linux-arm64;   asset=pdfium-linux-arm64.tgz ;;
-      *)
-        log_warn "unsupported platform for pdfium binary: $(uname -s)/$(uname -m); skipping"
-        return 0
-        ;;
-    esac
-
-    # M1: URL hardcoded from constants
-    local url="https://github.com/bblanchon/pdfium-binaries/releases/download/${CLAUDEBASE_PDFIUM_VERSION}/${asset}"
-
-    # M3: download to mktemp
-    local tmp_archive
-    tmp_archive=$(mktemp -t pdfium.XXXXXX) || { log_warn "mktemp failed"; return 0; }
-
-    # M4: extract to mktemp -d staging
-    local staging
-    staging=$(mktemp -d -t pdfium.XXXXXX) || { log_warn "mktemp -d failed"; rm -f "$tmp_archive"; return 0; }
-
-    # cleanup trap
-    trap 'rm -f "$tmp_archive"; rm -rf "$staging" 2>/dev/null' EXIT
-
-    # M2 + M14 + M15: TLS-only download with redirect/timeout bounds; curl primary + wget fallback
-    if command -v curl >/dev/null 2>&1; then
-      if ! curl --proto '=https' --tlsv1.2 -fsSL --max-redirs 5 --max-time 120 "$url" -o "$tmp_archive"; then
-        log_warn "pdfium download failed (curl); skipping PDF support"
-        return 0
-      fi
-    elif command -v wget >/dev/null 2>&1; then
-      if ! wget --https-only --secure-protocol=TLSv1_2 --max-redirect=5 --timeout=120 -q -O "$tmp_archive" "$url"; then
-        log_warn "pdfium download failed (wget); skipping PDF support"
-        return 0
-      fi
-    else
-      log_warn "neither curl nor wget available; skipping pdfium install"
-      return 0
-    fi
-
-    # M6 pre-extract: reject malicious tar entries (path traversal or absolute paths)
-    if tar -tzf "$tmp_archive" 2>/dev/null | grep -E '^/|(^|/)\.\.(/|$)' >/dev/null; then
-      log_warn "pdfium archive contains traversal entries; refusing to extract"
-      return 0
-    fi
-
-    # M5: tar safety flags
-    if ! tar --no-same-owner --no-same-permissions -xzf "$tmp_archive" -C "$staging" 2>/dev/null; then
-      log_warn "pdfium archive extraction failed"
-      return 0
-    fi
-
-    # M6 post-extract: re-check for traversal artifacts
-    if find "$staging" -path '*..*' -print -quit 2>/dev/null | grep -q .; then
-      log_warn "pdfium archive produced traversal paths post-extract; refusing"
-      return 0
-    fi
-
-    # M7: reject suid/sgid bits
-    if find "$staging" -perm /6000 -print -quit 2>/dev/null | grep -q .; then
-      log_warn "pdfium archive contains setuid/setgid files; refusing"
-      return 0
-    fi
-
-    # bblanchon archive layout: lib/libpdfium.{dylib|so} at top level
-    local extracted_lib
-    extracted_lib=$(find "$staging" -maxdepth 3 -name "libpdfium*" -type f -print -quit 2>/dev/null)
-    if [ -z "$extracted_lib" ]; then
-      log_warn "no libpdfium found in extracted archive"
-      return 0
-    fi
-
-    # Move to canonical location
-    mkdir -p "$lib_dir"
-    cp "$extracted_lib" "$lib_dir/"
-    chmod 0755 "$lib_dir"/libpdfium*
-
-    # Write version sentinel
-    echo "$CLAUDEBASE_PDFIUM_VERSION" > "$sentinel"
-    chmod 0644 "$sentinel"
-
-    # M17: post-install integrity check
-    if ! [ -s "$lib_dir/libpdfium.dylib" ] && ! [ -s "$lib_dir/libpdfium.so" ]; then
-      log_warn "pdfium post-install integrity check failed; cleaning up"
-      rm -rf "$target_dir"
-      return 0
-    fi
-
-    log_ok "pdfium binary installed: ${platform} (version ${CLAUDEBASE_PDFIUM_VERSION})"
-    # M13: hash verification deferral
-    # TODO(iter-3): add pdfium-<arch>.tgz.sha256 sidecar verification
-    return 0
-  )
-  return 0  # always succeed (FR-3.5 graceful degradation)
-}
-
-# ============================================================================
 # Main
 # ============================================================================
 
@@ -1012,25 +696,8 @@ if [ -n "$BOOTSTRAP_RELEASE_VERSION" ]; then
 fi
 
 install_user_config
-install_knowledge_binary
-register_claudebase_alias
-register_bash_allowlist
+chain_claudebase_installer
 register_release_bash_allowlist
-install_pdfium_binary
-
-# Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
-# encoder so the first `claudebase ingest` / `claudebase search --mode hybrid`
-# doesn't pay a 30 s cold-start model-download stall. Idempotent (no-op
-# when model is already cached). Network failure is a warning, not a
-# fatal error — fastembed will lazy-download on first real use.
-if [ -x "$CLAUDE_DIR/tools/claudebase/claudebase" ]; then
-  log_info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
-  if "$CLAUDE_DIR/tools/claudebase/claudebase" warmup --quiet 2>&1; then
-    log_ok "encoder ready (cached at ~/.claude/tools/claudebase/models/)"
-  else
-    log_warn "encoder pre-load failed; fastembed will retry on first ingest"
-  fi
-fi
 
 if [ "$INIT_PROJECT" = true ]; then
   scaffold_project
@@ -1071,8 +738,8 @@ echo "    claudebase search '<query>' --json BM25-ranked search; PDF hits cite p
 echo "    claudebase page <doc> <N>   Fetch full text of a cited PDF page"
 echo "    claudebase list  | status | delete Inspect / manage indexed sources"
 echo ""
-echo "  Tip: re-ingest existing PDFs (claudebase ingest <path>) to upgrade pre-v2 indexes"
-echo "  to schema v2 — that's what unlocks per-page citations in search hits."
+echo "  Tip: re-ingest existing PDFs (claudebase ingest <path>) to upgrade pre-v3 indexes"
+echo "  to schema v3 — that's what unlocks per-page citations + agent-insights corpus."
 echo ""
 
 if [ "$INIT_PROJECT" = false ]; then

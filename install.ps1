@@ -11,7 +11,7 @@ param(
 # Claude Code SDLC Windows Installer (PowerShell)
 # ============================================================================
 #
-# Installs an autonomous SDLC workflow for Claude Code — 21 specialized AI
+# Installs an autonomous SDLC workflow for Claude Code — 20 specialized AI
 # agents that mirror a professional software development team.
 #
 # Quick install (PowerShell, run from any directory after cloning):
@@ -31,9 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$Version = "3.0.0"
-$ClaudebaseVersion = "0.4.0"
-$ClaudebasePdfiumVersion = "chromium/7802"
+$Version = "3.1.0"
 $RepoUrl = "https://github.com/codefather-labs/claude-code-sdlc.git"
 $RepoOwnerRepo = "codefather-labs/claude-code-sdlc"
 $ClaudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -49,7 +47,7 @@ function Show-Help {
     @"
 Claude Code SDLC Installer v$Version (Windows)
 
-Turn Claude Code into a full dev team with 21 specialized AI agents.
+Turn Claude Code into a full dev team with 20 specialized AI agents.
 
 USAGE:
   install.bat [OPTIONS]
@@ -62,17 +60,20 @@ OPTIONS:
   -Help            Show this help message
 
 WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
-  claude.md        Main workflow instructions
-  agents\          21 specialized agent prompts
-  commands\        10 SDLC pipeline commands
-  rules\           4 process rules
-  tools\claudebase\claudebase.exe   Knowledge-base CLI binary
-  tools\claudebase\pdfium\lib\pdfium.dll   PDFium runtime for PDF ingest
+  claude.md        Main workflow instructions (includes Mira orchestrator persona)
+  agents\          20 specialized agent prompts (SDLC pipeline)
+  commands\        7 SDLC pipeline commands
+  rules\           4 process rules (cognitive-self-check, error-recovery, scratchpad, git)
 
-GLOBAL ALIAS (claudebase):
-  A claudebase.cmd wrapper is created in %USERPROFILE%\.claude\bin\
-  and that directory is added to your User PATH (open a new shell after
-  install for the PATH change to take effect).
+CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
+  This installer downloads and runs claudebase's standalone PowerShell
+  installer, which additionally installs:
+    tools\claudebase\        CLI binary + PDFium + e5 encoder
+    rules\                   knowledge-base, knowledge-base-tool, tool-limitations
+    commands\                /knowledge-ingest, /reflect, /consolidate
+    agents\                  reflection (Drift), consolidator (Mnem)
+    bin\claudebase.cmd       Global alias (User PATH appended; open new shell)
+  Source: https://github.com/codefather-labs/claudebase
 
 WHAT -InitProject CREATES (in current directory):
   .claude\CLAUDE.md             Project context template
@@ -89,25 +90,24 @@ AFTER INSTALL:
   The autonomous pipeline kicks in automatically.
 
 COMMANDS AVAILABLE:
-  /develop-feature    Full autonomous pipeline
-  /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
-  /implement-slice    Implement next TDD slice
-  /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
-                      documented QA plan with Playwright MCP for UI/UX evidence;
-                      FAIL spawns implementer with fix directives (deliberate-mode
-                      on iter N+1); 3 non-converging iters triggers sunk-cost
-                      circuit breaker. BLOCKED halts with fact-grounded argument.
-                      Run BEFORE /merge-ready; /develop-feature chains it automatically.
-  /consolidate        Cross-artifact drift detection (hippocampal sleep-replay
-                      analogue). 6 fixed passes via consolidator agent. Auto-chained
-                      between waves in /develop-feature; manually invokable.
-  /reflect            DMN unfocused observation pass via reflection agent. No specific
-                      task — wanders project state for non-obvious observations.
-                      User-invoked only; never auto-chained.
-  /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
-  /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
-  /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
-  /context-refresh    Rebuild session context
+  SDLC pipeline (this repo):
+    /develop-feature    Full autonomous pipeline
+    /bootstrap-feature  Documentation phases only ([--with-resources] forces resource-architect)
+    /implement-slice    Implement next TDD slice
+    /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
+                        documented QA plan with Playwright MCP for UI/UX evidence;
+                        FAIL spawns implementer with fix directives (deliberate-mode
+                        on iter N+1); 3 non-converging iters triggers sunk-cost
+                        circuit breaker. BLOCKED halts with fact-grounded argument.
+                        Run BEFORE /merge-ready; /develop-feature chains it automatically.
+    /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
+    /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
+    /context-refresh    Rebuild session context
+
+  Memory + observation (from claudebase):
+    /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
+    /consolidate        Cross-artifact drift detection (auto-chained between waves)
+    /reflect            DMN unfocused observation pass — user-invoked only
 "@ | Write-Host
 }
 
@@ -176,7 +176,7 @@ function Install-UserConfig {
     Write-Host "============================================" -ForegroundColor White
     Write-Host ""
     Write-Host "  Turn Claude Code into a full dev team" -ForegroundColor Cyan
-    Write-Host "  21 AI agents | Documentation-first | TDD"
+    Write-Host "  20 AI agents | Documentation-first | TDD"
     Write-Host ""
     Write-Host "  This will install to $ClaudeDir"
     Write-Host ""
@@ -216,130 +216,6 @@ function Install-UserConfig {
 
     Write-Host ""
     Write-Ok "User-level config installed ($total files: 1 workflow + $agentCount agents + $cmdCount commands + $ruleCount rules)"
-}
-
-function Install-KnowledgeBinary {
-    # Migration cleanup: remove the pre-2026-05-10 sdlc-knowledge install +
-    # legacy claudeknows.cmd wrapper. Idempotent — silently no-ops on a fresh
-    # install.
-    $oldDir = Join-Path $ClaudeDir "tools\sdlc-knowledge"
-    if (Test-Path $oldDir) {
-        Write-Info "migrating from claudeknows to claudebase: removing old install"
-        Remove-Item -Recurse -Force $oldDir -ErrorAction SilentlyContinue
-    }
-    $oldWrapper = Join-Path $ClaudeDir "bin\claudeknows.cmd"
-    if (Test-Path $oldWrapper) {
-        Remove-Item -Force $oldWrapper -ErrorAction SilentlyContinue
-        Write-Ok "removed legacy claudeknows.cmd wrapper"
-    }
-
-    if (-not [Environment]::Is64BitOperatingSystem) {
-        Write-Warn "32-bit Windows is not supported by claudebase; skipping binary install"
-        return
-    }
-    $platform = "windows-x64"
-    $targetDir = Join-Path $ClaudeDir "tools\claudebase"
-    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    $targetBin = Join-Path $targetDir "claudebase.exe"
-
-    # Idempotency check
-    if (Test-Path $targetBin) {
-        try {
-            $verLine = & $targetBin --version 2>$null
-            $existingVer = ($verLine -split '\s+')[-1]
-            if ($existingVer -eq $ClaudebaseVersion) {
-                Write-Ok "claudebase already at expected version $ClaudebaseVersion"
-                return
-            }
-        } catch { }
-    }
-
-    # claudebase moved to its own repo on 2026-05-10. URL is hard-coded to
-    # codefather-labs/claudebase, NOT derived from $RepoOwnerRepo (which still
-    # points at the SDLC monorepo for the rest of the install).
-    $url = "https://github.com/codefather-labs/claudebase/releases/download/claudebase-v$ClaudebaseVersion/claudebase-$platform.exe"
-    $tmp = Join-Path $env:TEMP ("claudebase-" + [guid]::NewGuid().ToString() + ".exe")
-
-    Write-Info "Downloading claudebase.exe v$ClaudebaseVersion..."
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 120
-    } catch {
-        Write-Warn "Download failed: $($_.Exception.Message)"
-        Remove-Item $tmp -ErrorAction SilentlyContinue
-        Invoke-CargoSourceBuildFallback
-        return
-    }
-
-    # Smoke-test
-    try {
-        & $tmp --version | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "non-zero exit from --version" }
-    } catch {
-        Write-Warn "downloaded binary failed --version smoke; falling back to cargo build"
-        Remove-Item $tmp -ErrorAction SilentlyContinue
-        Invoke-CargoSourceBuildFallback
-        return
-    }
-
-    Move-Item -Force $tmp $targetBin
-    Write-Ok "tools\claudebase\claudebase.exe ($platform)"
-}
-
-function Invoke-CargoSourceBuildFallback {
-    if (-not (Test-Path (Join-Path $Script:ScriptDir "tools\claudebase"))) {
-        Get-SourceDir
-    }
-    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-        Write-Warn "binary unavailable; install cargo (https://rustup.rs) or wait for the release to publish"
-        return
-    }
-    $cargoToml = Join-Path $Script:ScriptDir "tools\claudebase\Cargo.toml"
-    if (-not (Test-Path $cargoToml)) {
-        Write-Warn "binary unavailable; cannot find tools\claudebase\Cargo.toml"
-        return
-    }
-    Write-Info "Building claudebase from source via cargo (fallback)..."
-    & cargo build --release -p claudebase --manifest-path $cargoToml
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn "cargo build failed; binary unavailable"
-        return
-    }
-    $built = Join-Path $Script:ScriptDir "tools\claudebase\target\release\claudebase.exe"
-    if (-not (Test-Path $built)) {
-        Write-Warn "cargo build did not produce expected binary at $built"
-        return
-    }
-    $targetDir = Join-Path $ClaudeDir "tools\claudebase"
-    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    Copy-Item -Force $built (Join-Path $targetDir "claudebase.exe")
-    Write-Ok "tools\claudebase\claudebase.exe (built from source)"
-}
-
-function Register-ClaudeknowsAlias {
-    $targetBin = Join-Path $ClaudeDir "tools\claudebase\claudebase.exe"
-    if (-not (Test-Path $targetBin)) {
-        Write-Warn "claudebase alias: target binary not found at $targetBin; skipping"
-        return
-    }
-    $binDir = Join-Path $ClaudeDir "bin"
-    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-
-    $wrapperPath = Join-Path $binDir "claudebase.cmd"
-    $wrapperContent = "@echo off`r`n`"$targetBin`" %*`r`n"
-    Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding ASCII -NoNewline
-    Write-Ok "claudebase alias: $wrapperPath -> $targetBin"
-
-    # Add binDir to user PATH if not already there
-    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    $pathParts = if ($userPath) { $userPath -split ';' } else { @() }
-    if ($pathParts -notcontains $binDir) {
-        $newPath = if ($userPath) { "$userPath;$binDir" } else { $binDir }
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-        Write-Ok "User PATH updated to include $binDir"
-        Write-Warn "  NOTE: open a new terminal for the PATH change to take effect"
-    } else {
-        Write-Ok "User PATH already contains $binDir"
-    }
 }
 
 function Update-AllowList {
@@ -385,10 +261,6 @@ function Update-AllowList {
     }
 }
 
-function Register-BashAllowlist {
-    Update-AllowList -Entries @('~/.claude/tools/claudebase/claudebase *') -SuccessMsg "claudebase allowlist"
-}
-
 function Register-ReleaseBashAllowlist {
     $entries = @(
         "git add CHANGELOG.md *",
@@ -404,72 +276,6 @@ function Register-ReleaseBashAllowlist {
         "git push origin claudebase-v*"
     )
     Update-AllowList -Entries $entries -SuccessMsg "release-engineer allowlist"
-}
-
-function Install-PdfiumBinary {
-    $targetDir = Join-Path $ClaudeDir "tools\claudebase\pdfium"
-    $libDir = Join-Path $targetDir "lib"
-    $sentinel = Join-Path $targetDir ".version"
-
-    if (Test-Path $sentinel) {
-        $existing = (Get-Content -Raw $sentinel).Trim()
-        if ($existing -eq $ClaudebasePdfiumVersion) {
-            Write-Ok "pdfium binary already at version $ClaudebasePdfiumVersion"
-            return
-        }
-    }
-
-    if (-not [Environment]::Is64BitOperatingSystem) {
-        Write-Warn "32-bit Windows pdfium not supported; skipping PDF support"
-        return
-    }
-    $asset = "pdfium-win-x64.tgz"
-    $url = "https://github.com/bblanchon/pdfium-binaries/releases/download/$ClaudebasePdfiumVersion/$asset"
-
-    if (-not (Get-Command tar.exe -ErrorAction SilentlyContinue)) {
-        Write-Warn "tar.exe not found (Windows 10 1803+ required); skipping pdfium install"
-        return
-    }
-
-    $tmpArchive = Join-Path $env:TEMP ("pdfium-" + [guid]::NewGuid().ToString() + ".tgz")
-    $staging = Join-Path $env:TEMP ("pdfium-staging-" + [guid]::NewGuid().ToString())
-    New-Item -ItemType Directory -Path $staging -Force | Out-Null
-
-    try {
-        Write-Info "Downloading pdfium ($ClaudebasePdfiumVersion)..."
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $tmpArchive -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 120
-        } catch {
-            Write-Warn "pdfium download failed: $($_.Exception.Message); skipping PDF support"
-            return
-        }
-
-        & tar.exe -xzf $tmpArchive -C $staging 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "pdfium archive extraction failed"
-            return
-        }
-
-        $pdfiumDll = Get-ChildItem -Path $staging -Filter "pdfium.dll" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $pdfiumDll) {
-            Write-Warn "no pdfium.dll found in extracted archive"
-            return
-        }
-
-        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
-        Copy-Item -Force $pdfiumDll.FullName (Join-Path $libDir "pdfium.dll")
-        Set-Content -Path $sentinel -Value $ClaudebasePdfiumVersion -Encoding ASCII
-
-        if (-not (Test-Path (Join-Path $libDir "pdfium.dll"))) {
-            Write-Warn "pdfium post-install integrity check failed; cleaning up"
-            Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
-            return
-        }
-        Write-Ok "pdfium binary installed: win-x64 (version $ClaudebasePdfiumVersion)"
-    } finally {
-        Remove-Item -ErrorAction SilentlyContinue $tmpArchive
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $staging
-    }
 }
 
 function Initialize-Project {
@@ -557,36 +363,61 @@ TODO: High-level description of the product.
 }
 
 # ============================================================================
+# Chain to the standalone claudebase installer
+# ============================================================================
+# claudebase lives in its own GitHub repo with its own installer that ships
+# the CLI binary, PDFium native library, e5 encoder, plus the agent toolkit
+# (3 rules, 3 commands, 2 agents — see https://github.com/codefather-labs/claudebase).
+# Calling its installer keeps the boundary clean.
+#
+# In -Local mode AND with a sibling claudebase\ checkout (the dev path —
+# e.g., when working from the SDLC monorepo with a nested claudebase clone),
+# run the local installer directly. Otherwise download and invoke from main.
+# ============================================================================
+function Invoke-ClaudebaseInstaller {
+    if ($Local -and (Test-Path (Join-Path $Script:ScriptDir 'claudebase\install.ps1'))) {
+        Write-Info "Chaining to local claudebase installer at $($Script:ScriptDir)\claudebase\install.ps1"
+        try {
+            & (Join-Path $Script:ScriptDir 'claudebase\install.ps1') -Yes -Local
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "claudebase installed (local checkout)"
+            } else {
+                Write-Warn "claudebase installer exited with $LASTEXITCODE; SDLC will degrade gracefully (no knowledge base)"
+            }
+        } catch {
+            Write-Warn "claudebase installer threw: $($_.Exception.Message); SDLC will degrade gracefully"
+        }
+        return
+    }
+
+    $url = "https://raw.githubusercontent.com/codefather-labs/claudebase/main/install.ps1"
+    Write-Info "Chaining to claudebase installer at $url"
+    try {
+        $script = Invoke-WebRequest -Uri $url -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 300
+        $tmpScript = Join-Path $env:TEMP ("claudebase-installer-" + [guid]::NewGuid().ToString() + ".ps1")
+        Set-Content -Path $tmpScript -Value $script.Content -Encoding UTF8
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmpScript -Yes
+        $rc = $LASTEXITCODE
+        Remove-Item -Force $tmpScript -ErrorAction SilentlyContinue
+        if ($rc -eq 0) {
+            Write-Ok "claudebase installed"
+        } else {
+            Write-Warn "claudebase installer exited with $rc; SDLC will degrade gracefully (no knowledge base)"
+        }
+    } catch {
+        Write-Warn "claudebase installer failed: $($_.Exception.Message)"
+        Write-Warn "  install manually: iwr -useb $url | iex"
+    }
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 if ($Help) { Show-Help; exit 0 }
 
 Install-UserConfig
-Install-KnowledgeBinary
-Register-ClaudeknowsAlias
-Register-BashAllowlist
+Invoke-ClaudebaseInstaller
 Register-ReleaseBashAllowlist
-Install-PdfiumBinary
-
-# Slice 11 of vector-retrieval-backend: pre-load the e5-multilingual-small
-# encoder so the first `claudebase ingest` / `claudebase search --mode hybrid`
-# doesn't pay a ~30 s cold-start model-download stall. Idempotent (no-op
-# when model is already cached). Network failure is a warning, not a
-# fatal error — fastembed will lazy-download on first real use.
-$KnowledgeExe = Join-Path $ClaudeDir "tools\claudebase\claudebase.exe"
-if (Test-Path $KnowledgeExe) {
-    Write-Info "Pre-loading e5-multilingual-small encoder (~120 MB on first run)..."
-    try {
-        & $KnowledgeExe warmup --quiet 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Ok "encoder ready (cached at $env:USERPROFILE\.claude\tools\claudebase\models\)"
-        } else {
-            Write-Warn "encoder pre-load failed; fastembed will retry on first ingest"
-        }
-    } catch {
-        Write-Warn "encoder pre-load failed ($($_.Exception.Message)); fastembed will retry on first ingest"
-    }
-}
 
 if ($InitProject) {
     Initialize-Project

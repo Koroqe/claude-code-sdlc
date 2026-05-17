@@ -17,6 +17,27 @@ Behavior:
 - If the agent returns `action taken: rewrote` (uncommon — e.g., PRD edited since last sync), surface the diff summary in the merge-ready output before proceeding to Gate 0.
 - If the agent fails for any reason, log the error and proceed to Gate 0 per FR-4.5. The pre-flight sync cannot fail `/merge-ready`.
 
+## Pre-gate: Corporate Code Style Cycle (conditional on `.codestyle` sentinel)
+
+Before Gate 0 runs, check for the `.codestyle` sentinel in the project root:
+
+```bash
+[ -s "<project-root>/.codestyle" ] || skip_corporate_codestyle_cycle
+```
+
+The `-s` flag means "exists AND size > 0" — empty files are treated as absent. When the sentinel is absent or empty, this pre-gate is SKIPPED silently (no output, no entry in the gate count). When present, it MUST run to PASS before Gate 0 starts.
+
+**Iteration loop semantics** (parallel to `/qa-cycle`):
+
+1. Spawn the `corporate-code-style-reviewer` agent. It audits the diff between the feature branch and `main` against the rules in `.codestyle`, then emits PASS / FAIL / BLOCKED.
+2. **PASS** → proceed to Gate 0.
+3. **FAIL** → spawn the implementer with the fix_directives from the reviewer's verdict. After the implementer commits, re-spawn the reviewer (iter N+1).
+4. **BLOCKED** → halt `/merge-ready` entirely. Surface `exit_argument` + `human_needs_to` via `AskUserQuestion` (continue / abort).
+
+The cycle has no iteration cap — exit only via PASS, BLOCKED, or implementer FAIL. After 3 consecutive non-converging iterations, the reviewer itself surfaces BLOCKED with `exit_argument: implementer is not addressing the violations`.
+
+This pre-gate is invisible to projects without `.codestyle` — they go straight from changelog-sync to Gate 0 byte-identically to before. Projects WITH `.codestyle` get mandatory corporate-style enforcement before the regular quality gates run. See `src/agents/corporate-code-style-reviewer.md` for the agent contract.
+
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
 - [ ] Working tree clean (`git status`)
@@ -115,7 +136,7 @@ When the in-memory mutation transitions `features:` from non-empty to empty, the
 
 ### Defense-in-depth deletion safety (FR-4.3, FR-4.4, FR-4.5)
 
-Orchestrator MUST glob-match the literal path pattern `~/.claude/agents/ondemand-*.md` for every deletion. Canonicalize the file path via `realpath` / `readlink -f` (resolving every symlink in the chain) and verify the canonical absolute path begins with `<HOME>/.claude/agents/` before deletion (defense-in-depth against symlink attacks and path-traversal). Files at `~/.claude/agents/<core-agent>.md` (lacking the `ondemand-` prefix) are NOT visible to the FR-1.1 glob and are excluded by construction. Files matching `ondemand-*.md` whose frontmatter `scope` is NOT `on-demand` (the marker-mismatch case) are SKIPPED — orchestrator emits a warning to the merge-ready output but does NOT mutate the file. The twenty-one core agent slugs (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`, `red-team`, `consolidator`, `reflection`) MUST never be teardown-deletion targets. Additionally, if a file at `~/.claude/agents/ondemand-<slug>.md` has `<slug>` byte-equal to one of these 21 core agent slugs (a buggy or hand-edited file that bypassed the iter-1 prefix self-check), the orchestrator MUST treat the file as ineligible for BOTH `features:` mutation AND deletion; emit a `manual-cleanup` warning naming the absolute path so a human reviewer can investigate.
+Orchestrator MUST glob-match the literal path pattern `~/.claude/agents/ondemand-*.md` for every deletion. Canonicalize the file path via `realpath` / `readlink -f` (resolving every symlink in the chain) and verify the canonical absolute path begins with `<HOME>/.claude/agents/` before deletion (defense-in-depth against symlink attacks and path-traversal). Files at `~/.claude/agents/<core-agent>.md` (lacking the `ondemand-` prefix) are NOT visible to the FR-1.1 glob and are excluded by construction. Files matching `ondemand-*.md` whose frontmatter `scope` is NOT `on-demand` (the marker-mismatch case) are SKIPPED — orchestrator emits a warning to the merge-ready output but does NOT mutate the file. The twenty-two core agent slugs (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`, `red-team`, `corporate-code-style-reviewer`, `consolidator`, `reflection`) MUST never be teardown-deletion targets. Additionally, if a file at `~/.claude/agents/ondemand-<slug>.md` has `<slug>` byte-equal to one of these 22 core agent slugs (a buggy or hand-edited file that bypassed the iter-1 prefix self-check), the orchestrator MUST treat the file as ineligible for BOTH `features:` mutation AND deletion; emit a `manual-cleanup` warning naming the absolute path so a human reviewer can investigate.
 
 ### Legacy file handling (FR-7.4)
 
