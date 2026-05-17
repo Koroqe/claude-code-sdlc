@@ -9,10 +9,13 @@ Follow the `/bootstrap-feature` workflow for the requested feature.
 This produces: PRD section, use-case document, architecture review, QA test cases, implementation plan, feature branch, and initialized scratchpad.
 
 ### Phase 1.5: Implementation Review
+
 After the plan is created by the Tech Lead:
-- **Architect** reviews slices flagged for architectural complexity — validates technical design for each
-- **Security Engineer** (security-auditor) reviews slices touching auth, financial data, or external APIs — flags security requirements
-- Incorporate review feedback into slice implementation notes in the scratchpad
+
+1. **Red Team review (MANDATORY — neuroscience: confirmation-bias debias).** Spawn the `red-team` agent to argue AGAINST the plan. Pass it `.claude/plan.md`, `docs/PRD.md` (current feature section), and `docs/use-cases/<feature>_use_cases.md`. The agent runs the 6 attack vectors (premise / approach / scope / dependency / failure-mode / maintenance) and emits a stdout report of objections. Treat objections at severity CRITICAL or MAJOR as findings the planner MUST address — re-spawn `planner` with the red-team report and instruct it to either (a) revise the plan or (b) explicitly defend the original choice in the plan's `## Review Notes` with the defense + the counter-argument so a human can audit. MINOR objections may be noted-and-accepted.
+2. **Architect** reviews slices flagged for architectural complexity — validates technical design for each.
+3. **Security Engineer** (security-auditor) reviews slices touching auth, financial data, or external APIs — flags security requirements.
+4. Incorporate review feedback into slice implementation notes in the scratchpad.
 
 ### Phase 2: Implement All Slices (Wave-Aware)
 
@@ -46,13 +49,21 @@ CRITICAL RULES FOR PARALLEL EXECUTION:
 Report your result: PASS (with commit hash) or FAIL (with error details)."
 ```
 
-After all subagents complete:
+**Post-wave result collection (applies to BOTH dispatch paths above — single-slice and multi-slice):** after the slice(s) in the current wave have completed via either the Single-slice path (line 21) or the Multi-slice parallel spawn (line 24), run the following four steps before advancing to the next wave.
+
 1. **Collect results** — which slices succeeded (commit hashes), which failed (errors)
 2. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
-3. **Handle failures** (per error-recovery parallel wave rules):
-   - All succeeded → proceed to next wave
+3. **Changelog sync (orchestrator-only, once per wave)** — delegate to `changelog-writer` ONCE after all subagents in this wave have completed and the scratchpad is updated, BEFORE proceeding to the next wave. **This applies to ALL waves regardless of size — single-slice waves included.** The agent is idempotent per FR-2.6 and NFR-6, so redundant invocations are cheap (no-op on second call). Uniform dispatch eliminates the dispatch-contradiction risk where a single-slice subagent would receive wave context (causing `implement-slice.md` Step 5.5 to SKIP) while the orchestrator also skipped — leaving the wave without a sync. The agent is invoked with no arguments beyond CWD (per FR-4.6). Subagents within the wave (single or multi-slice) do NOT invoke the agent themselves — this is the structural prevention of the PRD 3.9 Risk 3 double-write race (per FR-4.2). A `no-op: not configured` response inside the SDLC repo is expected and treated as success. If the agent fails, log the error and proceed to the next wave — per FR-4.5 this hook is non-blocking; NFR-6 idempotency ensures the next hook invocation reconciles state.
+4. **Handle failures** (per error-recovery parallel wave rules):
+   - All succeeded → proceed to step 5 (consolidation pass)
    - Some failed → keep successful sibling commits (independent files), report failures, ask user: retry / continue / abort
    - All failed → report as blocker, stop
+5. **Consolidation pass (MANDATORY — neuroscience: hippocampal sleep-replay).** After the wave's slices commit AND scratchpad is updated AND changelog sync ran, invoke `/consolidate` BEFORE proceeding to the next wave. The `consolidator` agent runs its 6 drift-detection passes against the accumulated scratchpad + plan + PRD + use-cases + recent commits + verdicts. Three branches per `/consolidate` protocol:
+   - **No drift detected** → proceed to next wave.
+   - **Maintenance-only signals** → recorded in scratchpad `## Drift Observations`; proceed.
+   - **Critical or major findings** → `/develop-feature` HALTS at the wave boundary. Surface findings to the user via `AskUserQuestion` with options (address / accept as tech debt / abort). Resume only after the user has chosen.
+
+   The consolidation pass is non-skippable except for single-wave features (one wave total — no cross-wave drift possible). Set `## Status:` to `consolidation iter N (between waves W and W+1)` while the pass runs.
 
 **Continue until all waves show complete in the scratchpad.**
 
@@ -64,6 +75,16 @@ Delegate to `refactor-cleaner` agent to review the accumulated changes:
 - Consolidate duplicated patterns across slices
 - Improve type safety where obvious
 Then commit cleanup as a single `chore(core): clean up <feature> implementation` commit.
+
+### Phase 2.75: QA Cycle (strict evidence-based execution)
+
+Follow the `/qa-cycle` workflow. The `qa-engineer` agent executes the documented QA plan against the running implementation, gathers concrete evidence per test case (Playwright MCP for UI/UX, Bash for API/DB/CLI), and emits PASS/FAIL/BLOCKED verdicts. FAIL spawns the implementer with fix directives — the cycle repeats until overall PASS or until BLOCKED surfaces a fact-grounded human-needed action.
+
+- If overall PASS → proceed to Phase 3
+- If overall BLOCKED → halt `/develop-feature` entirely; the human resolves the surfaced action, then re-runs `/develop-feature` (which restarts at Phase 2.75 with iteration N+1)
+- If implementer FAIL → halt `/develop-feature`; surface the implementer's report; the human investigates
+
+**Why this phase exists:** the standard `e2e-runner` pass that lives inside `/merge-ready` Gate 5 is a CODE-AUTHORING check (writes E2E tests, runs the suite). It does NOT examine screenshots visually, does NOT enforce Playwright-MCP-backed evidence per case, does NOT flag visual defects observed but not in the test plan. `/qa-cycle` is the STRICT pass that catches the visual / UX defects that automated E2E typically misses — the user-experienced load-bearing failure mode.
 
 ### Phase 3: Quality Gates
 Follow the `/merge-ready` workflow to run all quality gates.

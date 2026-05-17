@@ -2,10 +2,10 @@
 
 **Turn Claude Code into a full software development team.**
 
-13 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+21 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-3.0.0-green.svg)]()
 
 ---
 
@@ -33,19 +33,20 @@ Claude Code out of the box:
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
 - **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
 - **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- **Release packaging** — extracted to the standalone `/release` slash command (NOT a quality gate). User invokes `/release` after `/merge-ready` reports MERGE READY when ready to publish. The `release-engineer` agent computes the semver bump from `[Unreleased]` content, date-stamps the CHANGELOG section, writes a release-notes file, and provisions the GitHub Actions release workflow. **Two modes:** suggest-only by default (emits the exact `git add` / `git commit` / `git tag` / `git push` commands you run yourself; never executes them) — and an opt-in **executing mode** that activates when `<project>/.claude/rules/auto-release.md` is present. In executing mode `/release` runs whitelisted git commands itself with 4-tier authority (Trivial/Moderate auto-execute, Sensitive `git push origin <tag>` prompts default-deny `[y/N]` or auto-confirms with `AUTO_RELEASE=1`, Forbidden `npm publish` / `cargo publish` / `gh release create` / `--force` always refused). Anchored-regex bash whitelist with metacharacter pre-rejection. Sentinel-absent behavior is byte-identical to suggest-only.
 
 ---
 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash
 ```
 
 Or locally:
 
 ```bash
-git clone https://github.com/Koroqe/claude-code-sdlc.git
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
 cd claude-code-sdlc
 bash install.sh --yes
 ```
@@ -55,6 +56,67 @@ Scaffold a new project:
 ```bash
 cd your-project && bash install.sh --init-project
 ```
+
+### Windows
+
+Native Windows is supported — no WSL, Git Bash, MSYS2, or Cygwin required. The installer is `install.ps1` (PowerShell); `install.bat` is a thin cmd.exe wrapper that forwards arguments to it.
+
+**Prerequisites:** Windows 10 build 1803+ (for the built-in `tar.exe` used to extract the pdfium archive), PowerShell 5.1+ (preinstalled on Windows 10+), and `git` on PATH.
+
+**Clone and install** — from PowerShell or cmd.exe:
+
+```cmd
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
+cd claude-code-sdlc
+install.bat
+```
+
+Or directly via PowerShell:
+
+```powershell
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
+Set-Location claude-code-sdlc
+powershell.exe -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+**Flags** (same on `install.bat` and `install.ps1`):
+
+| Flag | Purpose |
+|------|---------|
+| `-Yes` | Skip confirmation prompts (non-interactive install) |
+| `-Local` | Use the local checkout instead of re-cloning from GitHub |
+| `-InitProject` | Also scaffold a new project template in the current directory |
+| `-Help` | Show usage and exit |
+
+Example — non-interactive install + scaffold a project at the same time:
+
+```cmd
+install.bat -Yes -InitProject
+```
+
+**What gets installed:**
+
+- `%USERPROFILE%\.claude\claude.md` — workflow instructions (loaded by every Claude Code session)
+- `%USERPROFILE%\.claude\agents\` — 21 specialized agent prompts (with personas baked in)
+- `%USERPROFILE%\.claude\commands\` — 10 SDLC pipeline commands
+- `%USERPROFILE%\.claude\rules\` — process rules (cognitive-self-check, error-recovery, knowledge-base, scratchpad, git, tool-limitations)
+- `%USERPROFILE%\.claude\tools\claudebase\claudebase.exe` — knowledge-base CLI binary downloaded from GitHub releases
+- `%USERPROFILE%\.claude\tools\claudebase\pdfium\bin\pdfium.dll` — PDFium native library for PDF extraction
+- `%USERPROFILE%\.claude\bin\claudebase.cmd` — wrapper that adds `claudebase` to your User PATH
+
+**After install:** open a NEW terminal window for the PATH change to take effect. Verify with:
+
+```cmd
+claudebase --version
+```
+
+The installer preserves a timestamped backup of any pre-existing config at `%USERPROFILE%\.claude\backup-YYYYMMDD-HHMMSS\` so a clean rollback is one folder copy away.
+
+**Troubleshooting:**
+
+- `tar.exe not found` → upgrade Windows 10 to build 1803 or later; tar ships natively from that build onward.
+- `Execution of scripts is disabled on this system` → run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in an admin PowerShell, or invoke install.ps1 with `-ExecutionPolicy Bypass` per the command above (this is what `install.bat` does internally).
+- `claudebase: command not found` after install → you didn't open a new terminal; PATH changes only apply to processes started after the install.
 
 ---
 
@@ -92,23 +154,31 @@ MERGE READY
 
 ---
 
-## The 13 Agents
+## The 21 Agents
 
 | Agent | Role |
 |-------|------|
 | `prd-writer` | Feature requirements in `docs/PRD.md` |
 | `ba-analyst` | Use cases and scenarios in `docs/use-cases/` |
 | `architect` | Architecture review, module boundaries, `[STRUCTURAL]` fix authorizations |
+| `resource-architect` | Recommends external resources at bootstrap Step 3.5 and auto-installs Trivial/Moderate items after user approval (MCP, dev dependencies); Sensitive items escalate via Rule 4 |
+| `role-planner` | Recommend project-specific on-demand roles (mobile dev, compliance officer, etc.) at bootstrap Step 3.75 — suggest-only |
 | `qa-planner` | Test cases in `docs/qa/` before any code |
-| `planner` | Breaks features into 5-9 executable slices with verification commands |
+| `planner` | Breaks features into 5-9 executable slices with verification commands; each slice carries a `Predicted outcome:` field for Friston-style prediction-error checking |
+| `red-team` | Devil's-advocate adversarial review of the plan after planner emits it — 6 attack vectors (premise / approach / scope / dependency / failure-mode / maintenance). Chained from `/bootstrap-feature` Step 5.25 and `/develop-feature` Phase 1.5. Catches confirmation bias. |
 | `security-auditor` | Vulnerability audit, auth boundaries |
 | `test-writer` | TDD — tests before implementation |
-| `e2e-runner` | End-to-end tests from use-case scenarios |
+| `e2e-runner` | Writes end-to-end tests from use-case scenarios (code authoring) |
+| `qa-engineer` | Executes the QA plan against the running implementation. Uses Playwright MCP for UI/UX (screenshots, console, network), Bash for API/DB/CLI. Emits per-test-case PASS/FAIL/BLOCKED verdicts with concrete evidence. Strict — no evidence = automatic FAIL. Drives the `/qa-cycle` iteration loop. |
+| `consolidator` | Memory-consolidation pass (hippocampal sleep-replay analogue). 6 drift-detection passes (PRD↔plan / use-case↔test↔impl / decision drift / hack accumulation / verdict↔reality / pattern observations). Auto-chained between waves in `/develop-feature`; manually via `/consolidate`. |
+| `reflection` | Default Mode Network analogue. No specific task — wanders the project state and surfaces non-obvious observations. Exclusively user-invoked via `/reflect`. Catches focus-induced blindness. |
 | `code-reviewer` | Quality, security, architecture compliance |
 | `build-runner` | Typecheck, tests, build verification |
-| `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
+| `verifier` | Goal-backward checks: file existence, stubs, wiring, prediction-error (predicted-vs-actual delta per slice), data flow |
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
+| `changelog-writer` | Maintain `[Unreleased]` of downstream `CHANGELOG.md` from PRD + scratchpad + git log |
+| `release-engineer` | Packages releases on user-invoked `/release` (NOT in /merge-ready) — semver bump, CHANGELOG date-stamp, release-notes file, GitHub Actions workflow provisioning. Suggest-only by default; opt-in executing mode (`.claude/rules/auto-release.md`) runs whitelisted git commands itself per the §7 4-tier authority dispatch — `npm publish` / `cargo publish` / `gh release create` / `--force` always refused. |
 
 ---
 
@@ -117,9 +187,14 @@ MERGE READY
 | Command | What It Does |
 |---------|-------------|
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
-| `/bootstrap-feature` | Documentation phases only — PRD, use cases, architecture, QA, plan |
+| `/bootstrap-feature [--with-resources]` | Documentation phases only — PRD, use cases, architecture, QA, plan. Pass `--with-resources` to force-run resource-architect (otherwise auto-detected from PRD/use-cases keywords). |
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
-| `/merge-ready` | All 9 quality gates |
+| `/qa-cycle` | Strict QA/Dev iteration loop — `qa-engineer` executes the QA plan against the running implementation with Playwright MCP for UI/UX evidence; FAIL spawns the implementer with fix directives (deliberate-mode injection on iter N+1 per the post-error-slowing protocol); after 3 non-converging iterations, the sunk-cost circuit breaker pauses for human input. BLOCKED halts and surfaces a fact-grounded argument. Run BEFORE `/merge-ready`; `/develop-feature` chains it automatically. |
+| `/consolidate` | Cross-artifact drift detection (hippocampal sleep-replay analogue). 6 fixed passes via the `consolidator` agent. Auto-chained between waves in `/develop-feature`; manually invokable. Halts the calling orchestrator on critical/major drift via AskUserQuestion. |
+| `/reflect` | Default Mode Network unfocused observation pass. The `reflection` agent reads project state and surfaces non-obvious observations (unused exports, duplicated implementations, dead code paths, PRD-requirements-without-slices). Exclusively user-invoked; never auto-chained. |
+| `/merge-ready` | All 9 quality gates (release packaging is NOT a gate — see `/release`) — assumes `/qa-cycle` has run and passed |
+| `/release` | User-invoked release packaging — semver bump, CHANGELOG date stamp, release-notes file, GHA release workflow. Run after `/merge-ready` when ready to publish. |
+| `/knowledge-ingest` | Ingest a folder/file into the per-project knowledge base |
 | `/context-refresh` | Rebuild session context from scratchpad |
 
 ```
@@ -129,7 +204,8 @@ Claude automatically:
 1. Plans -> explores codebase -> critic review
 2. Bootstraps -> PRD, use cases, architecture, QA, executable plan
 3. Implements -> TDD slices in parallel waves (independent slices run simultaneously)
-4. Verifies -> 9 quality gates including goal-backward verification
+4. Verifies -> 9 quality gates
+5. (User-invoked) Run /release to cut a versioned release from CHANGELOG [Unreleased]
 ```
 
 ---
@@ -150,6 +226,13 @@ Claude automatically:
 | Code compiles but feature is disconnected | 4-level goal-backward verification: existence, stubs, wiring, data flow |
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
+| Decisions built on memory or conjecture, not verified state | Cognitive self-check rule + mandatory `## Facts` block (verified facts / external contracts / assumptions / open questions); Plan Critic flags missing or hallucinated entries on file-based artifacts |
+| Agents lack project-specific domain knowledge | Local FTS5 knowledge base via `claudebase` CLI; agents query before authoring; cite hits in `## Facts` |
+| Lexical-only search misses paraphrases and cross-lingual concepts | Hybrid retrieval (iter-2): BM25 + dense (e5-multilingual-small embeddings via sqlite-vec) fused via Reciprocal Rank Fusion k=60; `--mode lexical\|dense\|hybrid`, default `hybrid` with auto-fallback to lexical on missing model or v1 schema |
+| PDF extraction | `pdfium-render` handles all PDFs (CID fonts, calibre conversions, scanned-with-text-layer, multi-column) |
+| Plan-mode plans lost to global cache | Auto-persist rule: Claude `Write`s the full plan body to `<project>/.claude/plan.md` before `ExitPlanMode`; `/bootstrap-feature` Step 0 aborts when the file is missing or empty |
+
+Plan-mode plans are now auto-saved to `<project>/.claude/plan.md` whenever Claude exits plan mode. The persistence sequence (`git rev-parse` → `mkdir -p .claude` → `Write plan.md` → `ExitPlanMode`) is mandated by the `### Plan-Mode Persistence (MANDATORY)` rule in `src/claude.md`. Downstream, `/bootstrap-feature` Step 0 checks `[ -s .claude/plan.md ]` and aborts with a clear error message if the file is missing or empty — no agent runs until the plan is persisted. The planner agent at Step 5 reads this file as authoritative input and refines it in place rather than regenerating from scratch.
 
 ---
 
@@ -170,6 +253,87 @@ Creates:
 
 ---
 
+## Automated CHANGELOG for downstream projects
+
+Downstream projects scaffolded with `bash install.sh --init-project` get a `CHANGELOG.md` file maintained automatically in the [Keep a Changelog](https://keepachangelog.com/) format. The `changelog-writer` agent keeps the `[Unreleased]` section in sync with the PRD, scratchpad, and git log at four lifecycle points: post-bootstrap (after `/bootstrap-feature` completes), post-commit in standalone `/implement-slice` mode, post-wave in `/develop-feature` (once per wave, not per slice), and pre-flight in `/merge-ready`.
+
+The SDLC repo itself opts out automatically: because `bash install.sh` does not install the sentinel rule file `.claude/rules/changelog.md` onto the SDLC repo, the `changelog-writer` agent detects the missing sentinel and returns `no-op: not configured` without performing any writes when invoked inside this repository.
+
+See `templates/rules/changelog.md` for the full policy, including Keep-a-Changelog category mapping, idempotency rules, and the commit-hash marker strategy used to avoid duplicate entries.
+
+---
+
+## Resource recommendation at bootstrap
+
+The `resource-architect` agent runs at Step 3.5 of `/bootstrap-feature`, immediately after the architecture review passes, and produces structured recommendations across six categories: MCP servers, cloud/compute, external APIs, third-party services, libraries/frameworks, and hardware. Each recommendation includes Category, Why, Install/activate, Cost/complexity, and Reversibility fields so downstream humans or agents can evaluate tradeoffs without re-researching. When no external resources are needed, the agent still emits all six category headings with `(none)` so downstream readers can distinguish "not needed" from "not considered". The planner inlines the recommendations as a top-level `## Recommended Resources` section at the top of `.claude/plan.md` and deletes the temporary `.claude/resources-pending.md` handoff file.
+
+### Iteration 2: scoped auto-install
+
+Iteration 2 extends `resource-architect` from suggest-only to scoped auto-install while preserving every iter-1 contract. Each recommendation is now classified into a **4-tier authority gradation** — **Trivial** (idempotent, fully reversible: MCP server adds via `claude mcp add`, browser engine downloads via `npx playwright install`), **Moderate** (local but persistent: dev-only npm/pip dependencies installed via the detected package manager), **Sensitive** (credentialed or paid: cloud-credential setup, API keys for paid services, paid-service signup, writes to credential stores like `~/.aws/`/`~/.config/gcloud/`/`~/.config/gh/`/`~/.netrc` or real-credential `.env` files), and **Forbidden** (destructive or out-of-scope: `rm`/`mv`/`cp` outside CWD, modifying SDLC core or agent prompts, `git push`/`git tag`/`git commit -a`/`git rebase`/`git reset --hard`, `sudo`/`su`/`runas`, network calls beyond Trivial-tier installs, shell metacharacter chaining). The agent applies the most-restrictive applicable tier and emits a per-tier summary alongside the existing `## Recommended Resources` block.
+
+The **approval flow** runs as a single ephemeral prompt after the recommendations are presented: Trivial items are grouped per category and approved with one yes/no per category (bulk approval), Moderate items require an explicit yes/no per item, and Sensitive items are escalated via Rule 4 of the deviation rules — the agent halts auto-install for those items and surfaces them to the user for manual decision. Forbidden items are never auto-installed and are either rewritten as a Trivial/Moderate alternative or emitted with `Tier: Forbidden` plus the literal `user must perform manually outside the SDLC pipeline` in the `Why` field.
+
+A **Bash whitelist** acts as defense-in-depth on top of the per-tier approvals: every command the agent executes must match one of a conservative set of anchored regex patterns (no shell metacharacters, no runtime expansion, no `&&`/`||`/`;`/backticks/`$()`), and a redundant deny-list explicitly rejects `rm`, `mv`, `cp`, `curl`, `wget`, `ssh`, `sudo`, `git push`, `npm publish`, `aws configure`, and similar destructive prefixes. Any command that fails to match the whitelist halts the install phase with `aborted-whitelist-violation`. The agent's own `tools:` frontmatter is restricted to `Read`, `Write`, `Bash`, `Glob`, `Grep` — `Edit`, `WebFetch`, `WebSearch`, and `NotebookEdit` are not granted.
+
+**Backward compatibility** is preserved exactly: replying "no to all" at the approval prompt — or running in a non-interactive context where `process.stdin.isTTY === false` — bypasses every install action and leaves the iter-1 **suggest-only** behavior fully intact, including the `## Recommended Resources` block byte-for-byte. When auto-install runs, results are appended as a separate `## Auto-Install Results` section after `## Recommended Resources`, never mutating the suggestion block.
+
+---
+
+## On-demand role recommendations at bootstrap
+
+The 21 agents shipped by this repo are the **core team**: they are mandatory, permanent, and re-used across every feature in every project. The `role-planner` agent runs at Step 3.75 of `/bootstrap-feature` (immediately after `resource-architect` and before `qa-planner`) and adds a second, **on-demand** layer on top of that core team — project-specific roles that are recommended for a single feature when the core 21 are not sufficient. On-demand roles are optional, one-off, and never replace or modify the core 21. The agent is strictly **suggest-only**: it writes recommendations and prompt files, but never installs anything, never edits core agent prompts, never modifies pipeline steps, and never makes network calls.
+
+Generated prompt files use the `ondemand-<slug>.md` filename convention and live in `~/.claude/agents/` alongside the core agents. Each generated file carries a YAML frontmatter line `scope: on-demand` so audits and tooling can distinguish the dynamic layer from the permanent core team. The slug must not collide with any of the 21 core agent names (`prd-writer`, `ba-analyst`, `architect`, `qa-planner`, `planner`, `security-auditor`, `test-writer`, `code-reviewer`, `build-runner`, `e2e-runner`, `verifier`, `doc-updater`, `refactor-cleaner`, `changelog-writer`, `resource-architect`, `role-planner`, `release-engineer`, `qa-engineer`, `red-team`, `consolidator`, `reflection`); the Plan Critic flags collisions as MAJOR.
+
+Because on-demand subagent types are not registered with Claude Code at session start, they cannot be invoked via `subagent_type: ondemand-<slug>`. Instead, the bootstrap pipeline reads the prompt body from `~/.claude/agents/ondemand-<slug>.md`, strips the frontmatter, and spawns the role using the **general-purpose** subagent type with the body passed verbatim as the prompt. This frontmatter-extraction-and-invocation contract is documented in detail in `src/commands/bootstrap-feature.md` (see the `### On-Demand Role Invocation` section). The `tools:` frontmatter field is not runtime-enforced for general-purpose subagents — the prompt body itself must self-restrict authority and tool usage.
+
+Concrete examples of on-demand roles `role-planner` may suggest:
+
+- **`mobile-dev`** — mobile-specific implementation guidance (iOS/Android platform conventions, app-store review concerns, native bridge patterns) when a feature targets a mobile client and no core agent covers that surface.
+- **`compliance-officer`** — feature-level compliance review (GDPR, HIPAA, PCI, SOC2, regional data-residency rules) when a feature touches regulated data and the standard `security-auditor` audit is not sufficient.
+- **`information-researcher`** — focused background research (competitor analysis, prior-art survey, regulatory context, domain-specific terminology) for features whose PRD requires external context the core team cannot generate from local files alone.
+
+When `role-planner` determines no additional roles are needed, it explicitly emits "No additional roles required" rather than silently skipping — making the suggest-only decision auditable.
+
+### Iteration 2: cross-feature reuse and automatic teardown
+
+Iteration 2 extends the on-demand layer with **cross-feature reuse** and **post-merge teardown** — without changing the suggest-only contract or the core team count. **No new agents** are introduced (the count stays at 17). Teardown runs as **Step 11** of `/merge-ready` after Gate 8, which is a STEP — not a gate.
+
+**3-stage matching at bootstrap.** When `role-planner` recommends an on-demand role, the bootstrap pipeline performs a **three-stage** match against existing files in `~/.claude/agents/ondemand-*.md` before deciding what to do:
+
+1. **Stage 1 — exact-slug match → automatic reuse.** If a file already exists at `~/.claude/agents/ondemand-<slug>.md` whose slug matches the recommendation exactly, the bootstrap pipeline reuses it automatically with no user prompt. This is the fast path for repeated features that need the same role.
+2. **Stage 2 — purpose match → user prompt with default-deny.** If no exact-slug file exists but one or more files have a similar role purpose (judged via the existing file's `description:` frontmatter field plus body text), the orchestrator prompts the user to confirm reuse. The reply is parsed against an explicit token grammar (see below). **Ambiguous replies are treated as NEGATIVE** (default-deny) — when in doubt, the pipeline creates a new file rather than silently overwriting or merging into an unrelated role.
+3. **Stage 3 — no match → create new (iter-1 behavior preserved).** If neither Stage 1 nor Stage 2 matches, the pipeline falls through to the original iter-1 behavior: write a new `ondemand-<slug>.md` file with the recommended prompt. Iter-1's suggest-only flow is preserved byte-for-byte for unmatched recommendations.
+
+**Affirmative/negative token grammar with default-deny.** Stage-2 user replies are parsed against an explicit, lower-cased token list:
+
+- **Affirmative** (reuse the existing file): `yes`, `y`, `approve`, `ok`, `agreed`, `please do`, `go ahead`.
+- **Negative** (create a new file instead): `no`, `n`, `decline`, `skip`, `not now`.
+- **Ambiguous** (anything not on either list, including empty replies, multi-token mixes, or unrecognized words): treated as **NEGATIVE** under default-deny.
+
+This grammar is enforced at the orchestrator layer so reuse decisions are deterministic and auditable rather than depending on natural-language interpretation.
+
+**Per-file `features:` manifest.** Every iter-2-managed on-demand file carries a `features:` array in its YAML frontmatter:
+
+```
+features: ["<project-name>:<feature-slug>", ...]
+```
+
+The array tracks **which features own each on-demand role**. The `<project-name>` prefix disambiguates entries across multiple projects that share the user's global `~/.claude/agents/` directory — the same feature slug can appear in two projects without collision because the project-name prefix scopes the ownership claim. Stage-1 reuse and Stage-2 confirmed reuse both **append** the current feature's `<project-name>:<feature-slug>` entry to the `features:` array, so the orchestrator can later answer "which features still need this role?" deterministically.
+
+**Post-merge teardown at /merge-ready Step 11.** After Gate 8 of `/merge-ready` completes (regardless of PASS/FAIL/WARN), the orchestrator runs **Step 11 — on-demand teardown**:
+
+- For every file in `~/.claude/agents/ondemand-*.md`, remove the merged feature's `<project-name>:<feature-slug>` entry from the `features:` array.
+- If the array empties as a result, **delete the file**. If the array still contains entries from other features, **leave the file in place** — another feature still owns it.
+- **Refuses to run from non-feature branches** (e.g., directly on `main`) and **refuses to run from un-merged feature branches**. Defense-in-depth uses `git merge-base --is-ancestor` to confirm the feature branch's tip is actually an ancestor of `main` before any deletion happens — if the merge-ancestry check fails, teardown aborts without touching any file.
+- **Never deletes core-agent files.** Teardown only operates on files matching `~/.claude/agents/ondemand-*.md` — files lacking the `ondemand-` prefix (i.e., the 17 core agents) are out of scope and cannot be removed by Step 11. Files outside `~/.claude/agents/` are also out of scope.
+
+**Legacy file migration.** Files created under iter-1 lack the `features:` array entirely. These legacy files are migrated **opportunistically**: when a current feature's recommendation matches a legacy file (Stage 1 or Stage 2), the `role-planner` agent adds the `features:` array to that file as part of the reuse step, claiming ownership for the current feature. Legacy files **not matched** by any current recommendation are **left unchanged** — iter-2 does not perform a global sweep or rewrite of pre-existing files.
+
+**Headless-default-create.** Non-interactive contexts (CI/CD pipelines, automated runs, any environment where `process.stdin.isTTY === false`) cannot prompt for Stage-2 confirmation. In **headless** mode, the orchestrator **skips the Stage-2 prompt** and defaults to **creating a new file** (Stage-3 behavior) rather than blocking on user input. **Stage-1 automatic reuse still runs** in headless mode because it requires no user input — exact-slug matches are always safe to reuse. This preserves iter-1's existing non-interactive contract while adding the safe portion of iter-2's reuse path.
+
+---
+
 ## Customization
 
 - **Edit agents** — each is a standalone `.md` file in `~/.claude/agents/`
@@ -177,16 +341,47 @@ Creates:
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
 - **Fork and reinstall** — edit in `src/agents/`, run `bash install.sh --local --yes`
 
-### Model Tiers
+### Default model tiers (token-cost optimization)
 
-Agents are tiered by task complexity to reduce cost:
+| Tier | Model | Agents | Why |
+|------|-------|--------|-----|
+| Critical thinking | `opus` | `architect`, `security-auditor`, `code-reviewer`, `verifier`, `release-engineer`, `resource-architect`, `role-planner` | structural decisions, threat modeling, must-not-miss checks |
+| Standard reasoning | `sonnet` | `prd-writer`, `ba-analyst`, `planner`, `refactor-cleaner` | requirements, use-cases, slice breakdown — Sonnet fits |
+| Mechanical execution | `haiku` | `qa-planner`, `test-writer`, `build-runner`, `e2e-runner`, `doc-updater`, `changelog-writer` | UC→TC mapping, TDD spec exec, typecheck, Keep-a-Changelog mapping — formalized I/O |
 
-| Tier | Agents | Rationale |
-|------|--------|-----------|
-| `opus` | `architect`, `planner`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
-| `sonnet` | all other 10 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
+Override per agent by editing its `model:` frontmatter field. If your project has unusual quality demands you can promote any tier to `opus` (or demote to `haiku` for token-cost reduction). Original tier assignment is the project default — it strikes a balance between cost and quality suitable for general SDLC work.
 
-To change a tier: edit the `model:` field in the agent's frontmatter and re-run `bash install.sh --local --yes`.
+---
+
+## Cognitive self-check at authoring time
+
+Thinking agents in the SDLC pipeline can build verdicts on memory of similar systems instead of evidence about the actual system in front of them — hallucinated API field names, fabricated status enums, "remembered" PRD requirements that drifted, file behavior recalled from earlier in the conversation. The cognitive-self-check rule (`src/rules/cognitive-self-check.md`) forces a fact-vs-assumption discipline before output.
+
+Every thinking agent runs a 4-question protocol — what is this claim based on? did I verify it in this session? what am I assuming without proof? if it's an assumption, is it labelled? — and emits a mandatory `## Facts` block with four subsections: `### Verified facts`, `### External contracts`, `### Assumptions`, `### Open questions`. The block makes evidence auditable: a downstream agent or human reviewer can challenge any claim against its cited source. Memory of training-data is explicitly NOT a valid source.
+
+The rule applies to **13 thinking agents** (prd-writer, ba-analyst, architect, qa-planner, planner, security-auditor, code-reviewer, verifier, refactor-cleaner, resource-architect, role-planner, release-engineer, qa-engineer). The **5 executor agents** (test-writer, build-runner, e2e-runner, doc-updater, changelog-writer) are exempt — they execute deterministic specs and don't make discretionary claims that need fact-checking.
+
+**Enforcement split:** Plan Critic mechanically enforces the rule on **file-based artifacts** (PRD sections, use-case files, QA test-case files, plan.md, resources-pending.md, roles-pending.md, release-notes files) — missing block is a MAJOR finding, vague external-contract citation is a MINOR finding. **Stdout-only agents** (architect, security-auditor, code-reviewer, verifier, refactor-cleaner) emit `## Facts` to stdout via their own prompt instructions, since Plan Critic cannot read transcript content.
+
+**Backward compatibility:** the rule applies to artifacts produced on or after the rule's merge date. Pre-existing PRD sections, use-case files, and plans authored before that date are EXEMPT — there is no retroactive backfill. See `src/rules/cognitive-self-check.md` `## Backward Compatibility` for the date-guard mechanics.
+
+---
+
+## Local knowledge base
+
+Each downstream project can maintain a local, file-based knowledge base from arbitrary domain sources (books, articles, regulatory PDFs) that all 13 thinking agents consult before authoring. The retrieval tool itself lives globally in `~/.claude/tools/claudebase/claudebase` (also invokable as `claudebase` from any directory on PATH after `install.sh` registers the global alias); the data lives per-project in `<project>/.claude/knowledge/sources/` (raw documents) and `<project>/.claude/knowledge/index.db` (SQLite FTS5 index).
+
+The CLI exposes 5 subcommands — `ingest`, `search`, `list`, `status`, `delete`. **Iter-2 (vector-retrieval-backend) added a hybrid retrieval backend** alongside the existing FTS5 BM25 ranker: a `chunks_vec` virtual table (sqlite-vec extension) populated with 384-dim e5-multilingual-small embeddings during ingest, plus three search modes:
+
+- `claudebase search "<query>" --mode lexical` — iter-1 BM25 baseline (FTS5 only); regression-safe for exact-keyword queries
+- `claudebase search "<query>" --mode dense` — pure semantic K-NN via sqlite-vec
+- `claudebase search "<query>" --mode hybrid` — BM25 ⊕ dense fused via Reciprocal Rank Fusion k=60 (Cormack et al. 2009); the **default mode**
+
+Hybrid captures both exact-keyword and semantic recall in a single ranking — cross-lingual queries (RU→EN, EN→RU), paraphrase robustness, and concept-level retrieval all work. Image content from PDFs is extracted at ingest time (figures stored as PNG BLOBs in the same `index.db`) and embedded via the canonical placeholder text `[image: figure N from <doc>]` so it remains searchable until Slice 6b lands a real OCR engine.
+
+Populate the base via `/knowledge-ingest <path>` (or `claudebase ingest <path>` from the shell). Once `<project>/.claude/knowledge/index.db` exists, all 13 thinking agents query before authoring domain-bearing content and cite hits in `## Facts → ### External contracts` per the cognitive-self-check rule.
+
+Activation is opt-in: without `index.db`, every agent prompt behaves identically to current `main`. Without the e5 model OR on a v1 schema, hybrid/dense modes auto-fall-back to lexical with a stderr warning. Without the binary, install.sh degrades gracefully (cargo source-build fallback when cargo is on PATH). See `src/rules/knowledge-base.md` for the full CLI contract and citation discipline.
 
 ---
 

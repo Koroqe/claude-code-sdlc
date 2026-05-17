@@ -1,0 +1,16 @@
+# Local knowledge base (per-project corpus and index — never committed)
+books/
+.claude/knowledge/
+
+# OS artifacts
+.DS_Store
+**/.DS_Store
+
+# Editor swap files
+*.swp
+*.swo
+
+# Rust build artifacts (the crate has its own tools/sdlc-knowledge/.gitignore for /target,
+# but a top-level guard catches stray nested target dirs.)
+target/
+**/target/

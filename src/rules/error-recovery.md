@@ -72,6 +72,34 @@ Architectural decisions, new dependencies, API contract changes, or schema migra
 - Do NOT just report failures — attempt to fix them first
 - If a code review or security audit finds issues: fix them before proceeding (classify each issue under the appropriate rule)
 
+## Deliberate Mode — Post-Error Slowing (neuroscience: anterior cingulate cortex)
+
+In neuroscience, the brain's anterior cingulate cortex (ACC) responds to errors by slowing the next decision — this is **post-error slowing**. The next response after a mistake is measurably more careful: smaller scope, more verification, less reliance on automatic patterns. The agent pipeline implements the analogue explicitly.
+
+**Trigger condition.** Deliberate mode activates on the iteration AFTER any of these signals:
+
+- a `/qa-cycle` iteration ended in FAIL and the implementer is being re-spawned (covered in `src/commands/qa-cycle.md` Step 3)
+- a `verifier` Level-3.5 prediction-error FAIL surfaced large delta (covered in `src/agents/verifier.md`)
+- a `build-runner` returned non-zero on a slice the implementer just committed
+- the implementer's previous slice exhausted ≥ 2 retry attempts before passing
+
+**Deliberate-mode directives** (applied to the next implementer spawn or the next implementation step):
+
+- **Read before edit, always.** Re-read every file you intend to edit. Do NOT rely on memory of earlier reads — the prior iteration may have invalidated your mental model. This is non-negotiable in deliberate mode even for files you read 5 minutes ago.
+- **Smaller diff target.** Aim for ≤ 50% of the failed iteration's line count. If you cannot, that is a load-bearing signal that the fix is mis-scoped — surface it under `### Inbound validation` or BLOCKED rather than continuing.
+- **Pre-flight typecheck mandatory.** Run the project's typecheck command BEFORE committing, not just after. Catch errors before they enter the iteration history.
+- **No adjacent refactors.** Apply exactly the fix directives. Do NOT take the opportunity to refactor adjacent code, even if it looks like it needs work. Scope discipline matters here — adjacent changes mask the actual fix.
+- **No new abstractions.** Do not introduce factories / adapters / wrappers / new dependencies / new patterns in deliberate mode. Use the most direct expression of the fix. If a new abstraction is genuinely needed, surface it for the planner's next pass — not for this one.
+- **Repeat-edit detection.** If you find yourself making the same edit to the same file lines that the previous iteration made, STOP. Report BLOCKED with the diff history attached. This is the sunk-cost circuit breaker working — `/qa-cycle` will pause and ask the human.
+
+**Why this exists.** Without deliberate mode, the agent's default is to repeat its last approach on the next try — sometimes with a small variation, often producing the same failure. Deliberate mode forces a structural change in how the next iteration is attempted: smaller scope, more verification, less automatic pattern-execution. The neuroscience analogue is exact — humans who skip post-error slowing make the same mistake again at measurably higher rates.
+
+**Deliberate-mode exits** when:
+
+- The deliberately-scoped iteration passes (build / qa-cycle / verifier — whichever triggered).
+- The implementer surfaces BLOCKED with structural reasoning (the fix-directive is mis-scoped; the human must reconcile).
+- 3 consecutive deliberate-mode iterations on the same slice without convergence — the sunk-cost circuit breaker fires and pauses for human input.
+
 ## Mid-Slice Verification
 
 When a slice requires editing 4 or more files:

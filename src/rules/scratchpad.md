@@ -15,7 +15,7 @@
 Use structured format with these sections:
 - `## Feature:` — current feature name (or "none active")
 - `## Branch:` — current git branch
-- `## Status:` — idle / bootstrapping / implementing wave W slice N/M / implementing slice N/M / quality-gates / complete / blocked
+- `## Status:` — idle / bootstrapping / implementing wave W slice N/M / implementing slice N/M / qa-cycle iter N (PASS=p FAIL=f BLOCKED=b) / quality-gates / complete / blocked
 - `## Plan` — slices grouped by wave when wave assignments exist. Each wave is a subheading (`### Wave N`) containing its slices. Wave-level status: pending (no slices started), in progress (at least one started), complete (all DONE), failed (at least one FAILED). Individual slices use DONE/IN PROGRESS/pending/FAILED status. When no wave assignments exist (legacy plans), use a flat numbered list under `### Wave 1 (sequential)`. Example:
   ```
   ### Wave 1

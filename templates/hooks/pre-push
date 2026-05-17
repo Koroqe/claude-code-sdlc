@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# pre-push — advisory hook for auto-release activation
+#
+# Active when <project>/.claude/rules/auto-release.md sentinel exists.
+# Warns to stderr when CHANGELOG.md [Unreleased] is non-empty at push
+# time, suggesting that /release should run first to package the release.
+# Never blocks the push — advisory only.
+#
+# To uninstall: remove this file from .git/hooks/pre-push.
+# To skip the check temporarily: rename the file or run
+#   GIT_HOOKS_BYPASS=1 git push
+# (this hook honors the bypass var as a courtesy).
+
+set -euo pipefail
+
+# Bypass escape hatch.
+[ "${GIT_HOOKS_BYPASS:-0}" = "1" ] && exit 0
+
+# Sentinel absent → no-op.
+[ -f ".claude/rules/auto-release.md" ] || exit 0
+
+# CHANGELOG absent → no-op.
+[ -f "CHANGELOG.md" ] || exit 0
+
+# Detect non-empty [Unreleased]: any non-blank line under
+# `## [Unreleased]` until the next `## [` heading.
+unreleased_body=$(awk '
+  /^## \[Unreleased\]/ { in_unrel=1; next }
+  /^## \[/            { in_unrel=0 }
+  in_unrel && /[^[:space:]]/ { print }
+' CHANGELOG.md)
+
+if [ -n "$unreleased_body" ]; then
+  echo "[auto-release] WARNING: CHANGELOG.md [Unreleased] is non-empty." >&2
+  echo "[auto-release] /release should run before push to package the release." >&2
+  echo "[auto-release] To bypass this check once: GIT_HOOKS_BYPASS=1 git push" >&2
+  echo "[auto-release] To opt out permanently: remove .claude/rules/auto-release.md or this hook." >&2
+  echo "[auto-release] Push is allowed; this is advisory only." >&2
+fi
+
+exit 0

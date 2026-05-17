@@ -20,11 +20,12 @@ Implement only the next smallest slice from the plan using TDD.
 
 Read the current slice from the implementation plan. Two formats are supported:
 
-**Executable format** (preferred — when the slice has `Files:`, `Changes:`, `Verify:`, `Done when:` fields):
+**Executable format** (preferred — when the slice has `Files:`, `Changes:`, `Verify:`, `Done when:`, `Predicted outcome:` fields):
 - Use the `Files:` list directly — these are the exact files to create/modify
 - Use the `Changes:` descriptions as implementation guidance
 - Use the `Verify:` commands in step 4
 - Use the `Done when:` condition to confirm completion
+- Read the `Predicted outcome:` field (neuroscience: Friston predictive-coding prior) — this is the planner's expected end-state. If at any point during implementation you observe a divergence from the predicted outcome (the diff is becoming much larger than predicted, a new file is needed that wasn't predicted, the export signature has to change in a way that wasn't predicted), STOP and surface the deviation under `### Inbound validation` in your scratchpad note OR via BLOCKED. The verifier will compare actual-vs-predicted at Level 3.5 — flagging the deviation now is cheaper than letting it surface as a large delta then.
 - List the use-case scenarios this slice covers (from `Use cases:` field)
 - Re-read each file from the `Files:` list before modifying
 
@@ -62,6 +63,12 @@ Delegate to `test-writer` agent:
 - `git commit -m "<type>(<scope>): <slice summary>"`
 - Types: `feat`, `fix`, `test`, `chore`
 - Scopes: `api | ui | db | auth | core | infra`
+
+### 5.5. Changelog Sync (standalone mode only)
+
+**When running as a parallel subagent** (wave context provided in spawn prompt): SKIP this step entirely. The orchestrator handles post-wave changelog sync per FR-4.3 in `/develop-feature`. Invoking `changelog-writer` from a subagent risks a double-write race on `CHANGELOG.md` (PRD 3.9 Risk 3) and is explicitly prohibited.
+
+**When running standalone** (no wave context): immediately after the commit in Step 5 succeeds, delegate to `changelog-writer` with no arguments beyond CWD. A `no-op: not configured` response is expected when running inside the SDLC repo and is treated as success. If the agent fails (crash, timeout, Rule 3 retry exhaustion), log the error and proceed to Step 6 — per FR-4.5 the pipeline MUST continue; the next hook invocation will reconcile state (NFR-6 eventual consistency).
 
 ### 6. Update Scratchpad
 **Skip this step when running as a parallel subagent** (wave context provided in spawn prompt). The orchestrator handles scratchpad updates after collecting all wave results.
