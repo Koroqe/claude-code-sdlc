@@ -94,9 +94,16 @@ COMMANDS AVAILABLE:
   /implement-slice    Implement next TDD slice
   /qa-cycle           Strict QA/Dev iteration loop — qa-engineer executes the
                       documented QA plan with Playwright MCP for UI/UX evidence;
-                      FAIL spawns implementer with fix directives; BLOCKED halts
-                      and surfaces a fact-grounded argument to the human. Run
-                      BEFORE /merge-ready; /develop-feature chains it automatically.
+                      FAIL spawns implementer with fix directives (deliberate-mode
+                      on iter N+1); 3 non-converging iters triggers sunk-cost
+                      circuit breaker. BLOCKED halts with fact-grounded argument.
+                      Run BEFORE /merge-ready; /develop-feature chains it automatically.
+  /consolidate        Cross-artifact drift detection (hippocampal sleep-replay
+                      analogue). 6 fixed passes via consolidator agent. Auto-chained
+                      between waves in /develop-feature; manually invokable.
+  /reflect            DMN unfocused observation pass via reflection agent. No specific
+                      task — wanders project state for non-obvious observations.
+                      User-invoked only; never auto-chained.
   /merge-ready        Run all 9 quality gates (assumes /qa-cycle has passed)
   /release            User-invoked release packaging — semver bump + CHANGELOG + GHA workflow
   /knowledge-ingest   Ingest a folder/file into the per-project knowledge base
@@ -603,6 +610,8 @@ Write-Host "    /develop-feature    Full autonomous pipeline"
 Write-Host "    /bootstrap-feature  Documentation phases only"
 Write-Host "    /implement-slice    Implement next TDD slice"
 Write-Host "    /qa-cycle           Strict QA/Dev iteration loop (Playwright + evidence)"
+Write-Host "    /consolidate        Cross-artifact drift detection (auto-chained between waves)"
+Write-Host "    /reflect            DMN unfocused observation pass — user-invoked only"
 Write-Host "    /merge-ready        Run all 9 quality gates (assumes /qa-cycle passed)"
 Write-Host "    /release            User-invoked release packaging"
 Write-Host "    /knowledge-ingest   Ingest into per-project knowledge base"

@@ -59,16 +59,64 @@ cd your-project && bash install.sh --init-project
 
 ### Windows
 
-Native Windows is supported via `install.bat` (cmd.exe wrapper) or `install.ps1` (PowerShell). After cloning the repo:
+Native Windows is supported — no WSL, Git Bash, MSYS2, or Cygwin required. The installer is `install.ps1` (PowerShell); `install.bat` is a thin cmd.exe wrapper that forwards arguments to it.
+
+**Prerequisites:** Windows 10 build 1803+ (for the built-in `tar.exe` used to extract the pdfium archive), PowerShell 5.1+ (preinstalled on Windows 10+), and `git` on PATH.
+
+**Clone and install** — from PowerShell or cmd.exe:
 
 ```cmd
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
+cd claude-code-sdlc
 install.bat
-install.bat -InitProject     :: scaffold a new project in the current directory
-install.bat -Yes             :: skip confirmation prompts
-install.bat -Help            :: show help
 ```
 
-The Windows installer downloads `claudebase.exe` and `pdfium.dll` from GitHub releases, registers a `claudebase.cmd` wrapper in `%USERPROFILE%\.claude\bin\`, and adds that directory to your User PATH. Open a new terminal after install for the PATH change to take effect.
+Or directly via PowerShell:
+
+```powershell
+git clone https://github.com/codefather-labs/claude-code-sdlc.git
+Set-Location claude-code-sdlc
+powershell.exe -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+**Flags** (same on `install.bat` and `install.ps1`):
+
+| Flag | Purpose |
+|------|---------|
+| `-Yes` | Skip confirmation prompts (non-interactive install) |
+| `-Local` | Use the local checkout instead of re-cloning from GitHub |
+| `-InitProject` | Also scaffold a new project template in the current directory |
+| `-Help` | Show usage and exit |
+
+Example — non-interactive install + scaffold a project at the same time:
+
+```cmd
+install.bat -Yes -InitProject
+```
+
+**What gets installed:**
+
+- `%USERPROFILE%\.claude\claude.md` — workflow instructions (loaded by every Claude Code session)
+- `%USERPROFILE%\.claude\agents\` — 21 specialized agent prompts (with personas baked in)
+- `%USERPROFILE%\.claude\commands\` — 10 SDLC pipeline commands
+- `%USERPROFILE%\.claude\rules\` — process rules (cognitive-self-check, error-recovery, knowledge-base, scratchpad, git, tool-limitations)
+- `%USERPROFILE%\.claude\tools\claudebase\claudebase.exe` — knowledge-base CLI binary downloaded from GitHub releases
+- `%USERPROFILE%\.claude\tools\claudebase\pdfium\bin\pdfium.dll` — PDFium native library for PDF extraction
+- `%USERPROFILE%\.claude\bin\claudebase.cmd` — wrapper that adds `claudebase` to your User PATH
+
+**After install:** open a NEW terminal window for the PATH change to take effect. Verify with:
+
+```cmd
+claudebase --version
+```
+
+The installer preserves a timestamped backup of any pre-existing config at `%USERPROFILE%\.claude\backup-YYYYMMDD-HHMMSS\` so a clean rollback is one folder copy away.
+
+**Troubleshooting:**
+
+- `tar.exe not found` → upgrade Windows 10 to build 1803 or later; tar ships natively from that build onward.
+- `Execution of scripts is disabled on this system` → run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in an admin PowerShell, or invoke install.ps1 with `-ExecutionPolicy Bypass` per the command above (this is what `install.bat` does internally).
+- `claudebase: command not found` after install → you didn't open a new terminal; PATH changes only apply to processes started after the install.
 
 ---
 
