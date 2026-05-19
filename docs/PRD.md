@@ -505,3 +505,212 @@ Not applicable. This project has no API.
 4. **Risk: Re-install required.** Users on existing installations will not see the tier change until they re-run `bash install.sh`. Mitigation: NFR-3 documents this; the README override section (FR-4.3) reinforces the install requirement.
 5. **Dependency: Claude Code resolves `model: sonnet`.** This feature assumes the Claude Code runtime accepts `sonnet` as a valid value for the agent frontmatter `model:` field and resolves it to a current Sonnet model. This is a property of the Claude Code installation, not of this repository.
 6. **Dependency: Section 1 NFR-4 (verifier model tier).** Section 1 NFR-4 specifically requires the verifier on opus "for consistency". Section 3 supersedes that — the verifier moves to sonnet (FR-1.10). The supersession is explicit in FR-3.1 and FR-3.2.
+
+---
+
+## 4. Self-Improvement Loop — Cross-Session Lesson Capture
+
+**Status:** [DRAFT]
+**Date:** 2026-05-19
+**Priority:** Medium
+**Related:** Section 1 (FR-2: Deviation Rules), Section 2 (FR-2.6: orchestrator-only scratchpad writes)
+
+### 4.1 Description
+
+Add a persistent, project-local lesson-capture system that turns user corrections, repeated errors, and quality gate failures into prevention rules. Lessons accumulate in `.claude/lessons.md` inside each project and are read at session start, during planning, and before each slice implementation.
+
+**Why:** The SDLC pipeline catches errors reactively. Deviation rules (Section 1 FR-2) classify errors when they occur; quality gates verify output before merge. But the pipeline never learns from those errors across features or sessions. A mistake corrected in feature A can recur verbatim in feature B because no feedback loop exists between pipeline runs. This feature closes that gap by making the system self-improving: every correction is recorded, recurring patterns become prevention rules, and those rules are injected into the planning and implementation steps where they can prevent the error rather than catch it.
+
+**Design Decisions:**
+1. **Separate file from scratchpad** — Scratchpad has a 100-line archival mechanism that moves completed entries to `## Archive` and effectively discards them from active context. Lessons are permanent knowledge that must never be archived or deleted. A separate file enforces that contract.
+2. **No new agent** — Lesson capture is a behavioral rule (write it down when corrected), not a task requiring specialized analysis. A rules file is zero-overhead versus spawning a subagent; it also fires at times when spawning an agent is impractical (inline during slice implementation).
+3. **Three capture triggers** — (a) User explicitly corrects the agent mid-execution; (b) the same deviation rule fires two or more times within a single feature; (c) a quality gate failure in `/merge-ready` requires auto-fix or exhausts retries. Each trigger is already a natural signal present in the pipeline — no new instrumentation is needed.
+4. **Prevention rule elevation** — Individual lessons that recur across features are promoted to prevention rules, which appear in a dedicated section read before every slice. Thresholds are severity-weighted: security and data-integrity lessons elevate at 2 occurrences; general patterns at 3.
+5. **Prevention rule retirement** — Rules not confirmed (triggered or prevented) in 10 consecutive features, or rules referencing deleted files or patterns, are archived. This prevents unbounded accumulation.
+6. **Orchestrator-only writes in parallel mode** — Matches the scratchpad pattern from Section 2 FR-2.6. Subagents executing slices in parallel must not write to `lessons.md` directly; the orchestrator writes after each wave completes.
+7. **Existence guards on all references** — Projects created before this feature have no `.claude/lessons.md`. Every instruction that reads or writes the file must include a conditional (`if it exists`) so the pipeline remains fully functional without it.
+
+### 4.2 User Story
+
+As a developer using the Claude Code SDLC pipeline, I want the system to record corrections I make and errors that repeat, and apply that accumulated knowledge as prevention rules in future planning and implementation steps, so that the same mistakes do not occur across features or sessions.
+
+### 4.3 Functional Requirements
+
+#### FR-1: Lessons Rule File
+
+Create a new global rule file at `src/rules/lessons.md` that defines the lesson-capture system. This file is installed to `~/.claude/rules/lessons.md` and applies to every project.
+
+1. **FR-1.1:** The rule file MUST define a MUST Read protocol: read `.claude/lessons.md` at the start of every session if the file exists.
+2. **FR-1.2:** The rule file MUST define Trigger 1 — User Correction. The agent MUST write a lesson immediately when any of the following heuristics are detected: (a) the user explicitly rejects the agent's approach in a message (contains "that's wrong", "no, you should", "revert that", "undo that", or equivalent rejection language); (b) the user provides replacement code or a replacement approach directly in a message; (c) the user reverts or undoes a change (references a prior state or explicitly asks to go back).
+3. **FR-1.3:** The rule file MUST define Trigger 2 — Repeated Error Pattern. The agent MUST write a lesson when the same deviation rule category (Rule 1, 2, 3, or 4 from Section 1 FR-2) fires two or more times within a single feature's implementation.
+4. **FR-1.4:** The rule file MUST define Trigger 3 — Quality Gate Failure. The `/merge-ready` command MUST write a lesson after quality gate execution completes, covering both resolved failures (auto-fix succeeded) and unresolved failures (retry budget exhausted).
+5. **FR-1.5:** The rule file MUST define the lesson entry format: a markdown list item containing (a) date in `YYYY-MM-DD` format, (b) trigger type (`User Correction`, `Repeated Error`, or `Gate Failure`), (c) what happened (concrete description of the error or correction), (d) what to do instead (concrete prevention heuristic in ALWAYS/NEVER/WHEN phrasing).
+6. **FR-1.6:** The rule file MUST define prevention rule elevation thresholds: a lesson elevates to a prevention rule when it recurs in 2 or more features for security/data-integrity categories, or 3 or more features for general patterns.
+7. **FR-1.7:** The rule file MUST define prevention rule retirement: a prevention rule is archived when it has not been confirmed (triggered or demonstrably prevented a mistake) in 10 consecutive features, or when the file or pattern it references no longer exists in the project.
+8. **FR-1.8:** The rule file MUST define the context budget: only the `## Prevention Rules` section (always) and the 5 most recent entries from `## Lessons Log` (selectively) are read during slice pre-flight and context refresh. The full file is NOT read into context unless explicitly debugging the lesson system.
+9. **FR-1.9:** The rule file MUST define the parallel subagent skip: subagents executing slices in a parallel wave MUST NOT write to `.claude/lessons.md`. The orchestrator (`develop-feature`) is the sole writer during parallel waves, consistent with Section 2 FR-2.6.
+10. **FR-1.10:** The rule file MUST define the 50-entry consolidation: when `## Lessons Log` exceeds 50 entries, the agent MUST consolidate redundant lessons (merge lessons describing the same root cause) before adding a new entry.
+
+#### FR-2: Lessons Template and Install
+
+Create a project-local template file and update the install script to provision it.
+
+1. **FR-2.1:** A new file `templates/lessons.md` MUST exist with the following empty structure: a `## Prevention Rules` section (with a placeholder comment that it starts empty), and a `## Lessons Log` section (with a placeholder comment for the first entry format). No actual lessons are pre-populated.
+2. **FR-2.2:** `install.sh` MUST copy `templates/lessons.md` to `.claude/lessons.md` in the target project when run with the `--init-project` flag. The copy MUST be skipped (not overwrite) if `.claude/lessons.md` already exists.
+3. **FR-2.3:** `templates/settings.json` MUST be updated to grant Edit and Write permissions for `.claude/lessons.md` so the agent can write to it without a permission prompt.
+4. **FR-2.4:** The install banner displayed by `install.sh` MUST update the rule file count from 4 to 5 to reflect the addition of `lessons.md`.
+5. **FR-2.5:** The help text output by `install.sh --help` MUST mention `lessons.md` alongside `scratchpad.md` as a project-local file provisioned by `--init-project`.
+
+#### FR-3: Session-Start Reading
+
+Update the scratchpad rule file to instruct agents to read lessons at session start.
+
+1. **FR-3.1:** The `## MUST Read` section of `src/rules/scratchpad.md` MUST gain a bullet point: "Read `.claude/lessons.md` Prevention Rules section at session start (if the file exists). Note any prevention rules relevant to the current feature."
+2. **FR-3.2:** The new bullet MUST appear immediately after the existing bullet that instructs reading `.claude/scratchpad.md`.
+
+#### FR-4: Implement-Slice Integration
+
+Update `/implement-slice` to scan prevention rules before each slice and capture lessons after each commit.
+
+1. **FR-4.1:** The pre-flight check list in `src/commands/implement-slice.md` MUST gain a new item (#5): "If `.claude/lessons.md` exists, read the `## Prevention Rules` section. Note any rules relevant to the files or patterns in this slice. If a relevant rule exists, add a note to the slice context before implementing."
+2. **FR-4.2:** After the commit step in `src/commands/implement-slice.md`, a new step MUST be added (Step 6 — Capture Lessons): "Check Trigger 1 (did the user correct you during this slice?) and Trigger 2 (did the same deviation rule category fire 2+ times during this feature?). If either trigger is active and `.claude/lessons.md` exists, write a lesson entry to `## Lessons Log` now."
+3. **FR-4.3:** The existing scratchpad update step MUST be renumbered to Step 7.
+4. **FR-4.4:** When `implement-slice` is executing as a parallel subagent (wave context present, per Section 2 FR-3.3), Steps 6 and 7 MUST both be skipped. The orchestrator handles lesson capture and scratchpad updates for parallel waves.
+
+#### FR-5: Merge-Ready Integration
+
+Update `/merge-ready` to capture quality gate failures as lessons after gate execution.
+
+1. **FR-5.1:** `src/commands/merge-ready.md` MUST gain a "Post-Gate Lesson Capture" section that fires after all gates complete, regardless of the overall outcome (MERGE READY or NOT MERGE READY).
+2. **FR-5.2:** When the overall result is MERGE READY but one or more gates required an auto-fix (deviation Rule 1 or 2 resolved an issue inline), the Post-Gate Lesson Capture MUST write a Trigger 3 lesson for each gate that required auto-fixing, describing what the auto-fix corrected and what the pre-implementation check should have caught.
+3. **FR-5.3:** When the overall result is NOT MERGE READY because a gate exhausted its retry budget, the Post-Gate Lesson Capture MUST write a Trigger 3 lesson for each failed gate, describing the failure pattern and the slice-level or planning-level action that would have prevented it.
+4. **FR-5.4:** The Post-Gate Lesson Capture MUST be skipped (with a note in the output) if `.claude/lessons.md` does not exist.
+
+#### FR-6: Context-Refresh Integration
+
+Update `/context-refresh` to include lessons in the context rebuild.
+
+1. **FR-6.1:** `src/commands/context-refresh.md` MUST gain a new step 1.5 (between reading the scratchpad and reading the plan): "If `.claude/lessons.md` exists, read the `## Prevention Rules` section in full and the 5 most recent entries from `## Lessons Log`. Summarise the relevant rules for the current feature."
+2. **FR-6.2:** The context-refresh output format MUST include a "Lessons" line showing the count of prevention rules active and the 5 most recent lesson dates.
+3. **FR-6.3:** When `context-refresh` detects that `## Lessons Log` has more than 50 entries, it MUST add a consolidation prompt to its output: "Lessons Log has N entries (>50). Consider running consolidation before the next slice."
+
+#### FR-7: Develop-Feature Integration
+
+Update `/develop-feature` to inject prevention rules into Phase 2 and capture wave-level lessons post-wave.
+
+1. **FR-7.1:** At the start of Phase 2 (implementation), `src/commands/develop-feature.md` MUST instruct the orchestrator: "If `.claude/lessons.md` exists, read the `## Prevention Rules` section and note any rules relevant to the files in this feature's plan before spawning any subagents."
+2. **FR-7.2:** After all subagents in a wave complete (the post-wave result collection step, per Section 2 FR-2.5), the orchestrator MUST check Trigger 2 across the entire wave: if the same deviation rule category fired in 2 or more slices within the wave, write a wave-level lesson to `.claude/lessons.md`.
+3. **FR-7.3:** For slices that failed (retry budget exhausted), the orchestrator MUST also write a Trigger 3 lesson covering the failed slice's pattern.
+4. **FR-7.4:** All lesson writes in FR-7.2 and FR-7.3 MUST be performed by the orchestrator, not by subagents (consistent with FR-1.9 and Section 2 FR-2.6).
+
+#### FR-8: Bootstrap-Feature and Planner Integration
+
+Update `/bootstrap-feature` and the planner agent to consult prevention rules before producing the implementation plan.
+
+1. **FR-8.1:** `src/commands/bootstrap-feature.md` Step 5 (invoke planner) MUST include an instruction: "Before producing the implementation plan, read `.claude/lessons.md` Prevention Rules section if the file exists. Incorporate any relevant prevention rules into slice notes under a `Prevention:` sub-field."
+2. **FR-8.2:** `src/agents/planner.md` document reading list MUST include `.claude/lessons.md` (with an existence guard) alongside the plan file, use cases, and PRD sections.
+3. **FR-8.3:** The planner's per-slice output format MUST support an optional `Prevention:` sub-field. When one or more prevention rules are relevant to a slice, the planner MUST list them under `Prevention:` so the implementer reads them at slice start. When no rules are relevant, the field is omitted.
+
+#### FR-9: Documentation
+
+Update user-facing documentation to describe the self-improvement loop.
+
+1. **FR-9.1:** `src/claude.md` MUST gain a "Cross-Session Learning" subsection under the pipeline description. It MUST describe: (a) what `.claude/lessons.md` contains, (b) the three capture triggers, (c) the prevention rule elevation and retirement mechanism, and (d) where in the pipeline lessons are read versus written.
+2. **FR-9.2:** `README.md` MUST add "Self-Improvement Loop" to the feature list (in the project overview or key features section), with a one-sentence description.
+3. **FR-9.3:** `README.md`'s project setup output (the directory listing or setup confirmation text) MUST include `.claude/lessons.md` as one of the files provisioned by `--init-project`, alongside `.claude/scratchpad.md`.
+4. **FR-9.4:** `install.sh` version string MUST be bumped to `3.2.0` to reflect this feature addition.
+
+### 4.4 Non-Functional Requirements
+
+1. **NFR-1:** All changes are markdown prompt files and shell script text only. No JavaScript, TypeScript, Python, or other runtime code is introduced. The install script changes are limited to file copy logic and text string updates (rule count, version, help text).
+2. **NFR-2:** The feature is fully backward compatible. Projects without `.claude/lessons.md` are completely unaffected. Every instruction that reads or writes the file includes an existence guard (`if it exists` or `if the file exists`). Existing pipeline behavior for these projects is identical to pre-feature behavior.
+3. **NFR-3:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). New projects provisioned with `--init-project` after install get `.claude/lessons.md` automatically. Existing projects that want the feature must run `bash install.sh --init-project` to provision the file (the install must not overwrite an existing file).
+4. **NFR-4:** No new agents are added. The total agent count remains at 13. Lesson capture is implemented as behavioral rules in existing command and rule files, not as a new specialized agent. All existing agent counts in `README.md` and `src/claude.md` remain valid.
+5. **NFR-5:** The lessons rule file (`src/rules/lessons.md`) is installed to `~/.claude/rules/` (global scope, applies to every project). The lessons data file (`templates/lessons.md`, copied to `.claude/lessons.md`) is project-local scope. This mirrors the scratchpad pattern: global rules in `~/.claude/rules/scratchpad.md`, project data in `.claude/scratchpad.md`.
+6. **NFR-6:** Context budget is bounded. The `## Prevention Rules` section is always read in full (expected to remain short — typically 0-10 rules). Only the 5 most recent `## Lessons Log` entries are read during pre-flight and context refresh. The full log is never loaded into context during normal operation.
+
+### 4.5 Acceptance Criteria
+
+1. **AC-1:** `src/rules/lessons.md` exists with structured sections covering: MUST Read protocol, all three capture triggers with concrete detection heuristics (Trigger 1 includes the rejection-language heuristics from FR-1.2), prevention rule elevation thresholds (FR-1.6), prevention rule retirement (FR-1.7), context budget (FR-1.8), parallel subagent skip (FR-1.9), and 50-entry consolidation (FR-1.10).
+2. **AC-2:** `templates/lessons.md` exists with an empty `## Prevention Rules` section and an empty `## Lessons Log` section, and no pre-populated lesson entries.
+3. **AC-3:** `install.sh` copies `templates/lessons.md` to `.claude/lessons.md` when `--init-project` is specified. If `.claude/lessons.md` already exists, the copy is skipped (existing file is not overwritten). The install banner reports 5 rule files. The version string reads `3.2.0`.
+4. **AC-4:** `templates/settings.json` grants Edit and Write permissions for `.claude/lessons.md`.
+5. **AC-5:** `src/rules/scratchpad.md` MUST Read section contains a bullet instructing agents to read `.claude/lessons.md` Prevention Rules at session start if the file exists.
+6. **AC-6:** `src/commands/implement-slice.md` pre-flight checklist contains item #5 (scan Prevention Rules if file exists). The post-commit section contains Step 6 (Capture Lessons for Triggers 1-2). Step 6 and the scratchpad step are both skipped when running as a parallel subagent.
+7. **AC-7:** `src/commands/merge-ready.md` contains a "Post-Gate Lesson Capture" section that fires after all gates complete. The section handles both the MERGE READY path (auto-fix lessons) and the NOT MERGE READY path (failure pattern lessons). It is a no-op when `.claude/lessons.md` does not exist.
+8. **AC-8:** `src/commands/context-refresh.md` contains step 1.5 reading Prevention Rules and the 5 most recent Lessons Log entries (existence-guarded). The output format includes a Lessons summary line. A consolidation prompt appears when the log exceeds 50 entries.
+9. **AC-9:** `src/commands/develop-feature.md` Phase 2 reads prevention rules before spawning subagents (existence-guarded). Post-wave result collection includes Trigger 2 and Trigger 3 lesson capture performed by the orchestrator only.
+10. **AC-10:** `src/commands/bootstrap-feature.md` Step 5 instructs the planner to read prevention rules before producing the plan. `src/agents/planner.md` document reading list includes `.claude/lessons.md` with an existence guard. The planner's per-slice format supports an optional `Prevention:` sub-field.
+11. **AC-11:** `src/claude.md` contains a "Cross-Session Learning" subsection describing the four elements in FR-9.1. `README.md` lists "Self-Improvement Loop" in the feature list and includes `.claude/lessons.md` in the project setup output.
+12. **AC-12:** No instruction that references `.claude/lessons.md` is missing an existence guard. This is verifiable by searching all modified command and rule files for "lessons.md" and confirming each occurrence is conditioned on file existence.
+
+### 4.6 Affected Components
+
+#### New Files
+
+| File | Purpose | Install Destination |
+|------|---------|---------------------|
+| `src/rules/lessons.md` | Lesson capture rules — capture triggers, entry format, elevation/retirement, context budget, parallel skip | `~/.claude/rules/lessons.md` (global) |
+| `templates/lessons.md` | Empty lessons template with section scaffolding | `.claude/lessons.md` (project-local, via `--init-project`) |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `install.sh` | Add `templates/lessons.md` copy in `--init-project` block (skip if exists); update rule count 4→5 in install banner; update version string to `3.2.0`; update `--help` text to mention `lessons.md` | FR-2.2, FR-2.4, FR-2.5, FR-9.4 |
+| `templates/settings.json` | Add Edit and Write permissions for `.claude/lessons.md` | FR-2.3 |
+| `src/rules/scratchpad.md` | Add session-start lessons reading bullet to MUST Read section | FR-3.1, FR-3.2 |
+| `src/commands/implement-slice.md` | Add pre-flight check #5 (Prevention Rules scan); add Step 6 (Capture Lessons); renumber scratchpad step to Step 7; add parallel subagent skip for Steps 6-7 | FR-4.1, FR-4.2, FR-4.3, FR-4.4 |
+| `src/commands/merge-ready.md` | Add Post-Gate Lesson Capture section (Trigger 3, both MERGE READY and NOT MERGE READY paths, existence-guarded) | FR-5.1, FR-5.2, FR-5.3, FR-5.4 |
+| `src/commands/context-refresh.md` | Add step 1.5 (Prevention Rules + 5 recent lessons); add Lessons line to output format; add consolidation prompt when log >50 entries | FR-6.1, FR-6.2, FR-6.3 |
+| `src/commands/develop-feature.md` | Add Phase 2 prevention rules pre-read; add post-wave Trigger 2 and Trigger 3 lesson capture (orchestrator-only) | FR-7.1, FR-7.2, FR-7.3, FR-7.4 |
+| `src/commands/bootstrap-feature.md` | Add planner instruction to read prevention rules before producing plan; add `Prevention:` sub-field mention | FR-8.1 |
+| `src/agents/planner.md` | Add `.claude/lessons.md` to document reading list (existence-guarded); add optional `Prevention:` sub-field to per-slice output format | FR-8.2, FR-8.3 |
+| `src/claude.md` | Add Cross-Session Learning subsection | FR-9.1 |
+| `README.md` | Add Self-Improvement Loop to feature list; add `.claude/lessons.md` to project setup output | FR-9.2, FR-9.3 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/architect.md` | Architecture review runs in Phase 1, before slices exist. Prevention rules are a slice-level concern. No change needed. |
+| `src/agents/ba-analyst.md` | Use case analysis runs in Phase 1. No lesson capture occurs here. No change needed. |
+| `src/agents/qa-planner.md` | Test case generation runs in Phase 1. No lesson capture occurs here. No change needed. |
+| `src/agents/prd-writer.md` | PRD writing runs in Phase 1. No lesson capture occurs here. No change needed. |
+| `src/agents/test-writer.md` | Test writing happens within individual slices; prevention rules are surfaced to the implementer via the `Prevention:` sub-field in the plan, not by having test-writer read lessons.md directly. |
+| `src/agents/security-auditor.md` | Security review runs in Phase 1.5 and Phase 4. Security findings flow into lessons via the merge-ready Post-Gate Lesson Capture (FR-5). No direct lessons.md read required. |
+| `src/agents/code-reviewer.md` | Code review runs in Phase 4. Same pattern as security-auditor. No direct lessons.md read required. |
+| `src/agents/build-runner.md` | Build verification runs in Phase 4. Gate failures flow into lessons via FR-5. No direct lessons.md read required. |
+| `src/agents/e2e-runner.md` | E2E tests run in Phase 4. Gate failures flow into lessons via FR-5. No direct lessons.md read required. |
+| `src/agents/doc-updater.md` | Documentation update runs in Phase 4. No lesson capture occurs here. No change needed. |
+| `src/agents/refactor-cleaner.md` | Cleanup runs after all waves complete. No lesson capture occurs here. No change needed. |
+| `src/agents/verifier.md` | Verification runs in Phase 4. Gate failures flow into lessons via FR-5. No direct lessons.md read required. |
+| `src/rules/git.md` | Git workflow rules unchanged. |
+| `src/rules/tool-limitations.md` | Tool limitation awareness unchanged. |
+| `src/rules/error-recovery.md` | Deviation rules (Section 1 FR-2) are the trigger conditions for Trigger 2 lesson capture, but the error recovery rule file itself does not need to reference lessons.md. Trigger 2 capture is defined in `src/rules/lessons.md` and wired into the commands. |
+| `docs/qa/pipeline-hardening_test_cases.md` | Agent model tiers were updated by Section 3. No further changes from this feature. |
+| `CONTRIBUTING.md` | Agent template guidance (Section 3 FR-5). No lessons-related contributor guidance required beyond what is in the rule file. |
+
+### 4.7 UI Changes
+
+Not applicable. This project is a collection of markdown prompt files with no user interface.
+
+### 4.8 Schema Changes
+
+Not applicable. This project has no database.
+
+### 4.9 Affected Endpoints
+
+Not applicable. This project has no API.
+
+### 4.10 Risks and Dependencies
+
+1. **Risk: Lesson quality depends on agent self-awareness.** The agent must recognize when it is being corrected (Trigger 1). Mitigation: FR-1.2 provides concrete detection heuristics (explicit rejection language, user-provided replacement code, revert requests) rather than relying on vague judgment. If a correction is missed, the quality gate failure path (Trigger 3) provides a second capture opportunity.
+2. **Risk: Lessons file growth.** Without bounds, `## Lessons Log` could grow large enough to degrade context budget. Mitigation: FR-1.8 limits reads to 5 recent entries and the Prevention Rules section only. FR-1.10 defines a 50-entry consolidation trigger. FR-1.7 retires stale prevention rules after 10 features.
+3. **Risk: Over-specific lessons.** A lesson written for a very specific file path or function name in one project may be irrelevant or misleading in another. Mitigation: FR-1.5 requires the "what to do instead" field to use ALWAYS/NEVER/WHEN phrasing that generalizes beyond the specific instance. Prevention rule retirement (FR-1.7) removes rules referencing deleted files or patterns.
+4. **Risk: Race condition in parallel waves.** Multiple subagents writing to `lessons.md` simultaneously would corrupt the file. Mitigation: FR-1.9 explicitly prohibits subagent writes to `lessons.md`; only the orchestrator writes, consistent with Section 2 FR-2.6 for scratchpad. The parallel subagent skip in FR-4.4 enforces this for `implement-slice`.
+5. **Risk: Backward compatibility regression.** Commands modified by this feature must not break projects that have no `.claude/lessons.md`. Mitigation: every read/write reference to `lessons.md` in the command files includes an existence guard (FR-2.2, AC-12). The absence of the file is explicitly handled as a no-op in each integration point.
+6. **Risk: Stale prevention rules degrading plan quality.** A prevention rule that no longer applies may cause the planner to add unnecessary `Prevention:` notes to slices, adding noise. Mitigation: FR-1.7 defines a retirement mechanism based on non-confirmation over 10 features and reference-validity checks.
+7. **Risk: Install script overwrites existing lessons.** A re-install should update global rule files but must not destroy project-local lesson history. Mitigation: FR-2.2 specifies the copy is skipped if `.claude/lessons.md` already exists. This is a hard requirement on the install script implementation.
+8. **Dependency: Section 1 FR-2 (Deviation Rules).** Trigger 2 lesson capture uses deviation rule categories (Rule 1-4) as the unit of recurrence. If a project is on a pre-Section 1 pipeline version without deviation rules, Trigger 2 has no rule categories to track. Mitigation: Section 1 is marked [SHIPPED], so this dependency is satisfied for all current users.
+9. **Dependency: Section 2 FR-2.6 (orchestrator-only scratchpad writes).** The orchestrator-only write pattern for lessons in parallel mode (FR-1.9, FR-7.4) is an extension of the same pattern established for scratchpad in Section 2. If that pattern is not present in `develop-feature.md`, the lessons write pattern cannot be consistently enforced. Mitigation: Section 2 is marked [DRAFT] but its core orchestrator-only write requirement is already in place.

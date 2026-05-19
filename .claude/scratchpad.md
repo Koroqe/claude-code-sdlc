@@ -1,32 +1,30 @@
-## Feature: Execution Waves — Parallel Slice Implementation
-## Branch: feat/execution-waves
-## Status: implementing wave 1 slice 1/9
+## Feature: Self-Improvement Loop — Cross-Session Lesson Capture
+## Branch: feat/self-improvement-loop
+## Status: implementing wave 1 slice 1/8
 
 ## Plan
 
 ### Wave 1
-1. [ ] Slice 1: Planner — Wave field + Wave Assignment algorithm (`src/agents/planner.md`)
-2. [ ] Slice 2: Scratchpad rules — wave-grouped format (`src/rules/scratchpad.md`)
-3. [ ] Slice 3: Error recovery — Parallel Wave Execution section (`src/rules/error-recovery.md`)
+- [ ] Slice 1: Core lessons rule file (`src/rules/lessons.md` [new])
+- [ ] Slice 2: Lessons template + install script (`templates/lessons.md` [new], `install.sh`, `templates/settings.json`)
+- [ ] Slice 3: Scratchpad rule — session-start lessons reading (`src/rules/scratchpad.md`)
 
 ### Wave 2
-4. [ ] Slice 4: develop-feature — Wave-Aware Phase 2 orchestration (`src/commands/develop-feature.md`) [architect pre-review]
-5. [ ] Slice 5: implement-slice — wave context + auto-continue suppression (`src/commands/implement-slice.md`)
+- [ ] Slice 4: implement-slice — prevention rule check + lesson capture (`src/commands/implement-slice.md`)
+- [ ] Slice 5: merge-ready — post-gate lesson capture (`src/commands/merge-ready.md`)
+- [ ] Slice 6: context-refresh + develop-feature — lessons integration (`src/commands/context-refresh.md`, `src/commands/develop-feature.md`)
+- [ ] Slice 7: bootstrap-feature + planner — prevention rules in planning (`src/commands/bootstrap-feature.md`, `src/agents/planner.md`)
 
 ### Wave 3
-6. [ ] Slice 6: bootstrap-feature — wave-grouped scratchpad init (`src/commands/bootstrap-feature.md`)
-7. [ ] Slice 7: Plan Critic — Wave Assignment Validation (`src/claude.md`)
-8. [ ] Slice 8: context-refresh — wave-grouped progress (`src/commands/context-refresh.md`)
-
-### Wave 4
-9. [ ] Slice 9: README + install.sh — documentation updates
+- [ ] Slice 8: claude.md + README documentation (`src/claude.md`, `README.md`)
 
 ## Architecture Review Notes
-- Auto-Continue must be suppressed in parallel subagent mode
-- develop-feature Phase 2 is highest-risk slice — needs architect pre-review
-- Git: subagents must chain `git add && git commit` as single command
-- Scratchpad: orchestrator-only writes during parallel waves
-- Wave computation: Plan Critic validates as safety net
+- CONDITIONAL PASS — 4 action items incorporated into plan
+- Archived Rules section added to template and rule file
+- Trigger 2 tracking: scan lessons log for current feature matches
+- Elevation matching: compare "correct approach" fields
+- Spawn prompt: add "Do NOT write to .claude/lessons.md" rule #5
+- All references include existence guards for backward compatibility
 
 ## Completed
 
