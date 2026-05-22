@@ -14,6 +14,12 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Added
+
+- **New `/onboarding` slash command.** Forces the orchestrator to re-read every load-bearing pipeline rule at session start, verify the three cognitive-self-check protocols are active, and emit a concise verification report covering loaded rules + current project state (feature, branch, last 3 changelog bullets, open blockers). Read-only; flags missing rule files as drift signals without auto-recreating them. Run at fresh-session boot, after context-compaction, or before high-stakes features. See `src/commands/onboarding.md`.
+
+- **New `session-changelog` rule + per-project `<project>/.claude/changelog.md` convention.** A short-bullet operator-facing log the orchestrator maintains across sessions for the project manager. Distinct from the formal product `CHANGELOG.md` (end-user-facing, governed by `templates/rules/changelog.md`) and from `.claude/scratchpad.md` (rich internal state). One bullet per meaningful milestone — commit landed, plan accepted, wave/slice complete, blocker surfaced/resolved, merge-ready verdict, release cut. Hard cap 100 chars per bullet, dated `## YYYY-MM-DD` sections newest-on-top. Sentinel-activated: presence of `~/.claude/rules/session-changelog.md` enables the behaviour; absence equals opt-out. See `src/rules/session-changelog.md`.
+
 ### Changed
 
 - **claudebase split into a standalone repo with its own installer.** Previously, the `claude-code-sdlc` installer downloaded the claudebase binary, registered the alias, installed pdfium, pre-warmed the e5 encoder, AND deployed the knowledge-base + insights-related prompts/rules into `~/.claude/`. All of that logic now lives in the new [`claudebase`](https://github.com/codefather-labs/claudebase) repo's own `install.sh` / `install.ps1`. The SDLC installer chains to claudebase via `curl ... | bash` (Linux/macOS) or `Invoke-WebRequest ... | iex` (Windows). The previously-bundled files (`rules/knowledge-base.md`, `rules/knowledge-base-tool.md`, `rules/tool-limitations.md`, `commands/knowledge-ingest.md`, `commands/reflect.md`, `commands/consolidate.md`, `agents/reflection.md`, `agents/consolidator.md`) now ship from claudebase. End-user experience is byte-identical — all 22 agents and 10 commands still deploy to `~/.claude/` — the change is just about WHICH installer is the source of truth. claudebase can now also be installed standalone (without SDLC) for projects that only want the memory + observation infrastructure. SDLC bumps to v3.1.0.

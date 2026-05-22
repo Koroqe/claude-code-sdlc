@@ -151,6 +151,7 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 - `/release` — User-invoked release packaging (semver bump + CHANGELOG date stamp + release-notes file + GHA release workflow). Use after `/merge-ready` reports MERGE READY when ready to publish.
 - `/knowledge-ingest <path>` — Ingest folder/file into per-project knowledge base
 - `/context-refresh` — Rebuild session context from scratchpad
+- `/onboarding` — Force re-read of every global pipeline rule + verify cognitive-self-check protocols active + summarise project state at session start. Read-only; emits a concise verification report. Run at fresh-session boot, after context-compaction, or before high-stakes features.
 
 ### What Plan Mode Plans MUST Contain
 

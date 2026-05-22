@@ -67,8 +67,8 @@ OPTIONS:
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (includes Mira orchestrator persona)
   agents/          20 specialized agent prompts (SDLC pipeline)
-  commands/        7 SDLC pipeline commands
-  rules/           4 process rules (cognitive-self-check, error-recovery, scratchpad, git)
+  commands/        8 SDLC pipeline commands (incl. /onboarding session-boot orientation)
+  rules/           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer curls and runs claudebase's standalone installer, which
@@ -218,8 +218,8 @@ install_user_config() {
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (20 files — specialized agent prompts; +2 from claudebase: reflection, consolidator)"
-  echo "    commands/ (7 files — SDLC pipeline commands (+ 3 from claudebase: knowledge-ingest, reflect, consolidate))"
-  echo "    rules/   (4 files — process rules)"
+  echo "    commands/ (8 files — SDLC pipeline commands incl. /onboarding (+ 3 from claudebase: knowledge-ingest, reflect, consolidate))"
+  echo "    rules/   (6 files — process rules incl. session-changelog)"
   echo ""
 
   if ! confirm "Proceed with installation?"; then

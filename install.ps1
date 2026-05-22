@@ -62,8 +62,8 @@ OPTIONS:
 WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   claude.md        Main workflow instructions (includes Mira orchestrator persona)
   agents\          20 specialized agent prompts (SDLC pipeline)
-  commands\        7 SDLC pipeline commands
-  rules\           4 process rules (cognitive-self-check, error-recovery, scratchpad, git)
+  commands\        8 SDLC pipeline commands (incl. /onboarding session-boot orientation)
+  rules\           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer downloads and runs claudebase's standalone PowerShell
