@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# SDLC pipeline SubagentStart hook — auto-injects the onboarding preamble
-# from ~/.claude/rules/subagent-onboarding.md into EVERY subagent at
-# session start. Replaces the prior orchestrator-side contract requiring
-# Mira to manually include the preamble in every spawn prompt.
+# SDLC pipeline SubagentStart hook — auto-injects the 5-point onboarding
+# preamble into every subagent at spawn time.
 #
 # Wired via ~/.claude/settings.json:
 #   hooks.SubagentStart[*].hooks[*].command =
 #     ~/.claude/hooks/sdlc-subagent-onboarding.sh
 #
-# Per https://code.claude.com/docs/en/hooks the stdout of a SubagentStart
-# hook is appended as additionalContext to the subagent's first model
-# request when emitted as plain text.
+# Output is a JSON envelope per https://code.claude.com/docs/en/hooks:
+#   - `hookSpecificOutput.additionalContext` -> agent-only context, wrapped
+#     in a `<hook source="sdlc-subagent-onboarding" ...>` tag for visual
+#     parity with `<channel source="..." ...>` Telegram callbacks
 #
-# Exit codes: 0 always (informational, never blocks).
+# NOTE: this hook deliberately omits `systemMessage` — SubagentStart fires
+# on EVERY Agent-tool spawn (potentially dozens per /develop-feature wave),
+# so a user-visible bubble per spawn would spam the operator's CLI. Only
+# the SessionStart hook (fires once per session boot) surfaces a visible
+# bubble.
+#
+# Exit code: 0 always (informational; never blocks subagent spawn).
 
-# Read the JSON envelope CC sends on stdin (event metadata). Best-effort.
+# Read the JSON envelope CC sends on stdin. Best-effort.
 hook_payload="$(cat 2>/dev/null || true)"
 event_name=""
 session_id=""
@@ -27,14 +32,17 @@ fi
 [ -z "$event_name" ] && event_name="agent-spawn"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo '?')"
 
-# Wrapper tag — visually parallel to `<channel source="..." ...>` from
-# Telegram. Lets the agent grep `^<hook` for hook invocations.
-printf '<hook source="sdlc-subagent-onboarding" event="%s" ts="%s"%s%s>\n' \
-  "$event_name" "$ts" \
-  "$([ -n "$agent_type" ] && printf ' agent_type="%s"' "$agent_type")" \
-  "$([ -n "$session_id" ] && printf ' session_id="%s"' "$session_id")"
+# Build the preamble content into a temp buffer, wrapped in <hook> tag.
+buf="$(mktemp -t sdlc-subagent-onboarding.XXXXXX)"
+trap 'rm -f "$buf"' EXIT
 
-cat <<'PREAMBLE'
+{
+  printf '<hook source="sdlc-subagent-onboarding" event="%s" ts="%s"%s%s>\n' \
+    "$event_name" "$ts" \
+    "$([ -n "$agent_type" ] && printf ' agent_type="%s"' "$agent_type")" \
+    "$([ -n "$session_id" ] && printf ' session_id="%s"' "$session_id")"
+
+  cat <<'PREAMBLE'
 # === Subagent Onboarding (auto-injected by SDLC SubagentStart hook) ===
 
 You are a sub-agent spawned by the SDLC pipeline orchestrator. Before
@@ -79,6 +87,23 @@ The task body from the orchestrator follows in the user prompt below.
 
 PREAMBLE
 
-echo "</hook>"
+  echo '</hook>'
+} > "$buf"
+
+# Emit JSON: agent-only additionalContext. No systemMessage (would spam
+# operator CLI on every subagent spawn).
+if command -v jq >/dev/null 2>&1; then
+  jq -n \
+    --rawfile ctx "$buf" \
+    '{
+      hookSpecificOutput: {
+        hookEventName: "SubagentStart",
+        additionalContext: $ctx
+      }
+    }'
+else
+  # No jq — fall back to plain text (agent context only).
+  cat "$buf"
+fi
 
 exit 0

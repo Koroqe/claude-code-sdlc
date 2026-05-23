@@ -1,18 +1,20 @@
 # SDLC pipeline SessionStart hook (Windows PowerShell) — auto-injects
-# orientation context into Claude Code's first model request.
+# orientation context for the agent AND surfaces a brief visible line to
+# the operator in the CLI.
 #
 # Wired via $env:USERPROFILE\.claude\settings.json:
 #   hooks.SessionStart[*].hooks[*].command = powershell -NoProfile -File
 #     $env:USERPROFILE\.claude\hooks\sdlc-onboarding.ps1
 #
-# Per https://code.claude.com/docs/en/hooks the stdout of a SessionStart
-# hook is appended as additionalContext to the first model request when
-# emitted as plain text. This script outputs plain text only.
+# Output is a JSON envelope per https://code.claude.com/docs/en/hooks:
+#   - `systemMessage` -> visible to the OPERATOR in the CLI (short summary)
+#   - `hookSpecificOutput.additionalContext` -> agent-only context, wrapped
+#     in a `<hook source="sdlc-onboarding" ...>` tag for visual parity with
+#     the `<channel source="...">` tags Telegram channel callbacks use
 
 $ErrorActionPreference = 'Continue'
 
-# Read CC's JSON envelope from stdin. Best-effort metadata extraction;
-# blank fields just become empty attributes on the wrapper tag below.
+# Read CC's JSON envelope from stdin. Best-effort.
 $hookPayload = ''
 try { $hookPayload = [Console]::In.ReadToEnd() } catch {}
 $eventName = 'session-start'
@@ -30,14 +32,13 @@ $rulesDir = Join-Path $env:USERPROFILE '.claude\rules'
 $projectClaude = Join-Path $cwd '.claude'
 $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-# Wrapper tag — visually parallel to the `<channel source="..." ...>`
-# tags Telegram channel callbacks use. Lets the agent grep `^<hook` for
-# hook invocations the same way `^<channel` works for inbound TG events.
-$sessAttr = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
-Write-Output "<hook source=`"sdlc-onboarding`" event=`"$eventName`" ts=`"$ts`" cwd=`"$cwd`"$sessAttr>"
+# Build orientation content into a string buffer.
+$sb = New-Object System.Text.StringBuilder
 
-# Header — names the three load-bearing protocols verbatim.
-@'
+$sessAttr = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
+[void]$sb.AppendLine("<hook source=`"sdlc-onboarding`" event=`"$eventName`" ts=`"$ts`" cwd=`"$cwd`"$sessAttr>")
+
+[void]$sb.AppendLine(@'
 # SDLC Pipeline — Session Onboarding
 
 You are Mira, the orchestrator of this SDLC pipeline. Three cognitive-
@@ -58,77 +59,71 @@ self-check protocols are MANDATORY on every artifact you emit:
 Full protocol: `~/.claude/rules/cognitive-self-check.md`.
 Subagent contract: `~/.claude/rules/subagent-onboarding.md` (every
 Agent-tool spawn prompt MUST begin with the onboarding preamble).
-'@
+'@)
 
-# Global pipeline rules + mtimes.
 if (Test-Path $rulesDir) {
-    Write-Output ""
-    Write-Output "## Loaded pipeline rules (~/.claude/rules/)"
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## Loaded pipeline rules (~/.claude/rules/)")
     Get-ChildItem -Path $rulesDir -Filter '*.md' -File -ErrorAction SilentlyContinue | ForEach-Object {
         $mtime = $_.LastWriteTime.ToString('yyyy-MM-dd')
-        Write-Output "- $($_.Name) ($($_.Length) bytes, $mtime)"
+        [void]$sb.AppendLine("- $($_.Name) ($($_.Length) bytes, $mtime)")
     }
-    Write-Output ""
+    [void]$sb.AppendLine("")
 }
 
-# Per-project rules.
 $projectRules = Join-Path $projectClaude 'rules'
 if (Test-Path $projectRules) {
-    Write-Output "## Project rules (./.claude/rules/)"
+    [void]$sb.AppendLine("## Project rules (./.claude/rules/)")
     Get-ChildItem -Path $projectRules -Filter '*.md' -File -ErrorAction SilentlyContinue | ForEach-Object {
         $mtime = $_.LastWriteTime.ToString('yyyy-MM-dd')
-        Write-Output "- $($_.Name) ($($_.Length) bytes, $mtime)"
+        [void]$sb.AppendLine("- $($_.Name) ($($_.Length) bytes, $mtime)")
     }
-    Write-Output ""
+    [void]$sb.AppendLine("")
 }
 
-# Scratchpad summary.
 $scratchpad = Join-Path $projectClaude 'scratchpad.md'
 if (Test-Path $scratchpad) {
-    Write-Output "## Scratchpad summary (./.claude/scratchpad.md)"
+    [void]$sb.AppendLine("## Scratchpad summary (./.claude/scratchpad.md)")
     $content = Get-Content $scratchpad -ErrorAction SilentlyContinue
     foreach ($header in @('^## Feature:', '^## Branch:', '^## Status:', '^## Blockers')) {
         $idx = ($content | Select-String -Pattern $header | Select-Object -First 1).LineNumber
         if ($idx) {
             $slice = $content[($idx - 1)..([Math]::Min($idx + 4, $content.Count - 1))]
-            $slice | ForEach-Object { Write-Output "  $_" }
-            Write-Output ""
+            $slice | ForEach-Object { [void]$sb.AppendLine("  $_") }
+            [void]$sb.AppendLine("")
         }
     }
 }
 
-# Recent session changelog tail.
 $changelog = Join-Path $projectClaude 'changelog.md'
 if (Test-Path $changelog) {
-    Write-Output "## Recent session bullets (./.claude/changelog.md tail)"
+    [void]$sb.AppendLine("## Recent session bullets (./.claude/changelog.md tail)")
     Get-Content $changelog -ErrorAction SilentlyContinue `
       | Select-Object -Skip 1 -First 30 `
-      | ForEach-Object { Write-Output "  $_" }
-    Write-Output ""
+      | ForEach-Object { [void]$sb.AppendLine("  $_") }
+    [void]$sb.AppendLine("")
 }
 
-# Git state.
 $gitDir = Join-Path $cwd '.git'
 if (Test-Path $gitDir) {
-    Write-Output "## Git"
+    [void]$sb.AppendLine("## Git")
     try {
         $branch = (& git -C $cwd branch --show-current 2>$null)
-        if ($branch) { Write-Output "- branch: $branch" }
-        Write-Output "- recent commits:"
-        (& git -C $cwd log --oneline -3 2>$null) | ForEach-Object { Write-Output "    $_" }
+        if ($branch) { [void]$sb.AppendLine("- branch: $branch") }
+        [void]$sb.AppendLine("- recent commits:")
+        (& git -C $cwd log --oneline -3 2>$null) | ForEach-Object { [void]$sb.AppendLine("    $_") }
         $dirty = (& git -C $cwd status --short 2>$null) | Select-Object -First 10
         if ($dirty) {
-            Write-Output "- working tree (truncated to 10 entries):"
-            $dirty | ForEach-Object { Write-Output "    $_" }
+            [void]$sb.AppendLine("- working tree (truncated to 10 entries):")
+            $dirty | ForEach-Object { [void]$sb.AppendLine("    $_") }
         } else {
-            Write-Output "- working tree: clean"
+            [void]$sb.AppendLine("- working tree: clean")
         }
     } catch {}
-    Write-Output ""
+    [void]$sb.AppendLine("")
 }
 
-# Push-back note.
-@'
+[void]$sb.AppendLine(@'
 ## Push-back is not failure
 
 If the operator's first prompt contradicts an established pipeline
@@ -137,8 +132,22 @@ on main, asks for a hack labelled as a real fix), surface it under
 `### Inbound validation` and refuse to silently execute. Per
 `~/.claude/rules/cognitive-self-check.md` Protocol 3, push-back is
 the agent doing its job correctly.
-'@
+'@)
 
-Write-Output "</hook>"
+[void]$sb.AppendLine("</hook>")
+
+$additionalContext = $sb.ToString()
+$projectLabel = Split-Path -Leaf $cwd
+$systemMessage = "[hook] SDLC SessionStart — event=$eventName project=$projectLabel"
+
+# Emit JSON: operator sees systemMessage, agent gets additionalContext.
+$payload = [ordered]@{
+    systemMessage = $systemMessage
+    hookSpecificOutput = [ordered]@{
+        hookEventName = 'SessionStart'
+        additionalContext = $additionalContext
+    }
+}
+$payload | ConvertTo-Json -Depth 6 -Compress:$false
 
 exit 0

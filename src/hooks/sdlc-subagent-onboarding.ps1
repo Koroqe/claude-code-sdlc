@@ -1,9 +1,13 @@
 # SDLC pipeline SubagentStart hook (Windows PowerShell) — auto-injects
-# the onboarding preamble into every subagent at session start.
+# the 5-point onboarding preamble into every subagent at spawn time.
 #
 # Wired via $env:USERPROFILE\.claude\settings.json:
 #   hooks.SubagentStart[*].hooks[*].command = powershell -NoProfile -File
 #     $env:USERPROFILE\.claude\hooks\sdlc-subagent-onboarding.ps1
+#
+# Output is a JSON envelope; only `hookSpecificOutput.additionalContext`
+# is populated. No `systemMessage` (would spam operator CLI on every
+# subagent spawn). Only SessionStart surfaces a visible bubble.
 
 $ErrorActionPreference = 'Continue'
 
@@ -23,11 +27,14 @@ if ($hookPayload) {
     } catch {}
 }
 $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
 $agentAttr = if ($agentType) { " agent_type=`"$agentType`"" } else { '' }
 $sessAttr  = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
-Write-Output "<hook source=`"sdlc-subagent-onboarding`" event=`"$eventName`" ts=`"$ts`"$agentAttr$sessAttr>"
 
-@'
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine("<hook source=`"sdlc-subagent-onboarding`" event=`"$eventName`" ts=`"$ts`"$agentAttr$sessAttr>")
+
+[void]$sb.AppendLine(@'
 # === Subagent Onboarding (auto-injected by SDLC SubagentStart hook) ===
 
 You are a sub-agent spawned by the SDLC pipeline orchestrator. Before
@@ -69,8 +76,16 @@ producing any output, you MUST:
    is the agent doing its job correctly.
 
 The task body from the orchestrator follows in the user prompt below.
-'@
+'@)
 
-Write-Output "</hook>"
+[void]$sb.AppendLine("</hook>")
+
+$payload = [ordered]@{
+    hookSpecificOutput = [ordered]@{
+        hookEventName = 'SubagentStart'
+        additionalContext = $sb.ToString()
+    }
+}
+$payload | ConvertTo-Json -Depth 6 -Compress:$false
 
 exit 0
