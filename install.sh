@@ -67,8 +67,9 @@ OPTIONS:
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (includes Mira orchestrator persona)
   agents/          20 specialized agent prompts (SDLC pipeline)
-  commands/        8 SDLC pipeline commands (incl. /onboarding session-boot orientation)
+  commands/        7 SDLC pipeline commands
   rules/           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
+  hooks/           2 session hooks (SessionStart + SubagentStart — auto-fire on session boot + subagent spawn)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer curls and runs claudebase's standalone installer, which
@@ -218,7 +219,7 @@ install_user_config() {
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (20 files — specialized agent prompts; +2 from claudebase: reflection, consolidator)"
-  echo "    commands/ (8 files — SDLC pipeline commands incl. /onboarding (+ 3 from claudebase: knowledge-ingest, reflect, consolidate))"
+  echo "    commands/ (7 files — SDLC pipeline commands; + 3 from claudebase: knowledge-ingest, reflect, consolidate)"
   echo "    rules/   (6 files — process rules incl. session-changelog)"
   echo ""
 
@@ -509,6 +510,110 @@ register_release_bash_allowlist() {
 }
 
 # ============================================================================
+# Deploy SDLC session hooks (~/.claude/hooks/) and wire them into
+# ~/.claude/settings.json:
+#
+#   - SessionStart hook: sdlc-onboarding.sh — auto-injects orientation
+#     context (rules list, scratchpad summary, changelog tail, git state)
+#     on every new session / resume / compact. Replaces the prior
+#     /onboarding slash command (which required manual invocation).
+#
+#   - SubagentStart hook: sdlc-subagent-onboarding.sh — auto-injects the
+#     5-point subagent onboarding preamble (cognitive-self-check
+#     protocols 1/2/3, knowledge-base discipline, push-back-is-not-
+#     failure reminder) so the orchestrator no longer needs to manually
+#     prepend it to every Agent-tool spawn prompt.
+#
+# Per https://code.claude.com/docs/en/hooks plain-text stdout from these
+# hooks becomes additionalContext on the next model request.
+#
+# Idempotent — jq merge is by command-string equality so re-running the
+# installer never duplicates hook entries.
+# ============================================================================
+install_sdlc_hooks() {
+  local hooks_dir="$CLAUDE_DIR/hooks"
+  local settings="$CLAUDE_DIR/settings.json"
+
+  mkdir -p "$hooks_dir"
+
+  # Stale-artifact cleanup: prior installs deployed a /onboarding slash
+  # command at $CLAUDE_DIR/commands/onboarding.md. The hook supersedes
+  # it; remove the stale file so the operator doesn't see two surfaces.
+  local stale_cmd="$CLAUDE_DIR/commands/onboarding.md"
+  if [ -f "$stale_cmd" ]; then
+    rm -f "$stale_cmd"
+    log_ok "removed stale commands/onboarding.md (superseded by SessionStart hook)"
+  fi
+
+  local hook_files=(sdlc-onboarding.sh sdlc-subagent-onboarding.sh)
+  for hook in "${hook_files[@]}"; do
+    local src="$SCRIPT_DIR/src/hooks/$hook"
+    local dst="$hooks_dir/$hook"
+    if [ ! -f "$src" ]; then
+      log_warn "hooks/$hook missing in source — skipping"
+      continue
+    fi
+    cp "$src" "$dst"
+    chmod 0755 "$dst"
+    log_ok "hooks/$hook"
+  done
+
+  if [ ! -f "$settings" ]; then
+    mkdir -p "$CLAUDE_DIR"
+    echo '{"permissions":{"allow":[]}}' > "$settings"
+    chmod 0644 "$settings"
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq required for settings.json hook merge — add manually:"
+    log_warn '  hooks.SessionStart[*].hooks[*].command = ~/.claude/hooks/sdlc-onboarding.sh'
+    log_warn '  hooks.SubagentStart[*].hooks[*].command = ~/.claude/hooks/sdlc-subagent-onboarding.sh'
+    return 0
+  fi
+
+  local session_cmd="$HOME/.claude/hooks/sdlc-onboarding.sh"
+  local subagent_cmd="$HOME/.claude/hooks/sdlc-subagent-onboarding.sh"
+  local tmp
+  tmp="$(mktemp)"
+
+  # Merge both hook entries idempotently. The jq filter:
+  #   1. Ensures .hooks object exists.
+  #   2. For each event (SessionStart / SubagentStart) ensures the array
+  #      contains exactly one matcher block with our command. Existing
+  #      foreign matcher blocks are preserved untouched.
+  #   3. Deduplicates by command-string equality across the existing
+  #      matchers' hooks[].command values.
+  if jq \
+      --arg session_cmd "$session_cmd" \
+      --arg subagent_cmd "$subagent_cmd" \
+      '
+      .hooks //= {}
+      | .hooks.SessionStart //= []
+      | .hooks.SubagentStart //= []
+      | .hooks.SessionStart |=
+          (if any(.[]?; (.hooks // []) | any(.command == $session_cmd))
+           then .
+           else . + [{"matcher": "startup|resume|compact",
+                      "hooks": [{"type": "command", "command": $session_cmd}]}]
+           end)
+      | .hooks.SubagentStart |=
+          (if any(.[]?; (.hooks // []) | any(.command == $subagent_cmd))
+           then .
+           else . + [{"hooks": [{"type": "command", "command": $subagent_cmd}]}]
+           end)
+      ' \
+      "$settings" > "$tmp" 2>/dev/null \
+     && jq -e . "$tmp" >/dev/null 2>&1; then
+    mv "$tmp" "$settings"
+    chmod 0644 "$settings"
+    log_ok "settings.json (SessionStart + SubagentStart hooks wired)"
+  else
+    rm -f "$tmp"
+    log_warn "settings.json hook merge failed; please add manually"
+  fi
+}
+
+# ============================================================================
 # Bootstrap a claudebase release tag (Slice 6 — auto-release).
 # Maintainer-only one-shot: pushes the FIRST claudebase-v<X.Y.Z> tag
 # to origin so the binary-release workflow has a tag to publish against.
@@ -698,6 +803,7 @@ fi
 install_user_config
 chain_claudebase_installer
 register_release_bash_allowlist
+install_sdlc_hooks
 
 if [ "$INIT_PROJECT" = true ]; then
   scaffold_project

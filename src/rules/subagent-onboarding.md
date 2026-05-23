@@ -4,6 +4,18 @@ Every spawn of a sub-agent via the `Agent` tool (also called `Task` in the harne
 
 The named failure mode this rule prevents: a sub-agent spawned with a focused task prompt operates **without** the cognitive-self-check protocols, **without** the knowledge-base discipline, and **without** the insights-corpus retrieval that the parent agent is bound by — producing fact-shaped lies, decision-shaped hacks, and re-discovery of insights that prior sessions already captured. The parent's discipline is local-only unless it propagates to the child.
 
+## Belt-and-suspenders — the SubagentStart hook is the safety net
+
+`install.sh` and `install.ps1` deploy a `SubagentStart` hook at `~/.claude/hooks/sdlc-subagent-onboarding.sh` that auto-injects the 5-point onboarding preamble as `additionalContext` on every `Agent`-tool spawn. The hook fires before the sub-agent processes the task prompt.
+
+This rule remains MANDATORY because the hook is a safety net, not the primary contract:
+
+- The hook covers projects whose `~/.claude/settings.json` wires it; older installs and projects that haven't run `bash install.sh --yes` since the hook landed (CHANGELOG entry on or after `2026-05-20`) won't have it.
+- The hook injects the GENERIC preamble. The parent agent often has feature-specific context to add (current `$FEATURE_SLUG`, the inbound `fix_directive` from `/qa-cycle`, references to the upstream `## Decisions` block) that the hook cannot know about.
+- A parent that relies on the hook and omits the preamble is making the rule's enforcement invisible to a reader of the parent's prompt — bad for transcript audits.
+
+**Treat the hook as a belt; the explicit preamble in the spawn prompt is the suspenders.** Use both.
+
 ## When this rule applies
 
 This rule applies to ANY agent that invokes the `Agent` tool. Primarily this is the orchestrator (Mira) and any agent that delegates a sub-task (e.g., `/qa-cycle` spawning the implementer, `/develop-feature` spawning per-slice implementers in parallel waves, `red-team` consulting domain-specialist on-demand roles).

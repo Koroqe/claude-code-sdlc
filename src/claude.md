@@ -151,7 +151,13 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 - `/release` — User-invoked release packaging (semver bump + CHANGELOG date stamp + release-notes file + GHA release workflow). Use after `/merge-ready` reports MERGE READY when ready to publish.
 - `/knowledge-ingest <path>` — Ingest folder/file into per-project knowledge base
 - `/context-refresh` — Rebuild session context from scratchpad
-- `/onboarding` — Force re-read of every global pipeline rule + verify cognitive-self-check protocols active + summarise project state at session start. Read-only; emits a concise verification report. Run at fresh-session boot, after context-compaction, or before high-stakes features.
+
+### Session Hooks (auto-injected, no user invocation needed)
+
+Installed by `install.sh` / `install.ps1` into `~/.claude/hooks/` and wired into `~/.claude/settings.json`:
+
+- **SessionStart hook** (`sdlc-onboarding.sh`) — fires on `startup | resume | compact`. Auto-injects orientation context: names the three cognitive-self-check protocols (Facts / Decisions / Inbound), lists loaded pipeline rules with mtimes, summarises the project scratchpad (Feature / Branch / Status / Blockers), tails the session changelog, and reports git state (branch + recent commits + working tree). Replaces the prior `/onboarding` slash command — the agent now starts every session already oriented.
+- **SubagentStart hook** (`sdlc-subagent-onboarding.sh`) — fires before every Agent-tool spawn. Auto-injects the 5-point subagent onboarding preamble (Protocols 1/2/3, knowledge-base discipline, insights-corpus query, tool-limitations, push-back-is-not-failure reminder). The parent agent MAY still include the preamble explicitly per `~/.claude/rules/subagent-onboarding.md`, but the hook ensures every spawned sub-agent receives the contract even when the parent omits it.
 
 ### What Plan Mode Plans MUST Contain
 

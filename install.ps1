@@ -62,8 +62,9 @@ OPTIONS:
 WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   claude.md        Main workflow instructions (includes Mira orchestrator persona)
   agents\          20 specialized agent prompts (SDLC pipeline)
-  commands\        8 SDLC pipeline commands (incl. /onboarding session-boot orientation)
+  commands\        7 SDLC pipeline commands
   rules\           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
+  hooks\           2 session hooks (SessionStart + SubagentStart — auto-fire on session boot + subagent spawn)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer downloads and runs claudebase's standalone PowerShell
@@ -278,6 +279,112 @@ function Register-ReleaseBashAllowlist {
     Update-AllowList -Entries $entries -SuccessMsg "release-engineer allowlist"
 }
 
+# ============================================================================
+# Deploy SDLC SessionStart + SubagentStart hooks. Mirrors install_sdlc_hooks
+# in install.sh. On Windows PowerShell, JSON manipulation goes through
+# ConvertFrom-Json / ConvertTo-Json instead of jq.
+# ============================================================================
+function Install-SdlcHooks {
+    $hooksDir = Join-Path $ClaudeDir "hooks"
+    $settings = Join-Path $ClaudeDir "settings.json"
+
+    if (-not (Test-Path $hooksDir)) {
+        New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null
+    }
+
+    # Stale-artifact cleanup: prior installs deployed a /onboarding slash
+    # command. The hook supersedes it.
+    $staleCmd = Join-Path $ClaudeDir "commands\onboarding.md"
+    if (Test-Path $staleCmd) {
+        Remove-Item -Force $staleCmd
+        Write-Ok "removed stale commands/onboarding.md (superseded by SessionStart hook)"
+    }
+
+    # We deploy BOTH the .sh and .ps1 variants under ~/.claude/hooks/.
+    # Windows users wire to the .ps1 variant; the .sh files don't hurt to
+    # have on disk (they just won't be invoked).
+    $hookFiles = @(
+        "sdlc-onboarding.sh",
+        "sdlc-onboarding.ps1",
+        "sdlc-subagent-onboarding.sh",
+        "sdlc-subagent-onboarding.ps1"
+    )
+    foreach ($hook in $hookFiles) {
+        $src = Join-Path $Script:ScriptDir "src\hooks\$hook"
+        $dst = Join-Path $hooksDir $hook
+        if (-not (Test-Path $src)) {
+            Write-Warn "hooks/$hook missing in source — skipping"
+            continue
+        }
+        Copy-Item -Force $src $dst
+        Write-Ok "hooks/$hook"
+    }
+
+    # Compute the hook command strings to wire into settings.json. On
+    # Windows, prefer .ps1; the command line is `powershell -NoProfile -File <path>`.
+    $sessionPs1  = Join-Path $hooksDir "sdlc-onboarding.ps1"
+    $subagentPs1 = Join-Path $hooksDir "sdlc-subagent-onboarding.ps1"
+    $sessionCmd  = "powershell -NoProfile -File `"$sessionPs1`""
+    $subagentCmd = "powershell -NoProfile -File `"$subagentPs1`""
+
+    if (-not (Test-Path $settings)) {
+        $obj = [ordered]@{ permissions = [ordered]@{ allow = @() } }
+        $obj | ConvertTo-Json -Depth 5 | Set-Content -Path $settings -Encoding UTF8
+    }
+
+    try {
+        $json = Get-Content -Raw $settings | ConvertFrom-Json
+        if (-not ($json.PSObject.Properties.Name -contains 'hooks')) {
+            $json | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([pscustomobject]@{}) -Force
+        }
+
+        # Helper — idempotent merge of one hook event.
+        $mergeEvent = {
+            param($eventName, $matcher, $command)
+            if (-not ($json.hooks.PSObject.Properties.Name -contains $eventName)) {
+                $json.hooks | Add-Member -NotePropertyName $eventName -NotePropertyValue @() -Force
+            }
+            $existing = @($json.hooks.$eventName)
+            $alreadyHas = $false
+            foreach ($entry in $existing) {
+                if ($entry.hooks) {
+                    foreach ($h in $entry.hooks) {
+                        if ($h.command -eq $command) { $alreadyHas = $true; break }
+                    }
+                }
+                if ($alreadyHas) { break }
+            }
+            if (-not $alreadyHas) {
+                $newEntry = [pscustomobject]@{
+                    matcher = $matcher
+                    hooks   = @(
+                        [pscustomobject]@{ type = "command"; command = $command }
+                    )
+                }
+                if (-not $matcher) {
+                    $newEntry = [pscustomobject]@{
+                        hooks = @(
+                            [pscustomobject]@{ type = "command"; command = $command }
+                        )
+                    }
+                }
+                $existing += $newEntry
+                $json.hooks.$eventName = $existing
+            }
+        }
+
+        & $mergeEvent "SessionStart"  "startup|resume|compact" $sessionCmd
+        & $mergeEvent "SubagentStart" $null                    $subagentCmd
+
+        $json | ConvertTo-Json -Depth 12 | Set-Content -Path $settings -Encoding UTF8
+        Write-Ok "settings.json (SessionStart + SubagentStart hooks wired)"
+    } catch {
+        Write-Warn "settings.json hook merge failed ($($_.Exception.Message)); add manually:"
+        Write-Warn "  hooks.SessionStart[*].hooks[*].command = $sessionCmd"
+        Write-Warn "  hooks.SubagentStart[*].hooks[*].command = $subagentCmd"
+    }
+}
+
 function Initialize-Project {
     Write-Host ""
     Write-Info "Scaffolding project template in $((Get-Location).Path)\.claude\"
@@ -418,6 +525,7 @@ if ($Help) { Show-Help; exit 0 }
 Install-UserConfig
 Invoke-ClaudebaseInstaller
 Register-ReleaseBashAllowlist
+Install-SdlcHooks
 
 if ($InitProject) {
     Initialize-Project

@@ -98,8 +98,10 @@ install.bat -Yes -InitProject
 
 - `%USERPROFILE%\.claude\claude.md` — workflow instructions (loaded by every Claude Code session)
 - `%USERPROFILE%\.claude\agents\` — 21 specialized agent prompts (with personas baked in)
-- `%USERPROFILE%\.claude\commands\` — 11 SDLC pipeline commands (includes `/onboarding` session-boot orientation)
+- `%USERPROFILE%\.claude\commands\` — 10 SDLC pipeline commands
 - `%USERPROFILE%\.claude\rules\` — process rules (cognitive-self-check, subagent-onboarding, error-recovery, knowledge-base, scratchpad, git, tool-limitations, session-changelog)
+- `%USERPROFILE%\.claude\hooks\sdlc-onboarding.{sh,ps1}` — **SessionStart hook**: auto-injects orientation context (rules + scratchpad + git state) on every session start / resume / compact. Replaces the prior `/onboarding` slash command.
+- `%USERPROFILE%\.claude\hooks\sdlc-subagent-onboarding.{sh,ps1}` — **SubagentStart hook**: auto-injects the 5-point cognitive-self-check + knowledge-base preamble into every `Agent`-tool spawn. Belt-and-suspenders with the parent-side `subagent-onboarding.md` rule.
 - `%USERPROFILE%\.claude\tools\claudebase\claudebase.exe` — knowledge-base CLI binary downloaded from GitHub releases
 - `%USERPROFILE%\.claude\tools\claudebase\pdfium\bin\pdfium.dll` — PDFium native library for PDF extraction
 - `%USERPROFILE%\.claude\bin\claudebase.cmd` — wrapper that adds `claudebase` to your User PATH
