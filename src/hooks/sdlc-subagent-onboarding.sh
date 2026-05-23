@@ -14,8 +14,25 @@
 #
 # Exit codes: 0 always (informational, never blocks).
 
-# Drain stdin; we don't need session_id / transcript_path here.
-cat >/dev/null 2>&1 || true
+# Read the JSON envelope CC sends on stdin (event metadata). Best-effort.
+hook_payload="$(cat 2>/dev/null || true)"
+event_name=""
+session_id=""
+agent_type=""
+if command -v jq >/dev/null 2>&1 && [ -n "$hook_payload" ]; then
+  event_name="$(printf '%s' "$hook_payload" | jq -r '.hook_event_name // empty' 2>/dev/null || true)"
+  session_id="$(printf '%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)"
+  agent_type="$(printf '%s' "$hook_payload" | jq -r '.subagent_type // .agent_type // empty' 2>/dev/null || true)"
+fi
+[ -z "$event_name" ] && event_name="agent-spawn"
+ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo '?')"
+
+# Wrapper tag — visually parallel to `<channel source="..." ...>` from
+# Telegram. Lets the agent grep `^<hook` for hook invocations.
+printf '<hook source="sdlc-subagent-onboarding" event="%s" ts="%s"%s%s>\n' \
+  "$event_name" "$ts" \
+  "$([ -n "$agent_type" ] && printf ' agent_type="%s"' "$agent_type")" \
+  "$([ -n "$session_id" ] && printf ' session_id="%s"' "$session_id")"
 
 cat <<'PREAMBLE'
 # === Subagent Onboarding (auto-injected by SDLC SubagentStart hook) ===
@@ -61,5 +78,7 @@ producing any output, you MUST:
 The task body from the orchestrator follows in the user prompt below.
 
 PREAMBLE
+
+echo "</hook>"
 
 exit 0

@@ -16,13 +16,29 @@
 # Do NOT set -e — a failed substat or missing file must not break the
 # session boot. Silent degradation is the contract.
 
-# Drain stdin so Claude Code's IPC doesn't SIGPIPE us. We don't currently
-# use the hook payload (session_id, transcript_path, cwd, etc.).
-cat >/dev/null 2>&1 || true
+# Read the JSON envelope CC sends on stdin (hook_event_name + session_id +
+# transcript_path + cwd). Best-effort — empty/missing fields just become
+# blank attributes on the wrapper tag below.
+hook_payload="$(cat 2>/dev/null || true)"
+event_name=""
+session_id=""
+if command -v jq >/dev/null 2>&1 && [ -n "$hook_payload" ]; then
+  event_name="$(printf '%s' "$hook_payload" | jq -r '.hook_event_name // .source // empty' 2>/dev/null || true)"
+  session_id="$(printf '%s' "$hook_payload" | jq -r '.session_id // empty' 2>/dev/null || true)"
+fi
+[ -z "$event_name" ] && event_name="session-start"
 
 cwd="$(pwd)"
 rules_dir="$HOME/.claude/rules"
 project_claude="$cwd/.claude"
+ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo '?')"
+
+# Wrapper tag — visually parallel to the `<channel source="..." ...>` tag
+# Telegram channel callbacks use. Lets the agent grep `^<hook` for hook
+# invocations the same way `^<channel` works for inbound TG events.
+printf '<hook source="sdlc-onboarding" event="%s" ts="%s" cwd="%s"%s>\n' \
+  "$event_name" "$ts" "$cwd" \
+  "$([ -n "$session_id" ] && printf ' session_id="%s"' "$session_id")"
 
 # Header — names the three load-bearing protocols verbatim so the agent
 # can't paraphrase them away on first turn.
@@ -135,5 +151,7 @@ on main, asks for a hack labelled as a real fix), surface it under
 `~/.claude/rules/cognitive-self-check.md` Protocol 3, push-back is
 the agent doing its job correctly.
 FOOTER
+
+echo "</hook>"
 
 exit 0

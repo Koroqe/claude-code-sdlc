@@ -11,12 +11,30 @@
 
 $ErrorActionPreference = 'Continue'
 
-# Drain stdin so Claude Code's IPC doesn't fault.
-try { $null = [Console]::In.ReadToEnd() } catch {}
+# Read CC's JSON envelope from stdin. Best-effort metadata extraction;
+# blank fields just become empty attributes on the wrapper tag below.
+$hookPayload = ''
+try { $hookPayload = [Console]::In.ReadToEnd() } catch {}
+$eventName = 'session-start'
+$sessionId = ''
+if ($hookPayload) {
+    try {
+        $envelope = $hookPayload | ConvertFrom-Json
+        if ($envelope.hook_event_name) { $eventName = $envelope.hook_event_name }
+        if ($envelope.session_id)      { $sessionId = $envelope.session_id }
+    } catch {}
+}
 
 $cwd = (Get-Location).Path
 $rulesDir = Join-Path $env:USERPROFILE '.claude\rules'
 $projectClaude = Join-Path $cwd '.claude'
+$ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+# Wrapper tag — visually parallel to the `<channel source="..." ...>`
+# tags Telegram channel callbacks use. Lets the agent grep `^<hook` for
+# hook invocations the same way `^<channel` works for inbound TG events.
+$sessAttr = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
+Write-Output "<hook source=`"sdlc-onboarding`" event=`"$eventName`" ts=`"$ts`" cwd=`"$cwd`"$sessAttr>"
 
 # Header — names the three load-bearing protocols verbatim.
 @'
@@ -120,5 +138,7 @@ on main, asks for a hack labelled as a real fix), surface it under
 `~/.claude/rules/cognitive-self-check.md` Protocol 3, push-back is
 the agent doing its job correctly.
 '@
+
+Write-Output "</hook>"
 
 exit 0

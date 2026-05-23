@@ -7,8 +7,25 @@
 
 $ErrorActionPreference = 'Continue'
 
-# Drain stdin so Claude Code IPC doesn't fault.
-try { $null = [Console]::In.ReadToEnd() } catch {}
+# Read CC's JSON envelope from stdin. Best-effort metadata extraction.
+$hookPayload = ''
+try { $hookPayload = [Console]::In.ReadToEnd() } catch {}
+$eventName = 'agent-spawn'
+$sessionId = ''
+$agentType = ''
+if ($hookPayload) {
+    try {
+        $envelope = $hookPayload | ConvertFrom-Json
+        if ($envelope.hook_event_name) { $eventName = $envelope.hook_event_name }
+        if ($envelope.session_id)      { $sessionId = $envelope.session_id }
+        if ($envelope.subagent_type)   { $agentType = $envelope.subagent_type }
+        elseif ($envelope.agent_type)  { $agentType = $envelope.agent_type }
+    } catch {}
+}
+$ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$agentAttr = if ($agentType) { " agent_type=`"$agentType`"" } else { '' }
+$sessAttr  = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
+Write-Output "<hook source=`"sdlc-subagent-onboarding`" event=`"$eventName`" ts=`"$ts`"$agentAttr$sessAttr>"
 
 @'
 # === Subagent Onboarding (auto-injected by SDLC SubagentStart hook) ===
@@ -53,5 +70,7 @@ producing any output, you MUST:
 
 The task body from the orchestrator follows in the user prompt below.
 '@
+
+Write-Output "</hook>"
 
 exit 0

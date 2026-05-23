@@ -78,6 +78,16 @@ CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
     rules/                   knowledge-base, knowledge-base-tool, tool-limitations
     commands/                /knowledge-ingest, /reflect, /consolidate
     agents/                  reflection (Drift), consolidator (Mnem)
+    voice deps (best-effort) ffmpeg + whisper-cli via brew/apt/dnf/pacman
+                             (opt-out: CLAUDEBASE_SKIP_WHISPER=1)
+    telegram plugin          downloads server-rs binary into the official
+                             Anthropic telegram plugin's cache + patches
+                             .mcp.json with bash toggle (default Rust, fallback
+                             to TSX via TELEGRAM_USE_TSX_SERVER=1). Requires
+                             `claude` CLI present; opt-out:
+                             CLAUDEBASE_SKIP_TELEGRAM=1
+  Plus exposes `claudebase run` to launch Claude Code with the telegram
+  plugin preset preloaded in one shot.
   Source: https://github.com/codefather-labs/claudebase
 
 WHAT --init-project CREATES (in current directory):
