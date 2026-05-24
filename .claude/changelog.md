@@ -13,6 +13,7 @@
 - claudebase title.png banner added to README top
 - codefather.dev: new /solutions section, claudebase as first entry, sitemap+llms.txt updated
 - New ExitPlanMode PostToolUse hook — reminds agent to persist plan.md after plan-mode exit
+- claudebase.codefather.dev subdomain — nginx server-block serves /solutions/claudebase at /
 
 ## 2026-05-23
 
