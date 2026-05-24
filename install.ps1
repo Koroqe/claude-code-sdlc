@@ -64,7 +64,7 @@ WHAT GETS INSTALLED (%USERPROFILE%\.claude\):
   agents\          20 specialized agent prompts (SDLC pipeline)
   commands\        7 SDLC pipeline commands
   rules\           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
-  hooks\           2 session hooks (SessionStart + SubagentStart — auto-fire on session boot + subagent spawn)
+  hooks\           3 hooks (SessionStart + SubagentStart + PostToolUse[ExitPlanMode] — auto-fire on session boot, subagent spawn, plan-mode exit)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer downloads and runs claudebase's standalone PowerShell
@@ -315,7 +315,9 @@ function Install-SdlcHooks {
         "sdlc-onboarding.sh",
         "sdlc-onboarding.ps1",
         "sdlc-subagent-onboarding.sh",
-        "sdlc-subagent-onboarding.ps1"
+        "sdlc-subagent-onboarding.ps1",
+        "sdlc-exitplanmode-reminder.sh",
+        "sdlc-exitplanmode-reminder.ps1"
     )
     foreach ($hook in $hookFiles) {
         $src = Join-Path $Script:ScriptDir "src\hooks\$hook"
@@ -332,8 +334,10 @@ function Install-SdlcHooks {
     # Windows, prefer .ps1; the command line is `powershell -NoProfile -File <path>`.
     $sessionPs1  = Join-Path $hooksDir "sdlc-onboarding.ps1"
     $subagentPs1 = Join-Path $hooksDir "sdlc-subagent-onboarding.ps1"
+    $exitplanPs1 = Join-Path $hooksDir "sdlc-exitplanmode-reminder.ps1"
     $sessionCmd  = "powershell -NoProfile -File `"$sessionPs1`""
     $subagentCmd = "powershell -NoProfile -File `"$subagentPs1`""
+    $exitplanCmd = "powershell -NoProfile -File `"$exitplanPs1`""
 
     if (-not (Test-Path $settings)) {
         $obj = [ordered]@{ permissions = [ordered]@{ allow = @() } }
@@ -383,13 +387,15 @@ function Install-SdlcHooks {
 
         & $mergeEvent "SessionStart"  "startup|resume|compact" $sessionCmd
         & $mergeEvent "SubagentStart" $null                    $subagentCmd
+        & $mergeEvent "PostToolUse"   "ExitPlanMode"           $exitplanCmd
 
         $json | ConvertTo-Json -Depth 12 | Set-Content -Path $settings -Encoding UTF8
-        Write-Ok "settings.json (SessionStart + SubagentStart hooks wired)"
+        Write-Ok "settings.json (SessionStart + SubagentStart + PostToolUse[ExitPlanMode] hooks wired)"
     } catch {
         Write-Warn "settings.json hook merge failed ($($_.Exception.Message)); add manually:"
         Write-Warn "  hooks.SessionStart[*].hooks[*].command = $sessionCmd"
         Write-Warn "  hooks.SubagentStart[*].hooks[*].command = $subagentCmd"
+        Write-Warn "  hooks.PostToolUse[matcher=ExitPlanMode].hooks[*].command = $exitplanCmd"
     }
 }
 

@@ -69,7 +69,7 @@ WHAT GETS INSTALLED (~/.claude/):
   agents/          20 specialized agent prompts (SDLC pipeline)
   commands/        7 SDLC pipeline commands
   rules/           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
-  hooks/           2 session hooks (SessionStart + SubagentStart — auto-fire on session boot + subagent spawn)
+  hooks/           3 hooks (SessionStart + SubagentStart + PostToolUse[ExitPlanMode] — auto-fire on session boot, subagent spawn, plan-mode exit)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer curls and runs claudebase's standalone installer, which
@@ -534,8 +534,18 @@ register_release_bash_allowlist() {
 #     failure reminder) so the orchestrator no longer needs to manually
 #     prepend it to every Agent-tool spawn prompt.
 #
-# Per https://code.claude.com/docs/en/hooks plain-text stdout from these
-# hooks becomes additionalContext on the next model request.
+#   - PostToolUse[ExitPlanMode] hook: sdlc-exitplanmode-reminder.sh —
+#     fires AFTER an ExitPlanMode tool call. Checks whether
+#     <project>/.claude/plan.md exists, is non-empty, and was written
+#     within the current response (mtime <= 300s). Emits an operator-
+#     visible systemMessage + agent-only reminder if any check fails,
+#     so the agent re-persists the plan body before /bootstrap-feature
+#     consumes it. Soft-enforces the CLAUDE.md `## Plan-Mode Persistence`
+#     mandate — never blocks (exit 0 always).
+#
+# Per https://code.claude.com/docs/en/hooks JSON envelope output drives
+# both the operator-visible bubble (systemMessage field) and the agent
+# additionalContext channel.
 #
 # Idempotent — jq merge is by command-string equality so re-running the
 # installer never duplicates hook entries.
@@ -555,7 +565,7 @@ install_sdlc_hooks() {
     log_ok "removed stale commands/onboarding.md (superseded by SessionStart hook)"
   fi
 
-  local hook_files=(sdlc-onboarding.sh sdlc-subagent-onboarding.sh)
+  local hook_files=(sdlc-onboarding.sh sdlc-subagent-onboarding.sh sdlc-exitplanmode-reminder.sh)
   for hook in "${hook_files[@]}"; do
     local src="$SCRIPT_DIR/src/hooks/$hook"
     local dst="$hooks_dir/$hook"
@@ -578,28 +588,32 @@ install_sdlc_hooks() {
     log_warn "jq required for settings.json hook merge — add manually:"
     log_warn '  hooks.SessionStart[*].hooks[*].command = ~/.claude/hooks/sdlc-onboarding.sh'
     log_warn '  hooks.SubagentStart[*].hooks[*].command = ~/.claude/hooks/sdlc-subagent-onboarding.sh'
+    log_warn '  hooks.PostToolUse[matcher=ExitPlanMode].hooks[*].command = ~/.claude/hooks/sdlc-exitplanmode-reminder.sh'
     return 0
   fi
 
   local session_cmd="$HOME/.claude/hooks/sdlc-onboarding.sh"
   local subagent_cmd="$HOME/.claude/hooks/sdlc-subagent-onboarding.sh"
+  local exitplan_cmd="$HOME/.claude/hooks/sdlc-exitplanmode-reminder.sh"
   local tmp
   tmp="$(mktemp)"
 
-  # Merge both hook entries idempotently. The jq filter:
+  # Merge all three hook entries idempotently. The jq filter:
   #   1. Ensures .hooks object exists.
-  #   2. For each event (SessionStart / SubagentStart) ensures the array
-  #      contains exactly one matcher block with our command. Existing
-  #      foreign matcher blocks are preserved untouched.
-  #   3. Deduplicates by command-string equality across the existing
-  #      matchers' hooks[].command values.
+  #   2. For each event (SessionStart / SubagentStart / PostToolUse) ensures
+  #      the array contains exactly one matcher block with our command.
+  #      Existing foreign matcher blocks are preserved untouched.
+  #   3. Deduplicates by command-string equality across existing matchers'
+  #      hooks[].command values.
   if jq \
       --arg session_cmd "$session_cmd" \
       --arg subagent_cmd "$subagent_cmd" \
+      --arg exitplan_cmd "$exitplan_cmd" \
       '
       .hooks //= {}
       | .hooks.SessionStart //= []
       | .hooks.SubagentStart //= []
+      | .hooks.PostToolUse //= []
       | .hooks.SessionStart |=
           (if any(.[]?; (.hooks // []) | any(.command == $session_cmd))
            then .
@@ -611,12 +625,18 @@ install_sdlc_hooks() {
            then .
            else . + [{"hooks": [{"type": "command", "command": $subagent_cmd}]}]
            end)
+      | .hooks.PostToolUse |=
+          (if any(.[]?; (.hooks // []) | any(.command == $exitplan_cmd))
+           then .
+           else . + [{"matcher": "ExitPlanMode",
+                      "hooks": [{"type": "command", "command": $exitplan_cmd}]}]
+           end)
       ' \
       "$settings" > "$tmp" 2>/dev/null \
      && jq -e . "$tmp" >/dev/null 2>&1; then
     mv "$tmp" "$settings"
     chmod 0644 "$settings"
-    log_ok "settings.json (SessionStart + SubagentStart hooks wired)"
+    log_ok "settings.json (SessionStart + SubagentStart + PostToolUse[ExitPlanMode] hooks wired)"
   else
     rm -f "$tmp"
     log_warn "settings.json hook merge failed; please add manually"
