@@ -6,6 +6,7 @@
 - Article DB seeded locally + CI pipeline switched Django→rust-site/var/content.sqlite3 as source-of-truth
 - New claudebase Stop hook — reflects after every turn, captures insights if agent learned something
 - New SDLC git rule — never use git rebase
+- New UserPromptSubmit self-check reminder hook + cognitive-self-check.md moved SDLC→claudebase
 
 ## 2026-05-24
 

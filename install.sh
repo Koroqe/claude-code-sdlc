@@ -68,16 +68,17 @@ WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (includes Mira orchestrator persona)
   agents/          20 specialized agent prompts (SDLC pipeline)
   commands/        7 SDLC pipeline commands
-  rules/           6 process rules (cognitive-self-check, subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
+  rules/           5 process rules (subagent-onboarding, error-recovery, scratchpad, git, session-changelog)
   hooks/           3 hooks (SessionStart + SubagentStart + PostToolUse[ExitPlanMode] — auto-fire on session boot, subagent spawn, plan-mode exit)
 
 CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   This installer curls and runs claudebase's standalone installer, which
   additionally installs:
     tools/claudebase/        CLI binary + PDFium + e5 encoder
-    rules/                   knowledge-base, knowledge-base-tool, tool-limitations
+    rules/                   cognitive-self-check, knowledge-base, knowledge-base-tool, tool-limitations
     commands/                /knowledge-ingest, /reflect, /consolidate
     agents/                  reflection (Drift), consolidator (Mnem)
+    hooks/                   Stop (insight-capture) + UserPromptSubmit (self-check reminder)
     voice deps (best-effort) ffmpeg + whisper-cli via brew/apt/dnf/pacman
                              (opt-out: CLAUDEBASE_SKIP_WHISPER=1)
     telegram plugin          downloads server-rs binary into the official
@@ -230,7 +231,7 @@ install_user_config() {
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (20 files — specialized agent prompts; +2 from claudebase: reflection, consolidator)"
   echo "    commands/ (7 files — SDLC pipeline commands; + 3 from claudebase: knowledge-ingest, reflect, consolidate)"
-  echo "    rules/   (6 files — process rules incl. session-changelog)"
+  echo "    rules/   (5 files — process rules incl. session-changelog; cognitive-self-check ships from claudebase)"
   echo ""
 
   if ! confirm "Proceed with installation?"; then

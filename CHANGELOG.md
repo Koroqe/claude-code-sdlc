@@ -14,6 +14,10 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Changed
+
+- **`cognitive-self-check.md` ownership moved to the claudebase repo.** The three-protocol rule (Facts / Decisions / Inbound) is no longer sourced from this repo's `src/rules/`; it now ships from claudebase `prompts/rules/` alongside the knowledge-base / insights rules as claudebase's cognitive-infrastructure layer. The SDLC installer already chains the claudebase installer, so the file still lands at `~/.claude/rules/cognitive-self-check.md` with no end-user change. All SDLC agent prompts + `CLAUDE.md` continue to reference the rule by its `~/.claude/rules/` path (unchanged). SDLC now sources 5 process rules (subagent-onboarding, error-recovery, scratchpad, git, session-changelog).
+
 ### Added
 
 - **Git workflow rule: never `git rebase`.** `src/rules/git.md` gains a hard prohibition on `git rebase` (interactive or otherwise). Rationale: rebase rewrites history — it drops commits, forces pushes, and strands work when a conflict aborts mid-rebase; the agent's environment also blocks the interactive `-i` flag outright. The rule directs the agent to `git merge` for branch integration, `git revert` / `git reset`-on-unpushed for undo, and to escalate to the operator if history genuinely needs rewriting.
