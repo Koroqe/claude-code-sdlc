@@ -1,5 +1,12 @@
 # Session Changelog
 
+## 2026-05-25
+
+- Published "Vibecoding Parallelizes Features…" article to codefather.dev (7-agent review applied)
+- Article DB seeded locally + CI pipeline switched Django→rust-site/var/content.sqlite3 as source-of-truth
+- New claudebase Stop hook — reflects after every turn, captures insights if agent learned something
+- New SDLC git rule — never use git rebase
+
 ## 2026-05-24
 
 - claudebase v0.6.0 released — 5-platform binaries + telegram-plugin-rs in GH release
