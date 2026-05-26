@@ -78,7 +78,7 @@ CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
     rules/                   cognitive-self-check, knowledge-base, knowledge-base-tool, tool-limitations
     commands/                /knowledge-ingest, /reflect, /consolidate, /update-claudebase
     agents/                  reflection (Drift), consolidator (Mnem)
-    hooks/                   Stop (insight-capture) + UserPromptSubmit (self-check reminder)
+    hooks/                   UserPromptSubmit (self-check protocols + insight-capture)
     voice deps (best-effort) ffmpeg + whisper-cli via brew/apt/dnf/pacman
                              (opt-out: CLAUDEBASE_SKIP_WHISPER=1)
     telegram plugin          downloads server-rs binary into the official
