@@ -76,7 +76,7 @@ CLAUDEBASE DEPENDENCY (chained from claudebase repo's installer):
   additionally installs:
     tools/claudebase/        CLI binary + PDFium + e5 encoder
     rules/                   cognitive-self-check, knowledge-base, knowledge-base-tool, tool-limitations
-    commands/                /knowledge-ingest, /reflect, /consolidate
+    commands/                /knowledge-ingest, /reflect, /consolidate, /update-claudebase
     agents/                  reflection (Drift), consolidator (Mnem)
     hooks/                   Stop (insight-capture) + UserPromptSubmit (self-check reminder)
     voice deps (best-effort) ffmpeg + whisper-cli via brew/apt/dnf/pacman
@@ -230,7 +230,7 @@ install_user_config() {
   echo "  This will install to $CLAUDE_DIR:"
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (20 files — specialized agent prompts; +2 from claudebase: reflection, consolidator)"
-  echo "    commands/ (7 files — SDLC pipeline commands; + 3 from claudebase: knowledge-ingest, reflect, consolidate)"
+  echo "    commands/ (7 files — SDLC pipeline commands; + 4 from claudebase: knowledge-ingest, reflect, consolidate, update-claudebase)"
   echo "    rules/   (5 files — process rules incl. session-changelog; cognitive-self-check ships from claudebase)"
   echo ""
 
@@ -401,7 +401,7 @@ EOF
 # claudebase lives in its own GitHub repo with its own installer that ships
 # the CLI binary, PDFium native library, e5 encoder, plus the agent toolkit
 # (rules: knowledge-base, knowledge-base-tool, tool-limitations;
-# commands: knowledge-ingest, reflect, consolidate;
+# commands: knowledge-ingest, reflect, consolidate, update-claudebase;
 # agents: reflection, consolidator). Calling its installer keeps the
 # boundary clean — claudebase owns its install surface.
 #
