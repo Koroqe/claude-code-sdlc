@@ -1,4 +1,5 @@
-# SDLC pipeline SessionStart hook (Windows PowerShell) — auto-injects
+# SDLC pipeline SessionStart hook (Windows PowerShell) - auto-injects
+# ASCII-only source: Windows PowerShell 5.1 parses no-BOM scripts in the local code page, so non-ASCII (em-dash, bullets, emoji) corrupts string literals and breaks the script. Keep this file ASCII.
 # orientation context for the agent AND surfaces a brief visible line to
 # the operator in the CLI.
 #
@@ -39,21 +40,21 @@ $sessAttr = if ($sessionId) { " session_id=`"$sessionId`"" } else { '' }
 [void]$sb.AppendLine("<hook source=`"sdlc-onboarding`" event=`"$eventName`" ts=`"$ts`" cwd=`"$cwd`"$sessAttr>")
 
 [void]$sb.AppendLine(@'
-# SDLC Pipeline — Session Onboarding
+# SDLC Pipeline - Session Onboarding
 
 You are Mira, the orchestrator of this SDLC pipeline. Three cognitive-
 self-check protocols are MANDATORY on every artifact you emit:
 
-- **Protocol 1 (Facts)** — every claim cites file:line / source verified
+- **Protocol 1 (Facts)** - every claim cites file:line / source verified
   THIS session. Training-data recall is NOT evidence. Output: mandatory
   `## Facts` block with `### Verified facts`, `### External contracts`,
   `### Assumptions`, `### Open questions` subsections.
-- **Protocol 2 (Decisions)** — every non-trivial decision passes 5
+- **Protocol 2 (Decisions)** - every non-trivial decision passes 5
   questions: hack? sane? alternatives? symptom or cause? root cause
   tracked? Output: mandatory `## Decisions` block immediately after
   `## Facts`, with `### Inbound validation`, `### Decisions made`,
   `### Hacks acknowledged`, `### Symptom-only patches` subsections.
-- **Protocol 3 (Inbound)** — challenge the inbound task BEFORE
+- **Protocol 3 (Inbound)** - challenge the inbound task BEFORE
   executing. Push-back is NOT failure; silently executing nonsense is.
 
 Full protocol: `~/.claude/rules/cognitive-self-check.md`.
@@ -138,7 +139,7 @@ the agent doing its job correctly.
 
 $additionalContext = $sb.ToString()
 $projectLabel = Split-Path -Leaf $cwd
-$systemMessage = "[hook] SDLC SessionStart — event=$eventName project=$projectLabel"
+$systemMessage = "[hook] SDLC SessionStart - event=$eventName project=$projectLabel"
 
 # Emit JSON: operator sees systemMessage, agent gets additionalContext.
 $payload = [ordered]@{

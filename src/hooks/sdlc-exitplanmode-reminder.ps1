@@ -1,4 +1,5 @@
-# SDLC pipeline PostToolUse hook (Windows PowerShell) — fires AFTER an
+# SDLC pipeline PostToolUse hook (Windows PowerShell) - fires AFTER an
+# ASCII-only source: Windows PowerShell 5.1 parses no-BOM scripts in the local code page, so non-ASCII (em-dash, bullets, emoji) corrupts string literals and breaks the script. Keep this file ASCII.
 # ExitPlanMode tool call and reminds the agent (and the operator) to persist
 # the plan body to <project>\.claude\plan.md per the CLAUDE.md mandate.
 #

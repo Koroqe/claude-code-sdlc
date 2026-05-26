@@ -14,6 +14,9 @@ and documentation cleanups do NOT belong here (per
 
 ## [Unreleased]
 
+### Fixed
+- **Windows PowerShell hooks broke on parse** (`sdlc-onboarding.ps1`, `sdlc-subagent-onboarding.ps1`, `sdlc-exitplanmode-reminder.ps1`). Em-dashes in string literals corrupted under Windows PowerShell 5.1's local-code-page parsing of no-BOM scripts, aborting with `Unexpected token`. All three SDLC `.ps1` hooks are now ASCII-only (em-dash -> `-`); the `.sh` variants are unchanged. Same class of fix as the claudebase hooks. A convention note at the top of each `.ps1` documents the ASCII-only requirement.
+
 ### Changed
 
 - **`cognitive-self-check.md` ownership moved to the claudebase repo.** The three-protocol rule (Facts / Decisions / Inbound) is no longer sourced from this repo's `src/rules/`; it now ships from claudebase `prompts/rules/` alongside the knowledge-base / insights rules as claudebase's cognitive-infrastructure layer. The SDLC installer already chains the claudebase installer, so the file still lands at `~/.claude/rules/cognitive-self-check.md` with no end-user change. All SDLC agent prompts + `CLAUDE.md` continue to reference the rule by its `~/.claude/rules/` path (unchanged). SDLC now sources 5 process rules (subagent-onboarding, error-recovery, scratchpad, git, session-changelog).
