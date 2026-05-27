@@ -166,10 +166,10 @@ insights-base: doc#<id> sha=<sha-prefix> agent=<author-agent> type=<source-type>
 2. **Peer-bias detection** — `peer-bias-observed`, `red-team-objection`, `consolidator-drift`
 3. **Prediction-reality mismatch** — `prediction-error`, `assumption-falsified`, `plan-reality-gap`
 
-Invoke (body via stdin or positional):
+Invoke (body via stdin or positional). `--category` (required: `general`|`project`) and `--tags` (required: ≥1 free-form tag, e.g. the feature slug or a domain like `#sqlite`) are MANDATORY — omitting either exits 2. Use `--category project` for insights about THIS project's work, `--category general` for cross-tool/cross-project lessons. Read-time `--tag` filtering is OR / any-intersection (an insight carrying ANY matching tag is returned):
 
 ```
-claudebase insight create "<body>" --type <kind> --agent <self> --feature "$FEATURE_SLUG" --salience <high|medium|low>
+claudebase insight create "<body>" --type <kind> --agent <self> --category project --tags "$FEATURE_SLUG" --feature "$FEATURE_SLUG" --salience <high|medium|low>
 ```
 
 As red-team: surface `red-team-objection` for adversarial objections the operator chose to ACKNOWLEDGE rather than fix — those are the load-bearing tech-debt signals.
