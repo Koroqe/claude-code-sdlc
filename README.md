@@ -40,8 +40,14 @@ Claude Code out of the box:
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/codefather-labs/claude-code-sdlc/main/install.sh | bash -s -- --yes
 ```
+
+> `bash -s -- --yes` passes `--yes` through to `install.sh` so the confirmation
+> prompt is auto-confirmed. Without `--yes`, piping via `curl | bash` aborts
+> silently — `curl` consumes stdin, so the script's `read -r` returns empty
+> and the `[y/N]` default-deny kicks in. If you want to inspect first:
+> `curl -fsSL <url> -o /tmp/sdlc-install.sh && bash /tmp/sdlc-install.sh`.
 
 Or locally:
 
