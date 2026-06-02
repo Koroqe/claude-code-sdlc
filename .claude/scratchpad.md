@@ -1,6 +1,6 @@
 ## Feature: Changelog Automation
 ## Branch: feat/changelog-automation
-## Status: quality-gates
+## Status: complete
 
 ## Plan
 
@@ -28,5 +28,8 @@ Docs: docs/PRD.md §5 · docs/use-cases/changelog-automation_use_cases.md (48 sc
 - Slice 5: fix stale "4 rules" counts → 5 at install.sh lines ~64, ~184. README has NO literal rule count (descriptive only) — Slice 8 needs no count fix.
 
 ## Completed
+- Changelog Automation feature complete. MERGE READY: all gates PASS (E2E/UI N/A — prompt-only). Code review found 2 MAJOR (idempotency-guard ordering, doc-updater Gate-7 premature write) + README minor; fixed in commit (fix(core): order idempotency guard...). Re-review PASS.
+- First real CHANGELOG.md entry written by merge-ready finalization (2026-06-02 19:44 UTC). Installed to ~/.claude (backup-20260602-203728).
 
 ## Blockers
+- none
