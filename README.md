@@ -140,6 +140,8 @@ There are two trigger points:
 - `/merge-ready` writes the entry after all quality gates pass — for features and gated fixes.
 - A standalone `/implement-slice` writes the entry for standalone fixes that do not go through merge-ready.
 
+### Example
+
 ```
 > Add user authentication with Google OAuth
 

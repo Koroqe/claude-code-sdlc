@@ -48,9 +48,9 @@ When a trigger that owns the changelog (see Trigger Ownership) finalizes a compl
 
 1. **Get the real timestamp.** Run `date -u +'%Y-%m-%d %H:%M'` via Bash to obtain today's UTC date and the current UTC time. **NEVER invent, guess, or estimate the date/time.** If `date` is unavailable or fails, do NOT write a hallucinated timestamp — skip writing the entry and report that the timestamp could not be retrieved.
 2. **Ensure the file exists.** If `CHANGELOG.md` is absent at the project root, create it with the `# Changelog` header block shown above before inserting any entry.
-3. **Place the entry by day.** If a `## <today's date>` heading already exists, insert the new `### ...` entry as the FIRST entry directly under that day heading. Otherwise, insert a new `## <today's date>` block immediately after the header block (so today sits above all older days).
+3. **Apply the idempotency guard FIRST** (see below). Before inserting anything, check whether an entry with the same name already exists under today's date. If it does, UPDATE that entry in place and STOP — do not proceed to insertion. Only continue to step 4 if no matching entry exists for today.
 4. **Enforce the Details cap.** Trim the Details field to **≤ 500 characters**. If longer, hard-truncate at 500 characters (counted as characters, not bytes).
-5. **Apply the idempotency guard** (below) before appending the entry.
+5. **Place the new entry by day.** If a `## <today's date>` heading already exists, insert the new `### ...` entry as the FIRST entry directly under that day heading. Otherwise, insert a new `## <today's date>` block immediately after the header block (so today sits above all older days).
 
 ## Idempotency Guard
 

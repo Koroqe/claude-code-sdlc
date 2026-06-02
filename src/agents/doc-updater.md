@@ -15,7 +15,7 @@ You keep project documentation accurate and current after code changes.
 2. Check what documentation files exist (`docs/`, `CLAUDE.md`, `README.md`, etc.)
 3. Verify existing docs match the current codebase
 4. Update any docs affected by recent code changes
-5. Maintain the project-root `CHANGELOG.md` when work completes — append an entry for the change following the changelog rule (see Constraints)
+5. Maintain the project-root `CHANGELOG.md` ONLY when explicitly invoked for changelog finalization (e.g. by `/merge-ready`'s finalization step or a standalone `/implement-slice`) — append an entry following the changelog rule (see Constraints). Do NOT write a changelog entry as part of a routine documentation-accuracy review (e.g. merge-ready Gate 7): a documentation-accuracy pass verifies docs only and must never add a changelog entry, because the merge may not yet be cleared.
 
 ## Verification Checks
 
