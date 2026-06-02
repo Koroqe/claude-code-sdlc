@@ -63,7 +63,23 @@ Delegate to `test-writer` agent:
 - Types: `feat`, `fix`, `test`, `chore`
 - Scopes: `api | ui | db | auth | core | infra`
 
-### 6. Update Scratchpad
+### 6. Write Changelog Entry
+
+This step runs **only after a successful commit** (step 5). It is the standalone-fix path: when a slice is committed outside the full pipeline, the changelog still needs an entry.
+
+**Skip this step entirely when EITHER skip condition is true:**
+- (a) **Parallel-wave subagent** — wave context was provided in the spawn prompt. The orchestrator / `merge-ready` owns the changelog entry for the wave.
+- (b) **`no-changelog` suppression flag** — a `no-changelog` flag was passed (i.e. this run is driven by `/develop-feature`). `merge-ready` owns the entry for the whole feature.
+
+If either condition holds, do NOTHING here — `merge-ready` writes the single consolidated entry.
+
+**When BOTH skip conditions are false** (true standalone fix), write ONE entry to the project-root `CHANGELOG.md` following the changelog rule (`changelog.md`):
+- Retrieve the real timestamp by running `date -u +'%Y-%m-%d %H:%M'` — NEVER invent or guess the timestamp.
+- Fields: name, UTC time, a non-technical Summary, and Details (≤500 characters).
+- Entries are day-grouped, newest-first.
+- **Idempotency guard:** if an existing entry with the same name already exists under today's date, UPDATE that entry in place — do NOT duplicate it.
+
+### 7. Update Scratchpad
 **Skip this step when running as a parallel subagent** (wave context provided in spawn prompt). The orchestrator handles scratchpad updates after collecting all wave results.
 
 **When running standalone** (no wave context), update `.claude/scratchpad.md` with:
@@ -103,6 +119,9 @@ Delegate to `test-writer` agent:
 ### Git
 - Branch: [branch name]
 - Commit: [hash] — [message]
+
+### Changelog
+- Entry written: Yes / Skipped (parallel-wave subagent) / Skipped (no-changelog flag — develop-feature owns it)
 
 ### Next Slice
 - [description of next slice]
