@@ -15,6 +15,22 @@ Every changelog entry MUST contain these four fields:
 - **Summary** — a simple, non-technical one-liner that a layperson can understand.
 - **Details** — a fuller description, **≤ 500 characters** (hard cap; trim if longer).
 
+## Technical Details (optional — write at CTO level)
+
+Some projects add a `**Technical details:**` line to each entry for engineering leadership (CTO/CDO). This field is **optional** — include it only where a project asks for it. When present, write it at a **high product/system level**, never at the file or function level. Cover only what applies:
+
+- New or changed **user-facing screens / pages**
+- New or changed **API endpoints** (purpose and access level — not implementation)
+- **Services or major components** affected
+- Any **architecture, infrastructure, or deployment** change (e.g. VPS, workers, new processes)
+- **Impact / risk**: display-only vs. data/schema change; whether a database migration, route change, or deployment is involved
+
+Do NOT include file paths or names, function/component/symbol names, library or validation mechanics (unless they carry product-level meaning), slice counts, or other low-level minutiae. Keep it to a few sentences.
+
+**Avoid (too low-level):** "New `GET /api/.../pipeline` (`hasMinRole`-gated, `groupBy` aggregation, shared `foldFunnel`). New `PipelineTable` on `/admin/...`; centralized `feature-labels.ts`; 5 slices."
+
+**Prefer (CTO level):** "Adds one role-gated admin API endpoint powering a new pipeline dashboard, with a single aggregated query so the snapshot matches the detail views. Front end: a new tabbed admin screen. Display-only — no database, schema, or deployment changes."
+
 ## File Structure
 
 The file is grouped by UTC day, **newest first**, with the newest entry first within each day. Use exactly this shape:
