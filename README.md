@@ -133,6 +133,8 @@ Each entry records four fields:
 - **Summary** — a short, non-technical description of what changed
 - **Details** — a more specific description of the change (≤500 characters)
 
+Projects that want an engineering-leadership view can add an optional **Technical details** line, written at CTO level — screens, endpoints, components, and architecture/deployment changes, never file or function names.
+
 Entries are grouped by UTC day, with the newest day first.
 
 There are two trigger points:
