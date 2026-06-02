@@ -21,7 +21,7 @@ This workflow mirrors a professional software development team:
 | Code Reviewer | `code-reviewer` | Code quality and standards |
 | DevOps | `build-runner` | Typecheck, tests, build verification |
 | Verification Engineer | `verifier` | Goal-backward integration verification (wiring, data flow, stub detection) |
-| Tech Writer | `doc-updater` | Documentation accuracy |
+| Tech Writer | `doc-updater` | Documentation accuracy + `CHANGELOG.md` maintenance |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
 
 ### What Every Plan MUST Include
@@ -42,7 +42,7 @@ When planning ANY feature — whether in plan mode, responding to a request, or 
 7-N. TDD slices: tests first → implement → verify → commit
 
 **Phase 4: Quality Gates**
-N+1. Code review, security audit, build, E2E, docs verification
+N+1. Code review, security audit, build, E2E, docs verification, changelog entry
 
 **A plan without documentation phases is INCOMPLETE. Do not proceed to implementation without them.**
 
@@ -82,6 +82,7 @@ Even though plan mode is read-only and agents don't run during it, the plan file
    - [ ] Use cases in `docs/use-cases/<feature>_use_cases.md`
    - [ ] Architecture review verdict
    - [ ] QA test cases in `docs/qa/<feature>_test_cases.md`
+   - [ ] CHANGELOG.md entry (written at merge-ready / standalone fix)
 3. **Implementation slices** — preliminary breakdown (refined by planner agent in bootstrap)
 4. **Files likely affected**
 5. **Risks and dependencies**
