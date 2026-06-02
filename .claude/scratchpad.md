@@ -1,31 +1,35 @@
-## Feature: Self-Improvement Loop — Cross-Session Lesson Capture
-## Branch: feat/self-improvement-loop
-## Status: implementing wave 1 slice 1/8
+## Feature: Changelog Automation
+## Branch: feat/changelog-automation
+## Status: complete
 
 ## Plan
 
-### Wave 1
-- [ ] Slice 1: Core lessons rule file (`src/rules/lessons.md` [new])
-- [ ] Slice 2: Lessons template + install script (`templates/lessons.md` [new], `install.sh`, `templates/settings.json`)
-- [ ] Slice 3: Scratchpad rule — session-start lessons reading (`src/rules/scratchpad.md`)
+Docs: docs/PRD.md §5 · docs/use-cases/changelog-automation_use_cases.md (48 scenarios) · docs/qa/changelog-automation_test_cases.md (66 TCs) · Architecture: PASS (no security pre-review)
 
-### Wave 2
-- [ ] Slice 4: implement-slice — prevention rule check + lesson capture (`src/commands/implement-slice.md`)
-- [ ] Slice 5: merge-ready — post-gate lesson capture (`src/commands/merge-ready.md`)
-- [ ] Slice 6: context-refresh + develop-feature — lessons integration (`src/commands/context-refresh.md`, `src/commands/develop-feature.md`)
-- [ ] Slice 7: bootstrap-feature + planner — prevention rules in planning (`src/commands/bootstrap-feature.md`, `src/agents/planner.md`)
+### Wave 1 [complete]
+- [x] Slice 1: New changelog rule — canonical spec (`src/rules/changelog.md`) — ebcd9b8
+- [x] Slice 2: doc-updater owns CHANGELOG.md (`src/agents/doc-updater.md`) — fbaa379
+- [x] Slice 3: merge-ready Finalization: Changelog Entry, non-gate (`src/commands/merge-ready.md`) — 75a9f0b
+- [x] Slice 4: implement-slice standalone changelog step (`src/commands/implement-slice.md`) — d235ef9
+- [x] Slice 5: CHANGELOG template + install.sh scaffold + 4→5 rule count (`templates/CHANGELOG.md`, `install.sh`) — 43a7132
+- [x] Slice 6: claude.md doc — ≥3 changelog refs (`src/claude.md`) — 18f195a
+- [x] Slice 7: develop-feature no-changelog flag both paths + Phase 3 note (`src/commands/develop-feature.md`) — 936e565
+- [x] Slice 8: README changelog documentation (`README.md`) — 2035362
 
-### Wave 3
-- [ ] Slice 8: claude.md + README documentation (`src/claude.md`, `README.md`)
+### Wave 2 [complete]
+- [x] Slice 9: Installed to ~/.claude via `bash install.sh --local --yes` — all copies byte-identical, 5 rules, backup-20260602-203728
 
-## Architecture Review Notes
-- CONDITIONAL PASS — 4 action items incorporated into plan
-- Archived Rules section added to template and rule file
-- Trigger 2 tracking: scan lessons log for current feature matches
-- Elevation matching: compare "correct approach" fields
-- Spawn prompt: add "Do NOT write to .claude/lessons.md" rule #5
-- All references include existence guards for backward compatibility
+## Key design (from rule spec)
+- Entry: `### <name> — <HH:MM> UTC` under `## YYYY-MM-DD` (newest day first, newest entry first). Fields: Name, date+time UTC (real `date -u`, NEVER invent), **Summary:** (non-tech), **Details:** (≤500 chars).
+- Triggers (write once): merge-ready finalization (after all gates PASS) + standalone implement-slice (fix). develop-feature passes `no-changelog` flag so slices skip. Idempotency guard: same name under today → update, don't duplicate. Parallel-wave subagents never write.
+
+## Architecture action items (folded in)
+- Slice 3: author Finalization section standalone (no Section-4 "Lesson Capture" anchor — it doesn't exist).
+- Slice 5: fix stale "4 rules" counts → 5 at install.sh lines ~64, ~184. README has NO literal rule count (descriptive only) — Slice 8 needs no count fix.
 
 ## Completed
+- Changelog Automation feature complete. MERGE READY: all gates PASS (E2E/UI N/A — prompt-only). Code review found 2 MAJOR (idempotency-guard ordering, doc-updater Gate-7 premature write) + README minor; fixed in commit (fix(core): order idempotency guard...). Re-review PASS.
+- First real CHANGELOG.md entry written by merge-ready finalization (2026-06-02 19:44 UTC). Installed to ~/.claude (backup-20260602-203728).
 
 ## Blockers
+- none

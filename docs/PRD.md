@@ -714,3 +714,194 @@ Not applicable. This project has no API.
 7. **Risk: Install script overwrites existing lessons.** A re-install should update global rule files but must not destroy project-local lesson history. Mitigation: FR-2.2 specifies the copy is skipped if `.claude/lessons.md` already exists. This is a hard requirement on the install script implementation.
 8. **Dependency: Section 1 FR-2 (Deviation Rules).** Trigger 2 lesson capture uses deviation rule categories (Rule 1-4) as the unit of recurrence. If a project is on a pre-Section 1 pipeline version without deviation rules, Trigger 2 has no rule categories to track. Mitigation: Section 1 is marked [SHIPPED], so this dependency is satisfied for all current users.
 9. **Dependency: Section 2 FR-2.6 (orchestrator-only scratchpad writes).** The orchestrator-only write pattern for lessons in parallel mode (FR-1.9, FR-7.4) is an extension of the same pattern established for scratchpad in Section 2. If that pattern is not present in `develop-feature.md`, the lessons write pattern cannot be consistently enforced. Mitigation: Section 2 is marked [DRAFT] but its core orchestrator-only write requirement is already in place.
+
+---
+
+## 5. Changelog Automation
+
+**Status:** [DRAFT]
+**Date:** 2026-06-02
+**Priority:** Medium
+**Related:** Section 2 (FR-2.6: orchestrator-only writes in parallel mode), Section 4 (FR-5: merge-ready finalization pattern)
+
+### 5.1 Description
+
+Wire a `CHANGELOG.md` instruction into the SDLC framework's global instruction files so that every project using this setup automatically receives a human-readable changelog entry whenever work completes. The entry is written to the project-root `CHANGELOG.md` by the agent (via `doc-updater` in the merge-ready path, or directly in the standalone-fix path) using a real UTC timestamp retrieved via shell command — never hallucinated.
+
+**Why:** The SDLC framework already produces well-structured commits and a detailed PRD, but neither artifact gives a non-technical stakeholder a quick overview of what changed and when. A `CHANGELOG.md` fills that gap. Because the instruction lives in the global framework files, it applies to every project using this setup without per-project configuration.
+
+**Design decisions:**
+1. **Two trigger points** — `/merge-ready` (after all gates PASS) and standalone `/implement-slice` (not driven by `/develop-feature`, not a parallel-wave subagent). These are the two natural completion events in the pipeline. `/develop-feature` ends via `/merge-ready`, so it does not write directly.
+2. **Suppression flag** — `/develop-feature` passes a `no-changelog` flag to every `/implement-slice` it drives so only merge-ready writes. The flag covers both the single-slice-wave direct path and parallel-wave subagents.
+3. **Idempotency guard** — before writing, check whether an entry with the same feature/fix name already exists under today's `## YYYY-MM-DD` heading. If it does, update it rather than appending a duplicate. This is the definitive double-write prevention mechanism, making the system safe even if trigger-ownership heuristics misfire.
+4. **No new agent** — changelog writing is a mechanical append operation delegated to the existing `doc-updater` agent (from the merge-ready path) or performed inline (standalone-fix path). No new specialized agent is needed.
+5. **New global rule** — `src/rules/changelog.md` is the single authoritative source for the format, procedure, and trigger rules. All commands reference this rule rather than duplicating its content.
+
+### 5.2 User Story
+
+As a developer using the Claude Code SDLC pipeline, I want a `CHANGELOG.md` updated automatically at the project root whenever a feature or fix completes, so that I and my stakeholders can see a concise, human-readable record of what changed and when, without consulting git history.
+
+### 5.3 Functional Requirements
+
+#### FR-1: Changelog Rule File
+
+Create a new global rule at `src/rules/changelog.md` that is the single authoritative source for the changelog format, procedure, and trigger rules.
+
+1. **FR-1.1:** The rule file MUST define the entry format. Each entry MUST contain exactly four fields: (a) **Date + time** — UTC timestamp in `HH:MM UTC` format; (b) **Name** — the feature or fix name; (c) **Summary** — a simple, non-technical one-liner; (d) **Details** — a fuller description capped at 500 characters.
+2. **FR-1.2:** The rule file MUST define the file structure: entries are grouped by UTC day under `## YYYY-MM-DD` headings, with the newest day heading first (at the top) and the newest entry first within each day. Individual entries use the heading format `### <name> — <HH:MM> UTC` with `**Summary:**` and `**Details:**` lines below.
+3. **FR-1.3:** The rule file MUST define the writer procedure as a numbered sequence: (1) run `date -u +'%Y-%m-%d %H:%M'` via Bash to retrieve the real UTC timestamp — **never invent the date or time**; (2) if `CHANGELOG.md` is absent, create it with the `# Changelog` header block; (3) if a `## <today's date>` heading already exists, insert the new entry as the first entry under it; otherwise insert a new `## <today's date>` block immediately after the header (above older day headings); (4) enforce the 500-character cap on Details, trimming if needed; (5) apply the idempotency guard before writing.
+4. **FR-1.4:** The rule file MUST define the UTC timestamp retrieval requirement explicitly: the agent MUST run `date -u` via Bash and use the output. The agent MUST NOT invent or estimate the date or time.
+5. **FR-1.5:** The rule file MUST define the 500-character cap on the Details field. If the intended Details text exceeds 500 characters, it MUST be trimmed to fit.
+6. **FR-1.6:** The rule file MUST define the idempotency guard: before writing a new entry, check whether an entry with the same feature/fix name already exists under today's `## YYYY-MM-DD` heading. If a matching entry exists, update it in place rather than appending a duplicate.
+7. **FR-1.7:** The rule file MUST define the two trigger points and their ownership: (a) `/merge-ready` writes one entry as its finalization step, after all gates PASS — this covers everything taken through quality gates (features and fixes alike); (b) a standalone `/implement-slice` (invoked directly by the user, no `no-changelog` suppression flag, not a parallel-wave subagent) writes one entry at completion.
+8. **FR-1.8:** The rule file MUST define the suppression-flag mechanism: when `/develop-feature` drives `/implement-slice` (either the single-slice-wave direct path or as a parallel-wave subagent spawn), it passes a `no-changelog` flag. Any `/implement-slice` receiving this flag MUST skip the changelog step. This ensures exactly one entry per feature — written by merge-ready, not by each slice.
+9. **FR-1.9:** The rule file MUST state that parallel-wave subagents MUST NOT write to `CHANGELOG.md`, consistent with Section 2 FR-2.6 (orchestrator-only writes).
+
+#### FR-2: Merge-Ready Finalization Step
+
+Add a changelog finalization step to `/merge-ready` that fires only after all quality gates PASS.
+
+1. **FR-2.1:** `src/commands/merge-ready.md` MUST gain a **"Finalization: Changelog Entry"** section. This section is explicitly NOT a numbered quality gate and is excluded from the gate pass/fail table and the auto-fix rerun loop.
+2. **FR-2.2:** The finalization step MUST execute only after all quality gates report PASS. It MUST NOT execute when the overall result is NOT MERGE READY.
+3. **FR-2.3:** The finalization step MUST retrieve the UTC timestamp by running `date -u +'%Y-%m-%d %H:%M'` via Bash. The instruction text MUST contain `date -u` explicitly.
+4. **FR-2.4:** The finalization step MUST delegate the file write to `doc-updater`, referencing `src/rules/changelog.md` as the format authority.
+5. **FR-2.5:** The finalization step MUST apply the idempotency guard (as defined in FR-1.6) before writing.
+
+#### FR-3: Standalone Implement-Slice Changelog Step
+
+Add a conditional changelog step to `/implement-slice` that fires only for standalone use (not pipeline-driven).
+
+1. **FR-3.1:** `src/commands/implement-slice.md` MUST gain a changelog step after the commit step (and before the scratchpad update step).
+2. **FR-3.2:** The step MUST include both skip conditions explicitly: (a) skip if running as a parallel-wave subagent; (b) skip if the `no-changelog` suppression flag was passed (i.e., the command was invoked by `/develop-feature`). If either condition holds, the step is a no-op.
+3. **FR-3.3:** When neither skip condition holds, the step MUST run `date -u` to retrieve the real UTC timestamp and write one changelog entry per the format in `src/rules/changelog.md`.
+4. **FR-3.4:** The step MUST apply the idempotency guard (as defined in FR-1.6) before writing.
+
+#### FR-4: Develop-Feature Suppression Flag
+
+Update `/develop-feature` to pass the `no-changelog` suppression flag to every `/implement-slice` it drives.
+
+1. **FR-4.1:** `src/commands/develop-feature.md` Phase 2 MUST include an instruction to pass the `no-changelog` suppression flag to every `/implement-slice` invocation it drives, covering both the single-slice-wave direct path and the parallel-wave subagent spawn prompt.
+2. **FR-4.2:** Phase 3 of `src/commands/develop-feature.md` (or the merge-ready delegation point) MUST note that the single changelog entry for the feature is written by merge-ready, not by any slice.
+
+#### FR-5: Doc-Updater Changelog Responsibility
+
+Update `src/agents/doc-updater.md` to recognise `CHANGELOG.md` as a file it is explicitly responsible for maintaining.
+
+1. **FR-5.1:** `src/agents/doc-updater.md` MUST list `CHANGELOG.md` in its responsibilities.
+2. **FR-5.2:** The existing constraint in `doc-updater.md` that prohibits creating new documentation files unless explicitly requested MUST explicitly exempt `CHANGELOG.md` — the agent MAY create or append to `CHANGELOG.md` as part of its normal responsibilities.
+3. **FR-5.3:** `src/agents/doc-updater.md` MUST reference `src/rules/changelog.md` as the format authority.
+
+#### FR-6: Global Workflow Documentation (claude.md)
+
+Update `src/claude.md` to surface changelog writing as a pipeline responsibility.
+
+1. **FR-6.1:** The `doc-updater` row in the Agency Roles table in `src/claude.md` MUST include changelog maintenance in its Responsibility column.
+2. **FR-6.2:** The Phase 4 quality-gates description in `src/claude.md` MUST reference the changelog finalization step.
+3. **FR-6.3:** The deliverables checklist (the items listed under `/bootstrap-feature` or the "What Every Plan MUST Include" section) in `src/claude.md` MUST include a `CHANGELOG.md entry` item.
+
+#### FR-7: Template and Scaffold
+
+Provide a starter `CHANGELOG.md` template that is dropped into new projects by `--init-project`.
+
+1. **FR-7.1:** A new file `templates/CHANGELOG.md` MUST exist containing the `# Changelog` header block only (no entries). It serves as the scaffold for newly initialised projects.
+2. **FR-7.2:** `install.sh`'s `scaffold_project()` function MUST contain a `cp` command that copies `templates/CHANGELOG.md` to `CHANGELOG.md` at the project root. This line MUST be present literally (verifiable by grep).
+3. **FR-7.3:** The `--help` text and scaffold "What gets created" output of `install.sh` MUST mention `CHANGELOG.md`.
+4. **FR-7.4:** `install.sh` MUST pass a syntax check (`bash -n install.sh`) after the scaffold change is applied.
+
+#### FR-8: README Documentation
+
+Document the changelog behavior in `README.md`.
+
+1. **FR-8.1:** `README.md` MUST contain a section or paragraph describing the changelog behavior, naming all four entry fields (Date+time UTC, Name, Summary, Details).
+2. **FR-8.2:** The documentation MUST identify both trigger points: merge-ready (after gates PASS) for features and fixes taken through quality gates, and standalone `/implement-slice` for standalone fixes.
+
+### 5.4 Non-Functional Requirements
+
+1. **NFR-1:** All changes are markdown prompt files and shell script text only. No JavaScript, TypeScript, Python, or other runtime code is introduced. The installer changes are limited to a file-copy line and help-text strings.
+2. **NFR-2:** Timestamps MUST be real, not hallucinated. Every instruction that writes a timestamp MUST call `date -u` via Bash and use the result. Instructions MUST explicitly forbid inventing or estimating the date or time.
+3. **NFR-3:** The feature is fully backward compatible. Projects that have no `CHANGELOG.md` are handled by the writer procedure's "create if absent" logic (FR-1.3). No existing pipeline behavior is removed or changed — only new steps are added at natural completion points.
+4. **NFR-4:** Exactly one changelog entry is written per completed unit of work. The combination of trigger-ownership rules (FR-1.7, FR-1.8), the suppression flag (FR-4.1), and the idempotency guard (FR-1.6) enforces this even under failure or re-run scenarios.
+5. **NFR-5:** No new agents are added. The total agent count remains at 13. Changelog writing is delegated to the existing `doc-updater` agent (merge-ready path) or performed inline (standalone-fix path). All existing agent counts in `README.md` and `src/claude.md` remain valid.
+6. **NFR-6:** Changes take effect on the next Claude Code session after re-install (`bash install.sh`). New projects scaffolded with `--init-project` after install receive a starter `CHANGELOG.md`. Existing projects that have no `CHANGELOG.md` will have one created automatically the first time a changelog write fires.
+
+### 5.5 Acceptance Criteria
+
+1. **AC-1:** `src/rules/changelog.md` exists and contains: the four required entry fields (FR-1.1), the day-grouping structure with newest-day-first ordering (FR-1.2), the five-step writer procedure (FR-1.3), an explicit `date -u` retrieval requirement that forbids inventing the value (FR-1.4), the 500-character cap (FR-1.5), the idempotency guard (FR-1.6), the two trigger-point definitions with ownership rules (FR-1.7), and the suppression-flag mechanism (FR-1.8).
+2. **AC-2:** `src/commands/merge-ready.md` contains a "Finalization: Changelog Entry" section. The section text contains `date -u`. The section explicitly states it runs only after all gates PASS and is not a numbered gate. It references the idempotency guard.
+3. **AC-3:** `src/commands/implement-slice.md` contains a changelog step after the commit step. The step text contains `date -u`. The step explicitly states both skip conditions (parallel-wave subagent and `no-changelog`/develop-feature suppression). It references the idempotency guard.
+4. **AC-4:** `src/commands/develop-feature.md` contains `no-changelog` in its Phase 2 subagent spawn prompt and in its single-slice-wave direct path. Phase 3 (or the merge-ready delegation point) notes that merge-ready writes the entry.
+5. **AC-5:** `src/agents/doc-updater.md` lists `CHANGELOG.md` in its responsibilities, explicitly exempts it from the "do not create new files" constraint, and references `src/rules/changelog.md`.
+6. **AC-6:** `grep -c "[Cc]hangelog" src/claude.md` returns at least 3 matches. The `doc-updater` role row, the Phase 4 description, and the deliverables checklist each contain a changelog reference (verifiable per anchor).
+7. **AC-7:** `templates/CHANGELOG.md` exists and starts with `# Changelog`. `grep -q 'cp "$SCRIPT_DIR/templates/CHANGELOG.md"' install.sh` passes (the literal copy line is present). `bash -n install.sh` passes (syntax valid).
+8. **AC-8:** `README.md` names all four entry fields and both trigger points.
+9. **AC-9:** No changelog-writing instruction in any modified file is missing the `date -u` retrieval requirement. Verifiable by searching all modified files for the word "changelog" and confirming each write-path occurrence also contains `date -u` or a reference to the rule that mandates it.
+10. **AC-10:** An end-to-end smoke test confirms: running `/merge-ready` on a passing feature creates or updates `CHANGELOG.md` at the project root with an entry under the correct `## YYYY-MM-DD` heading, using a real UTC timestamp, with Summary and Details fields, and Details not exceeding 500 characters. Running `/merge-ready` again for the same feature name does not create a duplicate entry.
+
+### 5.6 Affected Components
+
+#### New Files
+
+| File | Purpose | Install Destination |
+|------|---------|---------------------|
+| `src/rules/changelog.md` | Changelog format, writer procedure, trigger rules, idempotency guard, suppression flag | `~/.claude/rules/changelog.md` (global, via `install.sh` glob) |
+| `templates/CHANGELOG.md` | Starter changelog scaffold (header block only) for new projects | `CHANGELOG.md` at project root (via `--init-project`) |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `src/agents/doc-updater.md` | Add CHANGELOG.md to responsibilities; exempt it from the "do not create new files" constraint; reference `src/rules/changelog.md` | FR-5.1, FR-5.2, FR-5.3 |
+| `src/commands/merge-ready.md` | Add "Finalization: Changelog Entry" section (non-gate, post-all-gates-PASS, `date -u`, delegates to doc-updater, idempotency guard) | FR-2.1 through FR-2.5 |
+| `src/commands/implement-slice.md` | Add changelog step after commit (standalone-fix path only; both skip conditions; `date -u`; idempotency guard) | FR-3.1 through FR-3.4 |
+| `src/commands/develop-feature.md` | Add `no-changelog` suppression flag to Phase 2 spawn prompt and single-slice-wave path; note merge-ready owns the entry in Phase 3 | FR-4.1, FR-4.2 |
+| `src/claude.md` | Update doc-updater role row; add changelog to Phase 4 description; add CHANGELOG entry item to deliverables checklist | FR-6.1, FR-6.2, FR-6.3 |
+| `install.sh` | Add `cp templates/CHANGELOG.md CHANGELOG.md` inside `scaffold_project()`; update `--help` and scaffold output text | FR-7.2, FR-7.3, FR-7.4 |
+| `README.md` | Document changelog behavior: four entry fields, two trigger points | FR-8.1, FR-8.2 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/agents/architect.md` | Architecture review runs in Phase 1, before completion events. No changelog writing occurs here. |
+| `src/agents/ba-analyst.md` | Use case analysis runs in Phase 1. No changelog writing occurs here. |
+| `src/agents/qa-planner.md` | Test case generation runs in Phase 1. No changelog writing occurs here. |
+| `src/agents/prd-writer.md` | PRD writing runs in Phase 1. No changelog writing occurs here. |
+| `src/agents/planner.md` | Implementation planning runs in Phase 2. No changelog writing occurs here. |
+| `src/agents/test-writer.md` | Test writing happens within slices. The merge-ready or standalone-fix trigger covers the completion point. |
+| `src/agents/security-auditor.md` | Security review runs in Phase 4 as a quality gate. Changelog entry is written by the finalization step after all gates PASS. |
+| `src/agents/code-reviewer.md` | Code review runs in Phase 4. Same pattern as security-auditor. |
+| `src/agents/build-runner.md` | Build verification runs in Phase 4. Same pattern. |
+| `src/agents/e2e-runner.md` | E2E tests run in Phase 4. Same pattern. |
+| `src/agents/verifier.md` | Verification runs in Phase 4. Same pattern. |
+| `src/agents/refactor-cleaner.md` | Cleanup runs after waves complete. The merge-ready finalization step covers the completion point. |
+| `src/rules/git.md` | Git workflow unchanged. Atomic commits per slice are preserved. |
+| `src/rules/scratchpad.md` | Scratchpad rules unchanged. Changelog is a separate file with its own rule. |
+| `src/rules/tool-limitations.md` | Tool limitation awareness unchanged. |
+| `src/rules/error-recovery.md` | Deviation rules unchanged. The changelog finalization step is post-gates, not an error-recovery concern. |
+| `src/commands/bootstrap-feature.md` | Bootstrap runs documentation phases only. No completion event occurs here. |
+| `src/commands/context-refresh.md` | Context refresh is a read-only operation. No changelog writing occurs here. |
+| `templates/settings.json` | No new file permission is required; `CHANGELOG.md` is a standard project file. |
+| `CONTRIBUTING.md` | No contributor template changes needed for changelog; the rule file is the authority. |
+
+### 5.7 UI Changes
+
+Not applicable. This project is a collection of markdown prompt files with no user interface.
+
+### 5.8 Schema Changes
+
+Not applicable. This project has no database.
+
+### 5.9 Affected Endpoints
+
+Not applicable. This project has no API.
+
+### 5.10 Risks and Dependencies
+
+1. **Risk: Hallucinated timestamps.** If the agent invents a date or time instead of running `date -u`, changelog entries will be inaccurate and potentially misleading. Mitigation: FR-1.4 and FR-2.3 and FR-3.3 all require `date -u` to appear explicitly in the instruction text; AC-9 verifies this across all write paths. The QA test cases must assert that the `date -u` retrieval requirement is present in every write-path instruction.
+2. **Risk: Duplicate entries from misfire of trigger-ownership.** If both merge-ready and implement-slice fire for the same work unit, two entries would appear under the same day. Mitigation: FR-1.8 (suppression flag) prevents the primary path. FR-1.6 (idempotency guard) catches any residual case — the guard is the definitive safety net regardless of which trigger fires.
+3. **Risk: Details field over 500 characters.** Untrimmed Details could break the intended format. Mitigation: FR-1.5 mandates trimming and AC-1 requires the cap to be documented in the rule file.
+4. **Risk: install.sh regression.** Editing `scaffold_project()` in `install.sh` could introduce a syntax error. Mitigation: FR-7.4 requires `bash -n install.sh` to pass after the change; AC-7 asserts the syntax check. The existing backup mechanism (`~/.claude/backup-*`) protects the user's current config.
+5. **Risk: CHANGELOG.md is absent and the rule's "create if absent" logic is not reached.** If a project has no `CHANGELOG.md` and the agent skips the creation step, no entry is written. Mitigation: FR-1.3 step (2) explicitly requires creation if absent. The template (FR-7) ensures newly scaffolded projects have the file from day one, reducing the frequency of the "create" path.
+6. **Risk: Parallel-wave subagent writes to CHANGELOG.md.** Concurrent writes would corrupt or duplicate entries. Mitigation: FR-1.9 explicitly prohibits subagent writes to `CHANGELOG.md`. FR-3.2 includes parallel-wave subagent as an explicit skip condition in the implement-slice changelog step.
+7. **Dependency: Section 2 FR-2.6 (orchestrator-only writes).** The suppression-flag pattern and the parallel-subagent skip pattern follow the precedent established for `scratchpad.md` writes in Section 2. Section 2 is marked [DRAFT] but its orchestrator-only write requirement is the reference design.
+8. **Dependency: Section 4 FR-5 (merge-ready finalization pattern).** The "Post-Gate Lesson Capture" pattern established in Section 4 (a non-gate step that fires after all gates complete) is the structural precedent for the "Finalization: Changelog Entry" step in FR-2. Both sections modify the same file (`src/commands/merge-ready.md`) and their sections must coexist without conflict.

@@ -61,7 +61,7 @@ WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions
   agents/          13 specialized agent prompts
   commands/        5 SDLC pipeline commands
-  rules/           4 process rules
+  rules/           5 process rules
 
 WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
@@ -71,6 +71,7 @@ WHAT --init-project CREATES (in current directory):
   docs/PRD.md                 Product requirements document
   docs/qa/                    QA test case directory
   docs/use-cases/             Use case document directory
+  CHANGELOG.md                Changelog template (newest first, by UTC date)
 
 AFTER INSTALL:
   Start Claude Code in any project and describe a feature.
@@ -181,7 +182,7 @@ install_user_config() {
   echo "    claude.md           (workflow instructions)"
   echo "    agents/  (13 files — specialized agent prompts)"
   echo "    commands/ (5 files — SDLC pipeline commands)"
-  echo "    rules/   (4 files — process rules)"
+  echo "    rules/   (5 files — process rules)"
   echo ""
 
   if ! confirm "Proceed with installation?"; then
@@ -268,6 +269,9 @@ scaffold_project() {
 
   cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
   log_ok ".claude/settings.json"
+
+  cp "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md"
+  log_ok "CHANGELOG.md"
 
   # Create docs structure
   cat > "docs/PRD.md" << 'EOF'

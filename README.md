@@ -122,6 +122,26 @@ MERGE READY
 | `/merge-ready` | All 9 quality gates |
 | `/context-refresh` | Rebuild session context from scratchpad |
 
+### Changelog Automation
+
+Every completed unit of work appends an entry to a project-root `CHANGELOG.md`.
+
+Each entry records four fields:
+
+- **Date+time** — captured live in **UTC** (retrieved at write time, never guessed)
+- **Name** — the feature or fix name
+- **Summary** — a short, non-technical description of what changed
+- **Details** — a more specific description of the change (≤500 characters)
+
+Entries are grouped by UTC day, with the newest day first.
+
+There are two trigger points:
+
+- `/merge-ready` writes the entry after all quality gates pass — for features and gated fixes.
+- A standalone `/implement-slice` writes the entry for standalone fixes that do not go through merge-ready.
+
+### Example
+
 ```
 > Add user authentication with Google OAuth
 

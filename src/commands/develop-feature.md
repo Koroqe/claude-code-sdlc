@@ -19,7 +19,7 @@ After the plan is created by the Tech Lead:
 Read `.claude/scratchpad.md` to identify the current wave and its pending slices. Process waves in order (Wave 1 → Wave 2 → ... → Wave N).
 
 **Single-slice wave (or no `Wave:` fields in plan):**
-Follow the `/implement-slice` workflow directly — identical to current sequential behavior.
+Follow the `/implement-slice` workflow directly — identical to current sequential behavior. Invoke `/implement-slice` WITH the `no-changelog` suppression flag so that even this direct, no-wave-context path does NOT write a CHANGELOG.md entry — the single feature changelog entry is owned by merge-ready (see Phase 3).
 
 **Multi-slice wave (2+ pending slices in same wave):**
 Spawn parallel subagents — one Agent tool call per slice in a single message:
@@ -42,6 +42,7 @@ CRITICAL RULES FOR PARALLEL EXECUTION:
 2. Do NOT auto-continue to the next slice — return to the orchestrator after committing
 3. Chain git commands: git add <files> && git commit -m '...' (single command to prevent staging conflicts)
 4. Read the project's CLAUDE.md at .claude/CLAUDE.md for conventions
+5. This slice runs under a `no-changelog` suppression flag — do NOT write a CHANGELOG.md entry. The single feature changelog entry is owned by merge-ready (Phase 3)
 
 Report your result: PASS (with commit hash) or FAIL (with error details)."
 ```
@@ -67,6 +68,7 @@ Then commit cleanup as a single `chore(core): clean up <feature> implementation`
 
 ### Phase 3: Quality Gates
 Follow the `/merge-ready` workflow to run all quality gates.
+- **Changelog**: the single `CHANGELOG.md` entry for the feature is written here by merge-ready — NOT by any individual slice. Each slice ran under the `no-changelog` suppression flag, so merge-ready is the sole owner of the feature changelog entry.
 - If any gate FAILS: the main agent reads the gate's output and fixes the issues directly, then reruns only the failed gate(s)
 - Repeat until all gates pass OR 3 fix attempts exhausted per gate
 - Output final MERGE READY / NOT MERGE READY verdict

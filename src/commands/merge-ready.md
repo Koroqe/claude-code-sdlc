@@ -95,3 +95,28 @@ If any gate FAILS:
 5. If still failing after 3 attempts: report as NOT MERGE READY with specific blockers
 
 Do NOT just report failures — attempt to fix them first.
+
+## Finalization: Changelog Entry
+
+This step records a changelog entry once the feature is cleared for merge.
+
+**When it runs:**
+- Runs ONLY after all gates report PASS and the overall result is **MERGE READY**.
+- Does NOT run when the overall result is **NOT MERGE READY**. Skip it entirely in that case.
+
+**What it is NOT:**
+- This is explicitly NOT a numbered quality gate. It does NOT appear in the gate PASS/FAIL table.
+- It is NOT subject to the Auto-Fix Protocol rerun loop above. There is nothing to "rerun" or "fix to PASS" here — it is a post-success finalization action only.
+
+**Steps:**
+1. Retrieve the real UTC timestamp by running the command `date -u +'%Y-%m-%d %H:%M'`. NEVER invent, estimate, or hardcode this value — always use the actual command output.
+2. Apply the idempotency guard before writing: if an entry for the same feature name already exists under today's date, update it in place — do NOT create a duplicate entry.
+3. Delegate the actual file write to the `doc-updater` agent. It writes one changelog entry following the changelog rule (`changelog.md`) with these fields:
+   - **Feature name**
+   - **UTC time** (from the `date -u` command above)
+   - **Summary** — non-technical, plain-language description for end users
+   - **Details** — technical notes, capped at ≤500 characters
+   - Entries are day-grouped, newest-first.
+
+**Failure handling:**
+- If the `doc-updater` agent fails to write the entry, surface it as a **WARNING**. A changelog write failure does NOT fail the merge — the merge remains MERGE READY.
