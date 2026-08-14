@@ -1,6 +1,6 @@
 ## Feature: Plugin Repackaging and Harness CI (v4.0 roadmap F1)
 ## Branch: feat/plugin-repackaging
-## Status: implementing wave 1 slice 1/9
+## Status: quality-gates
 
 ## Plan
 
@@ -9,26 +9,51 @@ Docs: `docs/PRD.md` §6 · `docs/use-cases/plugin-repackaging_use_cases.md` (UC-
 Roadmap: `/Users/aleksei/.claude/plans/alright-there-s-a-lot-merry-minsky.md` (F1 of F1–F5)
 Bootstrap docs commit: 59222e9
 
-### Wave 1
-- [ ] Slice 1: Relocate `src/agents/` → `agents/` (git mv, 13 files, no content edits)
-- [ ] Slice 2: Version reconciliation → 4.0.0 (`README.md:8`, `install.sh:22`, `install.sh:47`) + PRD status (§2/§5 SHIPPED, §3 SUPERSEDED, §4 DRAFT)
+### Wave 1 [complete]
+- [x] Slice 1: Relocate `src/agents/` → `agents/` (13 files, all R100 renames) — dccf59a
+- [x] Slice 2: Version → 4.0.0 (README:8, install.sh:22, install.sh:47) + PRD §2/§5 SHIPPED, §3 SUPERSEDED, §4 DRAFT — d305e82
 
-### Wave 2
-- [ ] Slice 3: `src/commands/*.md` → `skills/<name>/SKILL.md` + frontmatter (description, argument-hint, arguments, allowed-tools) + `$ARGUMENTS` + FR-8 preflight in develop-feature/bootstrap-feature
+### Wave 2 [complete]
+- [x] Slice 3: `src/commands/*.md` → `skills/<name>/SKILL.md` + 4 frontmatter fields + `$ARGUMENTS` + FR-8 preflight — 1e95634
 
-### Wave 3
-- [ ] Slice 4: `.claude-plugin/plugin.json` + `marketplace.json` (name `claude-code-sdlc`, version 4.0.0)
-- [ ] Slice 5: CI validators batch 1 — `scripts/ci/lib/validate-core.js` + validate-{agents,skills,hooks}.js + fixtures
+### Wave 3 [complete]
+- [x] Slice 4: `.claude-plugin/{plugin,marketplace}.json` — `claude plugin validate .` passes clean — c6f4fd5
+- [x] Slice 5: `scripts/ci/lib/validate-core.js` + validate-{agents,skills,hooks}.js + fixtures — 67547fb
 
-### Wave 4
-- [ ] Slice 6: CI validators batch 2 — validate-{personal-paths,unicode-safety,version-consistency}.js + `.github/workflows/ci.yml` (sole owner; `permissions: contents: read`)
-- [ ] Slice 7: Slash-command reference sweep — 20 of 21 scoped files (install.sh's 10 refs belong to Slice 8)
+### Wave 4 [complete]
+- [x] Slice 6: validate-{personal-paths,unicode-safety,version-consistency}.js + `.github/workflows/ci.yml` — cfe80ed
+- [x] Slice 7: Reference sweep, 19 files (install.sh's 10 refs deferred to Slice 8) — 4319cf6
 
-### Wave 5
-- [ ] Slice 8: Installer core rebuild — `manifests/owned-files.txt`, receipt, legacy cleanup, atomic backup, plugin-layout sources — **Pre-review: security (MANDATORY)**
+### Wave 5 [complete]
+- [x] Slice 8: Installer core rebuild — manifest, receipt, legacy cleanup, atomic backup — 2bfe515
 
-### Wave 6
-- [ ] Slice 9: Installer lifecycle flags — `--uninstall`, `--restore`, `--dry-run` — **Pre-review: security (MANDATORY)**
+### Wave 6 [complete]
+- [x] Slice 9: `--uninstall`, `--restore`, `--dry-run` with receipt∩manifest intersection — a8a88cf
+
+## CI status (all local, 21/21 green)
+
+6 validators pass on HEAD; each fails on its seeded fixture; each fails on an empty tree
+(anti-vacuity); placeholder positive control passes; `bash -n install.sh` passes; AC-9
+(no `node`/`jq` in install.sh) passes and was proven falsifiable against a dirtied copy.
+Fixture runs use `--min` to lower the anti-vacuity floor so each fixture fails for its own
+defect rather than tripping the count check first.
+
+## Deviations from plan (recorded)
+
+- Slice 6 extended `scripts/ci/lib/validate-core.js` (a Slice 5 file) with a `walkFiles` helper and
+  a `--min` flag. Safe because waves ran sequentially, not in parallel — no exclusive-ownership
+  conflict. Rule 1/2 (free).
+- `.gitignore` added out-of-slice (`.DS_Store`, `.vscode/`) so Gate 0's clean-tree check can pass.
+- Slice 7 swept 19 files, not 20: `.claude/scratchpad.md` is orchestrator-owned and excluded.
+
+## OPEN QUESTION blocking Slice 8 design
+
+Does `install.sh` still install agents into `~/.claude/agents/`?
+- If YES: user-level copies may permanently shadow the plugin's agents, making plugin updates
+  ineffective — the plugin's `agents/` becomes dead weight.
+- If NO: an install.sh-only adopter (UC-10, NFR-2) has no agents to delegate to.
+The manifest `owns` list (19 entries incl. 13 agents) currently assumes YES.
+Awaiting authoritative answer on subagent precedence between user-level and plugin sources.
 
 ## Key design (binding — do not re-litigate)
 
