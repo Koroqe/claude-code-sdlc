@@ -5,22 +5,22 @@ Thanks for your interest in improving the autonomous SDLC pipeline! This project
 ## What You Can Contribute
 
 ### Improve Agent Prompts
-Each agent lives in its own file under `src/agents/`. The prompts are the core of this project — better prompts mean better results.
+Each agent lives in its own file under `agents/` (the plugin's agent directory). The prompts are the core of this project — better prompts mean better results.
 
-- `src/agents/architect.md` — Architecture review logic
-- `src/agents/ba-analyst.md` — Use case analysis
-- `src/agents/planner.md` — Implementation planning
-- `src/agents/test-writer.md` — Test generation
+- `agents/architect.md` — Architecture review logic
+- `agents/ba-analyst.md` — Use case analysis
+- `agents/planner.md` — Implementation planning
+- `agents/test-writer.md` — Test generation
 - ... and 8 more
 
 **How to improve a prompt:**
 1. Fork the repo
-2. Edit the agent file in `src/agents/`
+2. Edit the agent file in `agents/`
 3. Test locally: `bash install.sh --local --yes` to install your changes
 4. Open a PR with a clear description of what changed and why
 
 ### Add New Agents
-Want to add a new specialized role? Create a new `.md` file in `src/agents/` following the existing format:
+Want to add a new specialized role? Create a new `.md` file in `agents/` following the existing format:
 
 ```markdown
 ---
@@ -44,8 +44,8 @@ Description of what this agent does.
 
 **Choosing the model tier:** Default to `sonnet` for new agents. Use `opus` only if the agent's output cascades through multiple downstream agents AND a wrong decision cannot be caught by automated verification (typecheck, test, build). See `docs/PRD.md` Section 3 for the full rationale.
 
-### Improve Commands
-Pipeline commands live in `src/commands/`. These define the workflow steps like `/bootstrap-feature` and `/implement-slice`.
+### Improve Skills (formerly "Commands")
+Pipeline commands ship as Claude Code plugin skills at `skills/<name>/SKILL.md` (e.g. `skills/bootstrap-feature/SKILL.md`, `skills/implement-slice/SKILL.md`). They resolve as `/claude-code-sdlc:<name>`; the bare form (e.g. `/bootstrap-feature`, `/implement-slice`) works automatically as long as no other installed plugin defines a same-named skill.
 
 ### Improve Rules
 Process rules live in `src/rules/`. These enforce conventions like git workflow, error recovery, and scratchpad usage.
@@ -59,11 +59,14 @@ Project scaffold templates live in `templates/`. These are what users get when t
 # Install from your local checkout
 bash install.sh --local --yes
 
-# Verify files were installed
+# Verify files were installed (commands no longer copy to ~/.claude/commands/ —
+# they ship only as the plugin's skills, validated separately below)
 ls ~/.claude/agents/
-ls ~/.claude/commands/
 ls ~/.claude/rules/
 cat ~/.claude/claude.md
+
+# Verify the plugin's agents and skills
+claude plugin validate .
 
 # Test in a real project
 cd your-project

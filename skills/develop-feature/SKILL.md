@@ -33,6 +33,8 @@ Known limitation: this preflight only fires when this skill is invoked explicitl
 
 ## Pipeline
 
+*(The workflows named below — `/bootstrap-feature`, `/implement-slice`, `/merge-ready` — are plugin skills, resolvable in full as `/claude-code-sdlc:<name>`. The bare form used throughout this file works automatically as long as no other installed plugin defines a skill by the same name.)*
+
 ### Phase 1: Bootstrap (Documentation)
 Follow the `/bootstrap-feature` workflow for the requested feature.
 This produces: PRD section, use-case document, architecture review, QA test cases, implementation plan, feature branch, and initialized scratchpad.
