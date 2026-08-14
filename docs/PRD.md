@@ -906,3 +906,225 @@ Not applicable. This project has no API.
 6. **Risk: Parallel-wave subagent writes to CHANGELOG.md.** Concurrent writes would corrupt or duplicate entries. Mitigation: FR-1.9 explicitly prohibits subagent writes to `CHANGELOG.md`. FR-3.2 includes parallel-wave subagent as an explicit skip condition in the implement-slice changelog step.
 7. **Dependency: Section 2 FR-2.6 (orchestrator-only writes).** The suppression-flag pattern and the parallel-subagent skip pattern follow the precedent established for `scratchpad.md` writes in Section 2. Section 2 is marked [DRAFT] but its orchestrator-only write requirement is the reference design.
 8. **Dependency: Section 4 FR-5 (merge-ready finalization pattern).** The "Post-Gate Lesson Capture" pattern established in Section 4 (a non-gate step that fires after all gates complete) is the structural precedent for the "Finalization: Changelog Entry" step in FR-2. Both sections modify the same file (`src/commands/merge-ready.md`) and their sections must coexist without conflict.
+
+---
+
+## 6. Plugin Repackaging and Harness CI
+
+**Status:** [DRAFT]
+**Date:** 2026-08-14
+**Priority:** High
+**Related:** Section 3 (status changed to `[SUPERSEDED]` by this feature — see FR-6.4), Section 4 (NFR-1 "no runtime code is introduced" is directly contradicted — see NFR-1 below; the contradiction should also be annotated in Section 4 itself when F5's planned Section 4 revision lands, so it is not discoverable only by reading this section), Section 5 (`src/rules/changelog.md` is one of the files in the slash-command reference sweep, FR-7)
+
+**Architect verdict (conditional PASS, addressed in this revision):** The hybrid plugin+memory split is APPROVED. JavaScript is APPROVED but scoped: **Node is CI-only — `install.sh` MUST NOT invoke `node` or `jq`.** Five structural/major gaps identified in review are closed below: the legacy `~/.claude/commands/` migration gap (FR-4), CI validators that pass vacuously on zero matched files (FR-5.8), a manifest format install.sh can parse without `node`/`jq` (FR-4.1), a per-install receipt for future drift detection (FR-4.8), a loud (non-blocking) preflight warning when the memory layer is missing (FR-8), and a corrected slash-command sweep scope (FR-7.2).
+
+### 6.1 Description
+
+Repackage the harness's executable assets (agents, commands) as a native Claude Code plugin distributed via `.claude-plugin/`, while keeping the always-on memory layer (`src/claude.md`, `src/rules/*.md`) on the existing `install.sh` mechanism. Add harness CI that validates every shipped asset on every push, reconcile the version and PRD-status drift that has accumulated since v2.1.0/v3.1.0, and sweep the 393 bare slash-command references created by the rename to plugin-namespaced skills.
+
+**Why:** The harness has shipped `curl | bash` into `~/.claude` with no version stamp, no update path, and no uninstall since its first release. Claude Code has since shipped a native plugin system (`/plugin install`, `.claude-plugin/plugin.json`, `skills/`) that gives this harness a real distribution and update mechanism. Foundation work is required before any of the other v4.0 features (hook infrastructure, blocking guards, verification upgrades, tier routing, self-improvement) can land, because they all assume the plugin scaffold, the CI validators, and a manifest-driven installer exist.
+
+**Design Decisions:**
+1. **Hybrid plugin + memory installer, not a pure-plugin migration.** Claude Code auto-loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as user memory — the sole channel by which the mandatory autonomous-pipeline instruction reaches every session. Plugins have no user-memory component type. A pure-plugin migration would pass `claude plugin validate`, resolve agents in `/agents`, and silently delete the pipeline instruction while every check stayed green. `src/claude.md` and `src/rules/*.md` therefore stay on `install.sh`; only `agents/`, `skills/`, and (in a later feature) `hooks/` move into the plugin.
+2. **Commands become skills with real frontmatter, not a lift-and-shift.** All 5 files in `src/commands/*.md` currently ship with zero YAML frontmatter and no `$ARGUMENTS` handling. Converting them to `skills/<name>/SKILL.md` is the point at which they gain `description`, `argument-hint`, `arguments`, and `allowed-tools` — this is a functional upgrade, not a rename.
+3. **Manifest-driven install/uninstall, never glob-based — and the manifest covers retired v3.1 paths too.** `~/.claude/agents/` on the reference machine holds 16 files today; 3 of them (`brand-guardian.md`, `demo-script-writer.md`, `social-copywriter.md`) are the user's own agents, unrelated to this harness. A glob-based `rm ~/.claude/agents/*.md` would destroy them. The manifest enumerates exactly what the harness owns, and all removal logic is scoped to that manifest. Critically, the manifest is **not** just "files this feature installs" — it MUST also enumerate v3.1-era paths this feature retires (`~/.claude/commands/*.md`, 5 files), because those legacy copies are loaded by Claude Code as user-level slash commands and can shadow the plugin skill exactly as a stale agent copy would shadow a plugin agent. A per-install receipt (FR-4.8) records what each specific install actually placed, closing the same ambiguity for all *future* retirements.
+4. **CI validators must be falsifiable, including against an empty match set.** A validator that only ever passes on good input proves nothing about whether it actually checks anything — and a validator that silently passes when its glob matches zero files (e.g. run before `agents/`/`skills/` exist) is exactly as vacuous as one that never fails. Every validator added by this feature ships with a deliberately seeded bad fixture it must fail on, and asserts an expected minimum matched-file count rather than trusting an empty glob.
+5. **Version and status debt is paid down here, not carried forward.** README badge (`3.1.0`) and `install.sh` `VERSION` (`2.1.0`) have drifted since Section 1 shipped. PRD Sections 2 and 5 are marked `[DRAFT]` despite being shipped; Section 3 is `[DRAFT]` and will never ship as originally specified because F4 (model routing, outside this feature's scope) supersedes it with a profile-driven rewrite mechanism. This feature corrects the drift and marks Section 3 `[SUPERSEDED]` rather than `[SHIPPED]`, since none of Section 3's FRs are implemented by this feature.
+6. **JavaScript is introduced deliberately, not incidentally — and scoped to CI only.** This repo has been markdown-and-bash only since inception (Section 1.4 NFR-1, Section 2.4 NFR-1, Section 4.4 NFR-1 all state "no runtime code"). CI validators require a real parser for YAML frontmatter and JSON schemas that bash cannot reasonably provide. This feature explicitly supersedes that constraint for CI tooling only (see NFR-1) and requires an explicit architect verdict before implementation proceeds, per the roadmap's deliverables checklist. The architect's approval is conditional on a hard boundary: **`install.sh` itself MUST NOT invoke `node` or `jq`** — the Node runtime is a CI-time dependency only, never a dependency of the installer a user runs locally. This is why FR-4.1 mandates a manifest format `install.sh` can parse with POSIX shell built-ins alone.
+
+### 6.2 User Story
+
+As a developer using the Claude Code SDLC harness, I want to install and update the pipeline's agents and commands as a native Claude Code plugin — with a safe, reversible installer and CI that catches broken assets before they ship — so that the harness has a real distribution mechanism instead of an unversioned `curl | bash` copy, without losing the always-on pipeline instruction that today only `install.sh` can deliver.
+
+### 6.3 Functional Requirements
+
+#### FR-1: Plugin Packaging
+
+Create the plugin manifest and marketplace descriptor required for `claude plugin validate` and `/plugin install` to work against this repo.
+
+1. **FR-1.1:** `.claude-plugin/plugin.json` MUST exist and MUST set, at minimum, the schema-required `name` field. It MUST additionally set `version`, `description`, `author`, and `license`, plus the component path fields (`agents`, `skills`, `hooks`) pointing at this repo's `agents/`, `skills/`, and (reserved for F2) `hooks/` directories.
+2. **FR-1.2:** `.claude-plugin/marketplace.json` MUST exist and MUST define a single, self-referencing plugin entry with `source: "./"`.
+3. **FR-1.3:** `claude plugin validate .` run from the repo root MUST exit `0` against the manifest and marketplace files produced by FR-1.1 and FR-1.2.
+
+#### FR-2: Asset Relocation
+
+Move the harness's executable assets into the plugin's expected directory layout, upgrading commands to skills in the process.
+
+1. **FR-2.1:** All 13 files currently in `src/agents/*.md` MUST be relocated to `agents/*.md` at the plugin root, with filenames and frontmatter content preserved byte-for-byte except where FR-6 requires a version-string change.
+2. **FR-2.2:** Each of the 5 files currently in `src/commands/*.md` MUST become `skills/<name>/SKILL.md`, where `<name>` is the command's existing name (e.g. `src/commands/develop-feature.md` → `skills/develop-feature/SKILL.md`).
+3. **FR-2.3:** Each relocated skill file MUST gain real YAML frontmatter with, at minimum, `description`, `argument-hint`, `arguments`, and `allowed-tools` fields. Today all 5 command files have **no YAML frontmatter at all**.
+4. **FR-2.4:** Any skill whose command today accepts a free-text argument (e.g. `/develop-feature <feature description>`) MUST document `$ARGUMENTS` handling in the skill body, consistent with the literal-token flag rule used elsewhere in the pipeline's design.
+
+#### FR-3: Memory Layer Stays on install.sh (hard architectural constraint)
+
+Preserve `install.sh` as the sole delivery mechanism for the harness's always-on user memory, because the plugin system has no equivalent component type.
+
+1. **FR-3.1:** `src/claude.md` MUST NOT be relocated into the plugin's directory layout. It MUST continue to be installed to `~/.claude/claude.md` by `install.sh`.
+2. **FR-3.2:** `src/rules/*.md` MUST NOT be relocated into the plugin's directory layout. Every file in `src/rules/` MUST continue to be installed to `~/.claude/rules/*.md` by `install.sh`.
+3. **FR-3.3:** Every affected doc that describes installation (`README.md`, and any plugin-facing install instructions this feature adds) MUST state the rationale explicitly: Claude Code auto-loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as user memory, and that is the only mechanism by which the mandatory autonomous-pipeline instruction reaches every session. Plugins have no user-memory component type — a pure-plugin migration would pass `claude plugin validate`, resolve agents in `/agents`, and silently delete the pipeline instruction while every check stays green.
+4. **FR-3.4:** `README.md` MUST state prominently, in the installation instructions, that installing only the plugin (`/plugin install`) is insufficient on its own — `bash install.sh` remains a required step for the memory layer to load.
+
+#### FR-4: Manifest-Driven Install/Uninstall
+
+Give `install.sh` a manifest of exactly what the harness owns in `~/.claude` — including v3.1-era paths this feature retires — plus a per-install receipt, and make all removal operations manifest/receipt-scoped. All of FR-4 MUST be satisfied without `install.sh` invoking `node` or `jq` (see NFR-1).
+
+1. **FR-4.1 (manifest format and structure):** A new file `manifests/owned-files.txt` (or a strictly one-path-per-line JSON string array if JSON is preferred for CI-side tooling — either way, the format MUST be parseable deterministically by POSIX shell built-ins, with no `node`/`jq` dependency) MUST enumerate the harness's `~/.claude` footprint in two labeled sections:
+   - **`owns`** — the v4.0 footprint this feature installs and is responsible for: the 13 agent copies, the 5 rule copies, and `claude.md`.
+   - **`legacy`** — v3.1-era paths this feature retires and must actively clean up: the 5 files under `~/.claude/commands/*.md`. These are not "installed" by v4.0, but they are loaded by Claude Code as user-level slash commands and can shadow the plugin skill of the same name if left behind — this section exists specifically to close that gap.
+   Comment lines (prefixed `#`) and blank lines MUST be permitted and ignored by the parser.
+2. **FR-4.2:** `install.sh` MUST gain an `--uninstall` flag that removes every file listed under **both** the `owns` and `legacy` sections of the manifest (or, when a receipt from FR-4.8 exists, prefers the receipt per FR-4.8's fallback order).
+3. **FR-4.3:** `install.sh` MUST gain a `--restore <backup-dir>` flag that restores `~/.claude` from a specified timestamped backup directory produced by the existing backup mechanism. The `<backup-dir>` argument MUST be validated per FR-4.7's path-safety rules before any restore operation touches disk.
+4. **FR-4.4:** `install.sh` MUST gain a `--dry-run` flag. When combined with `--uninstall`, it MUST print exactly the files (from the manifest's `owns` and `legacy` sections, or from the receipt if present) that would be removed, without removing anything.
+5. **FR-4.5:** All removal logic (uninstall, and any pre-install cleanup of stale copies, including the legacy `commands/` cleanup) MUST operate only on manifest or receipt entries. It MUST NOT use glob-based deletion (e.g. `rm ~/.claude/agents/*.md` or `rm ~/.claude/commands/*.md`) against any directory.
+6. **FR-4.6:** The manifest's `owns` section MUST NOT list `brand-guardian.md`, `demo-script-writer.md`, or `social-copywriter.md` — the 3 files in `~/.claude/agents/` (16 total on the reference install) that are the user's own agents, unrelated to this harness. These 3 files MUST survive any `install.sh` install or `--uninstall` run unchanged.
+7. **FR-4.7 (path-safety validation, security requirement):** Before any manifest or receipt entry is used in a destructive operation (uninstall, restore, or pre-install cleanup), `install.sh` MUST validate that the entry is a relative path, is normalized (no `.` or `..` path segments), and resolves to a location confined under `~/.claude`. An entry that fails this validation (e.g. a crafted `../.ssh/id_rsa`) MUST be rejected and MUST abort the destructive operation for that entry with a visible error, not silently skip it.
+8. **FR-4.8 (per-install receipt, same dependency-free format as the manifest):** `install.sh` MUST write an install receipt at `~/.claude/.sdlc-receipt` (no `.json` extension — the receipt MUST use the same newline-delimited, POSIX-parseable format as `manifests/owned-files.txt`, not JSON: line 1 is the installed version string, each remaining line is one relative file path that install placed, path-safety-validated per FR-4.7). This mirrors FR-4.1's format choice for the same reason: `install.sh` MUST NOT invoke `node` or `jq` (NFR-1), so the receipt — which `install.sh` itself must read back during `--uninstall` — cannot be JSON parsed by hand-rolled bash any more than the manifest can. `--uninstall` and `--dry-run --uninstall` MUST prefer the receipt when present and fall back to the manifest's `owns`/`legacy` sections when it is absent. Rationale: (a) it removes the "manifest describes v4.0 but disk holds v3.1" ambiguity for all future retirements, since a manifest alone cannot distinguish what a specific past install actually wrote; (b) it doubles as the machine-side version stamp that F2a's session-start drift check will need — today there is no way to detect that the plugin was updated while the memory layer was not. **The receipt cannot replace the manifest for *this* upgrade** — v3.1 wrote no receipt, so the `legacy` section of the manifest (FR-4.1) is the only mechanism available for cleaning up the v3.1 `commands/` footprint on this first v4.0 upgrade.
+9. **FR-4.9 (drop the legacy commands install path):** `install.sh` MUST stop copying `src/commands/*.md` to `~/.claude/commands/` — that copy loop (`install.sh:208-211` today) is removed, since commands become plugin skills (FR-2.2). The `commands/ (5 files)` line in the pre-install confirmation banner (`install.sh`, near line 184) and the `commands/ 5 SDLC pipeline commands` line in `--help` output (`install.sh`, near line 63) MUST both be removed, along with the corresponding `mkdir -p ".../commands"` and post-copy count logic.
+10. **FR-4.10:** The existing timestamped backup behavior (`~/.claude/backup-*`) MUST be retained unchanged by this feature. Per the mandatory security-auditor pre-review noted in Section 6.10, the backup write itself MUST be atomic (write to a temp directory, then rename into place) rather than an in-place copy, so a failure mid-backup cannot leave a partial, unusable backup.
+
+#### FR-5: Harness CI
+
+Add automated CI that validates every shipped agent, skill, and (forward-looking) hook asset, plus repo-hygiene checks, on every push.
+
+1. **FR-5.1:** A new workflow `.github/workflows/ci.yml` MUST run the validators defined below on every push and pull request. The workflow MUST declare least-privilege permissions explicitly — `permissions: contents: read` at the workflow (or job) level, with no broader default token scope. This is the condition the architect set for the CI slice **not** requiring security pre-review (contrast the mandatory `security-auditor` pre-review required for the `install.sh` slice, Section 6.10), so it is stated here as a requirement, not left as an implementation detail.
+2. **FR-5.2:** An agent-frontmatter validator MUST check every file in `agents/*.md`: the `name` field matches the filename, all required fields (`name`, `description`, `tools`, `model`) are present, and the `tools` list contains only valid tool names.
+3. **FR-5.3:** A skill-frontmatter validator MUST check every `skills/*/SKILL.md` file for the fields required by FR-2.3 (`description`, `argument-hint`, `arguments`, `allowed-tools`).
+4. **FR-5.4:** A hook-config validator MUST exist and validate `hooks/hooks.json` schema conformance where present. This is forward-looking for F2 (hook infrastructure, out of this feature's implementation scope) — the validator must exist, run in CI, and pass trivially (no hooks shipped yet) against a seeded fixture that proves it fails on malformed hook config.
+5. **FR-5.5:** A personal-path validator MUST scan every shipped file for the pattern `/Users/...` (or equivalent absolute personal paths) and fail CI if any are found.
+6. **FR-5.6:** A unicode-safety validator MUST scan every shipped prompt file (`agents/*.md`, `skills/*/SKILL.md`, `src/claude.md`, `src/rules/*.md`) for zero-width characters and homoglyph substitutions and fail CI if any are found.
+7. **FR-5.7:** A version-consistency validator MUST check that the version string in `README.md`, `install.sh`, and `.claude-plugin/plugin.json` are identical, and fail CI if they diverge.
+8. **FR-5.8:** Each validator added under FR-5.2 through FR-5.7 MUST be proven both ways in CI: it MUST exit `0` against the current `HEAD`, and it MUST exit non-zero when run against a deliberately seeded bad fixture asset checked into the test scaffolding for that validator.
+9. **FR-5.9 (validators must not pass vacuously on zero matched files):** Every validator that operates on a glob (`agents/*.md`, `skills/*/SKILL.md`, etc.) MUST assert an expected minimum matched-file count for that glob and MUST exit non-zero if it matches zero files, rather than trusting the glob and reporting success on an empty match set. This closes the gap where a validator run before `agents/` or `skills/` is populated would report a vacuous pass. (Ordering CI so validators run after the assets they check exist is an implementation-planning concern for the slice breakdown; this requirement is what the validator itself must enforce regardless of when it runs.)
+
+#### FR-6: Version and Status Reconciliation
+
+Correct the version-string drift and PRD-status drift that has accumulated since the last release.
+
+1. **FR-6.1:** `README.md`'s version badge (currently `3.1.0` at `README.md:8`) and `install.sh`'s `VERSION` variable (currently `"2.1.0"` at `install.sh:22`) MUST be set to the same value as part of this feature's implementation.
+2. **FR-6.2:** `docs/PRD.md` Section 2 (Execution Waves) `**Status:**` field MUST be changed from `[DRAFT]` to `[SHIPPED]` as part of this feature's implementation, reflecting that it is already implemented.
+3. **FR-6.3:** `docs/PRD.md` Section 5 (Changelog Automation) `**Status:**` field MUST be changed from `[DRAFT]` to `[SHIPPED]` as part of this feature's implementation, reflecting that it is already implemented.
+4. **FR-6.4:** `docs/PRD.md` Section 3 (Agent Model Tier Optimization) `**Status:**` field MUST be changed from `[DRAFT]` to `[SUPERSEDED]` as part of this feature's implementation, with a note that it is superseded by the profile-driven model-routing rewrite mechanism planned for a later roadmap feature (F4), and that none of Section 3's functional requirements are implemented as originally specified.
+5. **FR-6.5:** `docs/PRD.md` Section 4 (Self-Improvement Loop) `**Status:**` field MUST remain `[DRAFT]` — it is not implemented by this feature or any shipped feature to date.
+
+#### FR-7: Slash-Command Reference Sweep
+
+Reconcile documentation and prompt files with the fact that plugin skills resolve as `/<plugin-name>:<name>`, with bare-name resolution only succeeding absent a collision.
+
+1. **FR-7.1:** Every reference to a bare command name (e.g. `/develop-feature`) across the files enumerated in FR-7.2 MUST be reviewed. Where the reference documents plugin-invoked usage, it MUST be updated to show both the namespaced form (`/<plugin-name>:<name>`) and the bare form, with a note that bare resolution only succeeds when no other installed plugin defines a colliding skill name.
+2. **FR-7.2 (verified scope — 21 files, corrected from an earlier undercount of 17):** The scope was re-verified against the actual repository tree with `grep` before being written here, because the previous count was wrong in three ways: `docs/use-cases/` now holds **6** files, not 5 (this feature's own `plugin-repackaging_use_cases.md` is itself a sweep target); `docs/qa/` now holds **5** files, not 4; and `install.sh` was omitted despite containing **10** bare command references in its help text and pre-install banner. `templates/CLAUDE.md` was checked and contains **zero** bare command references, so it is correctly excluded. The verified 21-file scope is: `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/PRD.md`, `install.sh`, all 6 files under `docs/use-cases/` (`pipeline-hardening_use_cases.md`, `execution-waves_use_cases.md`, `model-tier-optimization_use_cases.md`, `self-improvement-loop_use_cases.md`, `changelog-automation_use_cases.md`, `plugin-repackaging_use_cases.md`), all 5 files under `docs/qa/` (`pipeline-hardening_test_cases.md`, `execution-waves_test_cases.md`, `model-tier-optimization_test_cases.md`, `self-improvement-loop_test_cases.md`, `changelog-automation_test_cases.md`), `src/claude.md`, `src/rules/changelog.md`, the two relocated skill files (`skills/develop-feature/SKILL.md` and `skills/merge-ready/SKILL.md` — the two files identified as containing the highest concentration of self-referencing command mentions), and `.claude/scratchpad.md`.
+3. **FR-7.3:** No file in scope MUST be left with an unreviewed bare command reference. This MUST be verifiable by a targeted `grep -rn` sweep across the 21 files that confirms every remaining bare reference was deliberately reviewed and, where applicable, given its namespaced counterpart — not merely left present by omission.
+
+#### FR-8: Loud, Non-Blocking Missing-Memory-Layer Preflight
+
+Close the silent half-migration failure mode (Risk 3 / UC-9-E1) where all green signals (`claude plugin validate`, `/plugin install`, `/agents`) can be true while the memory layer — and with it the mandatory pipeline instruction — is entirely absent.
+
+1. **FR-8.1:** `skills/develop-feature/SKILL.md` and `skills/bootstrap-feature/SKILL.md` MUST each open with a preflight step that verifies `~/.claude/claude.md` exists and contains the harness's pipeline instruction (a recognizable marker string from the file, e.g. a heading unique to the installed `claude.md`).
+2. **FR-8.2:** If the check in FR-8.1 fails (file absent, or present but missing the marker), the skill MUST emit a **visible warning** naming `bash install.sh` as the fix, and then **continue execution** — per the autonomy contract, no new gate introduced by this feature may dead-end an unattended run, so this is a warning, never a block.
+3. **FR-8.3:** This preflight explicitly does **not** cover the unprefixed-request case (a feature request made without invoking `/develop-feature` or `/bootstrap-feature` directly) — that path has no natural entry point for this check within this feature's scope. The residual gap is closed by F2a's `session:start:spine` hook (out of scope for this feature), which runs on every session regardless of how the pipeline is entered.
+
+### 6.4 Non-Functional Requirements
+
+1. **NFR-1 (supersedes Section 4.4 NFR-1 for this feature's scope, Node is CI-only):** This feature introduces JavaScript to a repo that has been markdown-and-bash only since inception. The introduction is constrained: Node.js only, **zero runtime dependencies** (no `npm install` step in CI beyond the Node toolchain itself), all CI validators share **one common wrapper module** rather than duplicating parsing logic per validator, and every validator entry point asserts a minimum Node version and fails loudly (not silently) if unmet. This directly contradicts Section 4.4 NFR-1 ("no runtime code is introduced") and Section 1.4/2.4's identical constraint. **This section supersedes those NFR-1 statements for CI tooling only** — agent, skill, and rule prompt files remain markdown-only. **`install.sh` never invokes `node` or `jq`; the Node boundary stays at CI** (enforced by FR-4.1's POSIX-parseable manifest format). Per the roadmap's deliverables checklist, the `architect` review for this feature MUST explicitly rule on introducing JavaScript, not silently wave it through — this review returned a conditional PASS scoping Node to CI-only, which this NFR now states as a hard constraint. **Note:** this contradiction with Section 4.4 NFR-1 should also be annotated directly in Section 4 itself when F5's planned Section 4 revision lands (Section 4 already requires revision for NFR-1/NFR-4/NFR-5/FR-1.5 per the roadmap), so the contradiction is not discoverable only by reading this section.
+2. **NFR-2 (backward compatibility):** Existing installs MUST keep working without modification. A user who installs only via `install.sh` and never installs the plugin MUST retain full pipeline functionality (agents resolve via `~/.claude/agents/`, memory layer loads as today). A user who does both (installs via `install.sh` and installs the plugin) MUST NOT end up with conflicting or duplicated agent/command resolution — this is the shadowing risk covered in Risks 1 and 3 below (legacy commands and hand-edited agent copies, respectively), and the manifest-driven cleanup in FR-4 is the mitigation.
+3. **NFR-3 (rollback):** `install.sh --uninstall` followed by `install.sh --restore <backup-dir>` MUST return `~/.claude` to its exact prior state. This MUST be verifiable by `diff -r` between the pre-uninstall state and the post-restore state, returning no differences (excluding the timestamped backup directory itself).
+4. **NFR-4 (no autonomy regression):** The harness's defining property is that `/develop-feature` runs to merge-ready without human steering. Nothing introduced by this feature may add a step a human must remember to run manually. CI runs automatically on push; the plugin install/uninstall lifecycle is a one-time human action, not a per-feature pipeline step, and must not be inserted into `/develop-feature`, `/bootstrap-feature`, `/implement-slice`, or `/merge-ready`.
+5. **NFR-5 (asset budget):** The v4.0 hard budget is ≤16 agents, ≤10 skills, ≤12 hooks. This feature adds **0 new agents and 0 new skills** — it relocates the existing 13 agents and 5 commands (as skills) without changing their count. Post-feature totals remain 13 agents / 5 skills / 0 hooks, well inside budget.
+
+### 6.5 Acceptance Criteria
+
+1. **AC-1:** `claude plugin validate .` run from the repo root exits `0`.
+2. **AC-2:** Each CI validator added under FR-5.2 through FR-5.7 exits `0` when run against the repository at `HEAD`, **and** exits non-zero when run against its corresponding deliberately seeded bad fixture asset.
+3. **AC-3:** `install.sh --dry-run --uninstall` lists exactly the files enumerated in the manifest's `owns` and `legacy` sections (or the install receipt, if present) — including all 5 legacy `~/.claude/commands/*.md` files — and lists none of the 3 personal agent files (`brand-guardian.md`, `demo-script-writer.md`, `social-copywriter.md`). A subsequent real `install.sh --uninstall` (removing both `owns` and `legacy` entries, including `~/.claude/commands/`) followed by `install.sh --restore <backup-dir>` round-trips `~/.claude` to its prior state, verified by `diff -r` returning no differences.
+4. **AC-4:** No unreviewed bare command reference remains across the 21 files enumerated in FR-7.2 — verifiable by a `grep -rn` sweep of bare command patterns (`/develop-feature`, `/bootstrap-feature`, `/implement-slice`, `/merge-ready`, `/context-refresh`) across those files, confirming each occurrence has been updated per FR-7.1 or is otherwise not a plugin-invocation reference (e.g. a heading label).
+5. **AC-5:** `ls agents/*.md | wc -l` returns `13`; `ls skills/*/SKILL.md | wc -l` returns `5`. Each skill file's frontmatter contains `description` and `argument-hint`.
+6. **AC-6:** `grep -c "VERSION=" install.sh` and the version string in `.claude-plugin/plugin.json` and the `README.md` badge all report the identical version value.
+7. **AC-7:** `docs/PRD.md` Section 2 and Section 5 `**Status:**` fields read `[SHIPPED]`; Section 3 reads `[SUPERSEDED]`; Section 4 remains `[DRAFT]`.
+8. **AC-8:** `src/claude.md` and every file under `src/rules/` remain present at their original paths (not relocated into the plugin) and `install.sh` still copies them to `~/.claude/claude.md` and `~/.claude/rules/*.md` respectively.
+9. **AC-9:** `install.sh` invokes neither `node` nor `jq` anywhere in its execution paths — verifiable with a portable (BSD- and GNU-grep-compatible) word-boundary search, e.g. `grep -E '(^|[^a-zA-Z])(node|jq)([^a-zA-Z]|$)' install.sh` (excluding comment lines), returning no matches. (This repo is developed on macOS with BSD grep; GNU-only syntax such as `\b` MUST NOT be assumed by QA test cases derived from this AC.)
+10. **AC-10:** A manifest or receipt entry containing a path-traversal payload (e.g. `../.ssh/id_rsa`) is rejected by `install.sh`'s path-safety validation before any destructive operation runs, and the rejection is visible in output, not silent.
+11. **AC-11:** `install.sh` writes an install receipt at `~/.claude/.sdlc-receipt` (no `.json` extension) at install time, in the same newline-delimited format as the manifest (version on line 1, one relative file path per remaining line). Running `install.sh --dry-run --uninstall` immediately after a fresh install shows dry-run output sourced from the receipt (verifiable by removing/renaming the manifest and confirming the dry-run output is unchanged).
+12. **AC-12:** Each CI validator from FR-5.2 through FR-5.7, when run against a scratch directory containing zero matching files for its glob, exits non-zero rather than reporting a vacuous pass.
+13. **AC-13:** Running `skills/develop-feature/SKILL.md`'s preflight against a state where `~/.claude/claude.md` is absent produces a visible warning naming `bash install.sh` and the skill's subsequent steps still execute (the run is not blocked).
+14. **AC-14:** `grep -c "commands/" install.sh` (checked at the pre-install banner and `--help` text locations) shows those specific lines removed, and the `src/commands/*.md` → `~/.claude/commands/` copy loop no longer exists in `install.sh`.
+
+### 6.6 Affected Components
+
+#### New Files
+
+| File | Purpose |
+|------|---------|
+| `.claude-plugin/plugin.json` | Plugin manifest — `name`, `version`, `description`, `author`, `license`, component paths (FR-1.1) |
+| `.claude-plugin/marketplace.json` | Self-referencing marketplace descriptor, `source: "./"` (FR-1.2) |
+| `manifests/owned-files.txt` | POSIX-parseable manifest, `owns` (v4.0 footprint) and `legacy` (retired v3.1 `commands/` footprint) sections — no `node`/`jq` dependency (FR-4.1) |
+| `~/.claude/.sdlc-receipt` (written at install time, not shipped in the repo; newline-delimited, no `.json` extension — same POSIX-parseable format as the manifest) | Per-install receipt — installed version (line 1) and exact file list for that install (remaining lines); `--uninstall` prefers this over the manifest when present (FR-4.8) |
+| `.github/workflows/ci.yml` | Harness CI workflow — runs all validators on push/PR (FR-5.1) |
+| `scripts/ci/validate-agents.js` | Agent frontmatter validator (FR-5.2) |
+| `scripts/ci/validate-skills.js` | Skill frontmatter validator (FR-5.3) |
+| `scripts/ci/validate-hooks.js` | Hook config validator, forward-looking for F2 (FR-5.4) |
+| `scripts/ci/validate-personal-paths.js` | Personal-path (`/Users/...`) scanner (FR-5.5) |
+| `scripts/ci/validate-unicode-safety.js` | Zero-width/homoglyph character scanner (FR-5.6) |
+| `scripts/ci/validate-version-consistency.js` | Cross-file version-string consistency check (FR-5.7) |
+
+#### Relocated Files
+
+| From | To | Related Requirements |
+|------|----|-----------------------|
+| `src/agents/*.md` (13 files) | `agents/*.md` | FR-2.1 |
+| `src/commands/bootstrap-feature.md` | `skills/bootstrap-feature/SKILL.md` (+ real frontmatter) | FR-2.2, FR-2.3 |
+| `src/commands/develop-feature.md` | `skills/develop-feature/SKILL.md` (+ real frontmatter) | FR-2.2, FR-2.3, FR-2.4 |
+| `src/commands/implement-slice.md` | `skills/implement-slice/SKILL.md` (+ real frontmatter) | FR-2.2, FR-2.3 |
+| `src/commands/merge-ready.md` | `skills/merge-ready/SKILL.md` (+ real frontmatter) | FR-2.2, FR-2.3 |
+| `src/commands/context-refresh.md` | `skills/context-refresh/SKILL.md` (+ real frontmatter) | FR-2.2, FR-2.3 |
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `install.sh` | Add `--uninstall`, `--restore <dir>`, `--dry-run`; manifest/receipt-driven removal covering both `owns` and `legacy` (incl. `~/.claude/commands/`); path-safety validation; atomic (temp-dir + rename) backup writes; drop the `src/commands/*.md` → `~/.claude/commands/` copy loop and its banner/help-text lines (~184, ~63); write install receipt; version bump per FR-6.1; command reference sweep (10 references) | FR-4.2 through FR-4.10, FR-6.1, FR-7.1, FR-7.2 |
+| `README.md` | Version badge fix; plugin install instructions; explicit "plugin alone is not enough" note; command reference sweep | FR-3.4, FR-6.1, FR-7.1 |
+| `CONTRIBUTING.md` | Command reference sweep | FR-7.1, FR-7.2 |
+| `CHANGELOG.md` | Command reference sweep | FR-7.1, FR-7.2 |
+| `docs/PRD.md` | This section (new); status field updates to Sections 2, 3, 5 | FR-6.2, FR-6.3, FR-6.4 |
+| `docs/use-cases/*.md` (6 files) | Command reference sweep | FR-7.1, FR-7.2 |
+| `docs/qa/*.md` (5 files) | Command reference sweep | FR-7.1, FR-7.2 |
+| `src/claude.md` | Command reference sweep (memory-layer file — stays in place per FR-3.1) | FR-7.1, FR-7.2 |
+| `src/rules/changelog.md` | Command reference sweep (memory-layer file — stays in place per FR-3.2) | FR-7.1, FR-7.2 |
+| `.claude/scratchpad.md` | Command reference sweep | FR-7.1, FR-7.2 |
+| `skills/develop-feature/SKILL.md` (relocated, see below) | Add missing-memory-layer preflight warning | FR-8.1, FR-8.2, FR-8.3 |
+| `skills/bootstrap-feature/SKILL.md` (relocated, see below) | Add missing-memory-layer preflight warning | FR-8.1, FR-8.2, FR-8.3 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `src/rules/git.md` | Not part of the 21-file command-reference sweep; no plugin-related content. |
+| `src/rules/tool-limitations.md` | Not part of the 21-file command-reference sweep; no plugin-related content. |
+| `src/rules/error-recovery.md` | Not part of the 21-file command-reference sweep; no plugin-related content. |
+| `src/rules/scratchpad.md` | Not part of the 21-file command-reference sweep; no plugin-related content. |
+| `templates/CLAUDE.md` | Checked with `grep` for bare command references (per FR-7.2 verification) — contains zero; explicitly excluded from the sweep scope. |
+| `templates/*` (other than `CLAUDE.md`) | Project scaffolding templates are unaffected by this feature's plugin/CI scope; out of scope per the approved plan (project scaffold ownership is unchanged). |
+
+### 6.7 UI Changes
+
+None. This is a prompt-and-shell-script harness repo with no web application and no user interface; there is nothing in this feature that adds one.
+
+### 6.8 Schema Changes
+
+None. This project has no database of any kind; nothing in this feature introduces one.
+
+### 6.9 Affected Endpoints
+
+None. This project has no API server; `claude plugin validate`, CI workflows, and `install.sh` are local/CLI operations, not network endpoints.
+
+### 6.10 Risks and Dependencies
+
+1. **Risk (highest priority — architect V1, STRUCTURAL): legacy `~/.claude/commands/` is an uncovered destructive-migration gap.** `install.sh` today copies the 5 command files to `~/.claude/commands/`. v4.0 stops doing that (commands become plugin skills, FR-2.2). If the manifest only enumerates "files the harness installs" (the v4.0 footprint), the 5 legacy `commands/*.md` copies are never enumerated anywhere and survive both upgrade and uninstall untouched. Claude Code loads `~/.claude/commands/*.md` as user-level slash commands, which participate in command resolution alongside the plugin skill of the same name — so after a "successful" v4.0 upgrade, `/develop-feature` can resolve to the **stale v3.1 command prompt** while `claude plugin validate` passes and `/agents` looks clean. This is the exact shadowing failure mode Risk 2 describes for agents, recurring for commands. Mitigation: FR-4.1 gives the manifest two sections, `owns` (v4.0 footprint) and `legacy` (v3.1-era retired paths, i.e. the 5 `commands/*.md` files); FR-4.2 and FR-4.9 require upgrade and `--uninstall` to actively remove `legacy` entries and to stop writing to `~/.claude/commands/` at all; AC-3 and AC-14 make this machine-verifiable.
+2. **Risk: Destructive uninstall vs. the user's 3 personal agents.** `~/.claude/agents/` holds 16 files today; 3 (`brand-guardian.md`, `demo-script-writer.md`, `social-copywriter.md`) are the user's own agents, unrelated to this harness. Any glob-based cleanup (`rm ~/.claude/agents/*.md`) would destroy them. Mitigation: FR-4 mandates manifest-driven removal scoped to the `owns`/`legacy` manifest (or the install receipt, FR-4.8), `--dry-run` verification before any destructive run, path-safety validation on every entry before use (FR-4.7), and the existing timestamped backup — now written atomically (temp-dir + rename, FR-4.10) — retained as a second line of defense.
+3. **Risk: Personal agent copies shadowing plugin agents.** 3 of the 16 installed copies in `~/.claude/agents/` (`architect.md`, `planner.md`, `security-auditor.md`) were hand-edited on the reference machine to `model: fable`, diverging from the repo. If cleanup does not run correctly during migration, these stale, hand-edited copies will continue to shadow the plugin's freshly installed agents, and the migration will look complete (`claude plugin validate` passes, `/plugin install` succeeds) while actually running stale prompts. Mitigation: verify via `/agents` after install that plugin agents resolve and no stale `~/.claude/agents/*.md` copy shadows them; this check is part of the cross-cutting verification for the whole v4.0 roadmap, not just this feature.
+4. **Risk: The memory-layer split means "just install the plugin" is insufficient.** Because `src/claude.md` and `src/rules/*.md` cannot move into the plugin (FR-3), a user who runs `/plugin install` and stops there gets agents and skills but never receives the mandatory autonomous-pipeline instruction — the harness looks installed but is not autonomous, and all three signals (`claude plugin validate`, `/plugin install`, `/agents`) report green while the pipeline instruction is gone (Risk under UC-9-E1). Mitigation: FR-3.4 requires `README.md` to state this prominently (documentation-only, insufficient on its own); FR-8 closes the gap loudly at runtime — `skills/develop-feature/SKILL.md` and `skills/bootstrap-feature/SKILL.md` preflight-check for `~/.claude/claude.md` and warn (never block) if it's missing; this does not cover the unprefixed-request entry path, which is deferred to F2a's `session:start:spine` hook. NFR-2 requires both install paths (install.sh-only, and install.sh-plus-plugin) to be fully functional and tested.
+5. **Risk: JavaScript in a previously markdown-and-bash-only repo, now scoped by the architect to CI only.** This directly contradicts the "no runtime code" NFR-1 stated in Sections 1, 2, and 4. Introducing a new language, toolchain, and dependency surface into a repo that has had none is an architectural change, not a routine addition. Mitigation: NFR-1 constrains the introduction tightly (Node only, zero runtime dependencies, one shared wrapper module, minimum-version assertion), the architect review returned a conditional PASS with a hard boundary — `install.sh` itself MUST NOT invoke `node` or `jq` (AC-9) — and FR-4.1's manifest format is POSIX-parseable specifically so the installer never crosses that boundary.
+6. **Risk: 393-reference blast radius, verified scope 21 files (corrected from an initial undercount of 17).** The slash-command reference sweep (FR-7) touches 393 references across the files spanning documentation, use cases, QA test cases, rule files, `install.sh`, and the scratchpad. A partial or careless sweep leaves stale bare-command documentation that misleads users once plugin-namespaced resolution is live. Mitigation: FR-7.2 enumerates the verified 21-file scope (6 use-case files, 5 QA files, and `install.sh`'s 10 references were previously missed); FR-7.3 and AC-4 require a machine-verifiable `grep -rn` sweep confirming no file has an unreviewed bare reference, not a best-effort pass.
+7. **Dependency: `architect` verdict on NFR-1 (received — conditional PASS).** Per the roadmap's deliverables checklist, this feature's architecture review ruled on introducing JavaScript to the repo: the hybrid plugin+memory split is APPROVED, and JavaScript is APPROVED but scoped to CI-only, with `install.sh` barred from invoking `node` or `jq`. This section has been revised to make that boundary a hard requirement (NFR-1, AC-9) rather than advisory.
+8. **Dependency: Foundation for the rest of the v4.0 roadmap.** F2a (hook infrastructure), F2b (blocking guards), F3 (verification upgrade), F4 (tier routing), and F5 (self-improvement loop) all assume the plugin scaffold, CI validators, and manifest-driven installer this feature produces already exist. This feature must land first; the roadmap's stated execution order is F1 → F2a → F2b, with F3/F4 following in either order and F5 last.
+9. **Dependency: Mandatory `security-auditor` pre-review for the `install.sh` manifest/uninstall/restore/dry-run slice.** The slice implementing FR-4 (manifest, `--uninstall`, `--restore`, `--dry-run`, path-safety validation, receipt) performs destructive deletion inside `$HOME`, accepts a user-supplied `--restore <backup-dir>` argument that is read and copied from, and must guarantee backup atomicity (temp-dir + rename, never an in-place write that could leave a partial, unusable backup mid-failure). Given this combination — destructive filesystem operations, an attacker-influenceable path argument, and the path-traversal surface described in FR-4.7 — this slice REQUIRES a `security-auditor` review before merge, not just the standard Phase 4 gate; this is called out explicitly here so the implementation plan schedules it as a pre-review, not a post-hoc check.
+10. **Dependency: This machine already runs additional hook entries in `~/.claude/settings.json`** from unrelated tooling. This feature does not add hooks (reserved for F2a), but the CI hook-config validator (FR-5.4) must be written against the eventual `hooks/hooks.json` schema without assuming it is the only hook configuration present on a user's machine.
