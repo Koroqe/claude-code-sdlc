@@ -4,7 +4,7 @@
 
 **System context (do not assume otherwise):** `claude-code-sdlc` is a universal, multi-project harness distributed as a source repo plus a bash installer (`install.sh`), now also distributed as a native Claude Code plugin (`.claude-plugin/`). There is no web application, no database, and no HTTP API anywhere in this system. Every scenario below is either a local filesystem operation (`install.sh`, `~/.claude/*`), a Claude Code CLI operation (`/plugin install`, `/agents`, skill invocation), or a CI process (`.github/workflows/ci.yml`, `scripts/ci/*.js`). Actors are: the **Harness Maintainer** (works inside this repo), the **Adopting Developer** (installs/uses the harness in their own projects), **Claude Code** itself (loads agents/skills/hooks/memory and resolves names), and **CI** (the GitHub Actions runner).
 
-**Manifest format note:** `manifests/owned-files.txt` is plain newline-delimited text — `#` comments and `owns`/`legacy` section markers are allowed — parseable entirely by POSIX shell tools; `install.sh` is explicitly forbidden from invoking `node` or `jq`. Each data line is **one relative path per line, relative to `~/.claude`** (e.g. `agents/planner.md`, `commands/develop-feature.md`), never an absolute path. `install.sh` resolves every entry as `~/.claude/<entry>` and rejects (does not act on) any entry containing a leading `/` (absolute) or a `..` traversal segment — see UC-3-EC4. The file has two sections: **`owns`** (the v4.0 footprint — the 13 agent paths, `claude.md`, and the 5 rule paths) and **`legacy`** (v3.1-era paths this release retires, currently the 5 command files formerly copied to `~/.claude/commands/` by v3.1's `install.sh:208-211`). Both `owns` and `legacy` entries are removed by `--uninstall`; only `legacy` entries are removed (never refreshed) by an upgrade install, since v4.0 no longer writes anything to `~/.claude/commands/`. A separate, per-machine **install receipt** (`~/.claude/.sdlc-receipt`, same relative-path format, FR-4.8) records exactly what a specific `install.sh` run placed and is `--uninstall`'s preferred removal source, with the manifest as fallback — see UC-1 and UC-5.
+**Manifest format note:** `manifests/owned-files.txt` is plain newline-delimited text — `#` comments and `owns`/`legacy` section markers are allowed — parseable entirely by POSIX shell tools; `install.sh` is explicitly forbidden from invoking `node` or `jq`. Each data line is **one relative path per line, relative to `~/.claude`** (e.g. `agents/planner.md`, `commands/develop-feature.md`), never an absolute path. `install.sh` resolves every entry as `~/.claude/<entry>` and rejects (does not act on) any entry containing a leading `/` (absolute) or a `..` traversal segment — see UC-3-EC4. The file has two sections: **`owns`** (the v4.0 footprint this feature installs — **6 entries**: `claude.md` and the 5 rule paths; agents are explicitly NOT in `owns`, since Claude Code's subagent precedence would let a same-named user-level agent permanently shadow the plugin's un-namespaced agent — see FR-2.5, FR-4.11) and **`legacy`** (v3.1-era paths this release retires — **18 entries**: the 5 command files formerly copied to `~/.claude/commands/` by v3.1's `install.sh:208-211`, plus the 13 agent files formerly copied to `~/.claude/agents/` by v3.1's `install.sh`). Both `owns` and `legacy` entries are removed by `--uninstall`; `owns` entries are refreshed by an upgrade install; `legacy` entries (both the 5 commands and the 13 agents) are only ever removed, never written, by an upgrade install, since v4.0 no longer writes anything to `~/.claude/commands/` or `~/.claude/agents/`. A separate, per-machine **install receipt** (`~/.claude/.sdlc-receipt`, same relative-path format, FR-4.8) records exactly the 6 `owns` paths a specific `install.sh` run placed — never agent paths — and is `--uninstall`'s preferred removal source for the `owns` footprint, with the manifest as fallback; `legacy` cleanup always comes from the manifest regardless of receipt presence, since the receipt only ever records what v4.0's own `install.sh` wrote — see UC-1 and UC-5.
 
 ---
 
@@ -22,21 +22,20 @@
 1. Developer runs `bash install.sh` from the repo root.
 2. `install.sh` reads `manifests/owned-files.txt` and finds none of the listed harness-owned paths exist yet under `~/.claude` — the pre-install cleanup pass has nothing to remove.
 3. `install.sh` creates a timestamped backup directory per the existing (unchanged) backup behavior, noting there was no prior installation to preserve.
-4. `install.sh` copies each of the 13 agent files from the repo's `agents/*.md` into `~/.claude/agents/*.md`.
-5. `install.sh` copies `src/claude.md` → `~/.claude/claude.md` and each `src/rules/*.md` → `~/.claude/rules/*.md`.
-6. `install.sh` writes an install receipt to `~/.claude/.sdlc-receipt` (FR-4.8) — the same newline-delimited, relative-path format as the manifest: line 1 is the installed version, and each following line is one relative path (relative to `~/.claude`) for a file this specific install operation placed — exactly the 13 agent paths, `claude.md`, and the 5 rule paths.
-7. `install.sh` prints a success summary: version installed, file counts, receipt location, backup location.
-8. Developer opens Claude Code and runs `/plugin marketplace add <repo-path>`, then `/plugin install <plugin-name>`.
-9. `claude plugin validate .` exits `0`.
-10. Claude Code registers the plugin's 5 skills (`develop-feature`, `bootstrap-feature`, `implement-slice`, `merge-ready`, `context-refresh`) and makes the plugin's own copies of the 13 agents available.
-11. Developer runs `/agents` — all 13 harness agents are listed and resolve without ambiguity (the freshly-written `~/.claude/agents/` copies and the plugin's copies have identical content immediately after a fresh install).
+4. `install.sh` copies `src/claude.md` → `~/.claude/claude.md` and each `src/rules/*.md` → `~/.claude/rules/*.md`. It does **not** write anything to `~/.claude/agents/` — agents ship via the plugin only (FR-2.5, FR-4.11); a same-named user-level agent would permanently shadow the plugin's un-namespaced copy.
+5. `install.sh` writes an install receipt to `~/.claude/.sdlc-receipt` (FR-4.8) — the same newline-delimited, relative-path format as the manifest: line 1 is the installed version, and each following line is one relative path (relative to `~/.claude`) for a file this specific install operation placed — exactly `claude.md` and the 5 rule paths (6 entries total; no agent paths).
+6. `install.sh` prints a success summary: version installed, file counts, receipt location, backup location.
+7. Developer opens Claude Code and runs `/plugin marketplace add <repo-path>`, then `/plugin install <plugin-name>`.
+8. `claude plugin validate .` exits `0`.
+9. Claude Code registers the plugin's 5 skills (`develop-feature`, `bootstrap-feature`, `implement-slice`, `merge-ready`, `context-refresh`) and makes the plugin's own copies of the 13 agents available.
+10. Developer runs `/agents` — all 13 harness agents are listed and resolve to the plugin's copies without ambiguity, since `install.sh` never wrote a competing copy under `~/.claude/agents/` to shadow them.
 
 **Postconditions**:
-- `~/.claude/agents/` contains the 13 harness agent files (plus any pre-existing personal files, untouched)
+- `~/.claude/agents/` is untouched by `install.sh` (any pre-existing personal files remain, unrelated to this install)
 - `~/.claude/claude.md` and `~/.claude/rules/*.md` exist and match the repo's `src/claude.md` / `src/rules/*.md`
-- `~/.claude/.sdlc-receipt` exists; its first line equals the installed version, and its remaining lines are exactly the relative paths of the files this install placed (13 agent paths + `claude.md` + 5 rule paths) — no more, no fewer
+- `~/.claude/.sdlc-receipt` exists; its first line equals the installed version, and its remaining lines are exactly the relative paths of the files this install placed (`claude.md` + 5 rule paths — 6 entries) — no more, no fewer, and never an agent path
 - The plugin's 5 skills are invocable
-- `/agents` shows all 13 harness agents resolved with no drift between sources
+- `/agents` shows all 13 harness agents resolved to the plugin, with no local `~/.claude/agents/` copy to drift from or shadow them
 
 ### Alternative Flows
 - **UC-1-A1: Plugin installed before `install.sh`** — order is reversed
@@ -59,9 +58,9 @@
 - **UC-1-EC2**: Developer re-runs `bash install.sh` a second time immediately with no changes in between. The run is idempotent — identical content overwrites identical content, the script reports success again, and a new (redundant) timestamped backup directory is created reflecting the already-migrated state.
 
 ### Data Requirements
-- **Input**: Repo checkout contents (`agents/*.md`, `src/claude.md`, `src/rules/*.md`), `manifests/owned-files.txt`
-- **Output**: Populated `~/.claude/agents/`, `~/.claude/claude.md`, `~/.claude/rules/*.md`; a new `~/.claude/.sdlc-receipt`; a plugin registration in Claude Code's plugin state
-- **Side Effects**: New directories/files created under `~/.claude`; the install receipt written; a timestamped backup directory created; no network calls beyond `/plugin marketplace add` reading the local repo path
+- **Input**: Repo checkout contents (`src/claude.md`, `src/rules/*.md`), `manifests/owned-files.txt`; separately, the plugin's `agents/*.md`, `skills/*/SKILL.md` (installed via `/plugin install`, not `install.sh`)
+- **Output**: `~/.claude/claude.md`, `~/.claude/rules/*.md`; a new `~/.claude/.sdlc-receipt` (6 entries); a plugin registration in Claude Code's plugin state; `~/.claude/agents/` is not written by this flow
+- **Side Effects**: New directories/files created under `~/.claude` (`claude.md`, `rules/`, `.sdlc-receipt`); a timestamped backup directory created; no network calls beyond `/plugin marketplace add` reading the local repo path
 
 ---
 
@@ -78,35 +77,34 @@
 **Trigger**: Developer updates their local checkout to v4.0 and runs `bash install.sh`
 
 ### Primary Flow (Happy Path)
-1. `install.sh` detects an existing installation (v3.1 `claude.md` and/or agent files matching manifest-known names are present).
-2. `install.sh` creates a timestamped backup directory containing a full copy of `~/.claude` in its pre-upgrade state — this backup captures `~/.claude/commands/` as it stood before removal, in addition to agents/rules/claude.md.
-3. `install.sh` reads the manifest's `owns` section and, for each of the 13 harness agent paths listed, overwrites the file on disk with the current v4.0 content — refreshing any drift, including hand-edited content if present on this machine (see UC-8).
-4. `install.sh` overwrites `~/.claude/claude.md` and each `~/.claude/rules/*.md` with the v4.0 content.
-5. `install.sh` reads the manifest's `legacy` section — the 5 v3.1 command paths under `~/.claude/commands/` — and removes each one present on disk. v4.0 no longer installs or refreshes commands via `install.sh`; commands are now plugin skills, and leaving the legacy files in place would let them shadow the plugin's skills of the same name (see UC-2-E3).
-6. `install.sh` does not touch the 3 personal agent files — they are absent from both the `owns` and `legacy` sections and are never enumerated.
-7. `install.sh` writes (this machine's first) install receipt to `~/.claude/.sdlc-receipt`, per FR-4.8, recording the new version and the relative paths of every file this upgrade run placed (13 agent paths + `claude.md` + 5 rule paths) — v3.1 never wrote one, so this is the point at which the receipt-based removal path (UC-5) becomes available on this machine.
-8. `install.sh` prints a summary: version bumped from the old value to the new value, 13 agent files refreshed, 5 legacy command files removed, receipt written, memory layer refreshed, backup location.
-9. Developer runs `/plugin marketplace add <repo-path>` + `/plugin install <plugin-name>`.
-10. `/agents` shows all 13 harness agents; since the `~/.claude/agents/` copies were just refreshed to match the repo, they are consistent with the plugin's copies.
-11. Developer types `/develop-feature <feature description>` — it resolves to the plugin's skill, because no `~/.claude/commands/develop-feature.md` remains on disk to compete in command-name resolution.
+1. `install.sh` detects an existing installation (v3.1 `claude.md` and/or legacy agent files matching manifest-known names are present).
+2. `install.sh` creates a timestamped backup directory containing a full copy of `~/.claude` in its pre-upgrade state — this backup captures `~/.claude/commands/` and `~/.claude/agents/` as they stood before removal, in addition to rules/claude.md.
+3. `install.sh` overwrites `~/.claude/claude.md` and each `~/.claude/rules/*.md` with the v4.0 content (the `owns` section — 6 entries, refreshed as normal).
+4. `install.sh` reads the manifest's `legacy` section — 18 entries: the 5 v3.1 command paths under `~/.claude/commands/` plus the 13 v3.1 agent paths under `~/.claude/agents/` — and removes each one present on disk. v4.0 does not install or refresh commands or agents via `install.sh` at all; commands are now plugin skills and agents ship via the plugin only, and leaving either set of legacy files in place would let them shadow the plugin's assets of the same name (see UC-2-E3 for commands, UC-8 for agents). Unlike the `owns` refresh in step 3, this is a pure removal — there is no v4.0 agent or command content for `install.sh` to write in its place.
+5. `install.sh` does not touch the 3 personal agent files — they are absent from both the `owns` and `legacy` sections and are never enumerated.
+6. `install.sh` writes (this machine's first) install receipt to `~/.claude/.sdlc-receipt`, per FR-4.8, recording the new version and the relative paths of every file this upgrade run placed — exactly `claude.md` and the 5 rule paths (6 entries; never agent paths, since none were written) — v3.1 never wrote one, so this is the point at which the receipt-based removal path (UC-5) becomes available on this machine.
+7. `install.sh` prints a summary: version bumped from the old value to the new value, 13 legacy agent files removed, 5 legacy command files removed, receipt written, memory layer refreshed, backup location.
+8. Developer runs `/plugin marketplace add <repo-path>` + `/plugin install <plugin-name>`.
+9. `/agents` shows all 13 harness agents; since the stale `~/.claude/agents/` copies were removed rather than left in place, they resolve cleanly to the plugin's copies with no local shadow.
+10. Developer types `/develop-feature <feature description>` — it resolves to the plugin's skill, because no `~/.claude/commands/develop-feature.md` remains on disk to compete in command-name resolution.
 
 **Postconditions**:
-- `~/.claude/agents/` contains 16 files: 13 refreshed harness copies + 3 unchanged personal files
-- No content drift remains between `~/.claude/agents/*.md` and the repo's `agents/*.md`
+- `~/.claude/agents/` contains exactly the 3 personal files — the 13 legacy harness copies were removed, not refreshed, since `install.sh` never writes agent content
+- No local `~/.claude/agents/*.md` copy of any of the 13 harness agents remains to drift from or shadow the plugin's `agents/*.md`
 - `~/.claude/claude.md` and `~/.claude/rules/*.md` match v4.0
-- `~/.claude/.sdlc-receipt` now exists (it did not before this upgrade), listing the version and the files this upgrade placed
+- `~/.claude/.sdlc-receipt` now exists (it did not before this upgrade), listing the version and the 6 `owns` files this upgrade placed
 - `~/.claude/commands/` is empty or absent — `ls ~/.claude/commands/*.md 2>/dev/null | wc -l` returns `0`
 - `/develop-feature` (and the other 4 skill names) resolve to the plugin's skill, not a legacy local command
-- A timestamped backup of the pre-upgrade state exists, including the removed `~/.claude/commands/` content
+- A timestamped backup of the pre-upgrade state exists, including the removed `~/.claude/commands/` and `~/.claude/agents/` content
 
 ### Alternative Flows
-- **UC-2-A1: Upgrade closes an existing shadowing gap as a side effect** — if this machine already has hand-edited agent copies (the `fable`-model scenario in UC-8), a correctly-run upgrade's unconditional overwrite in step 3 refreshes them to the repo's content automatically, closing the gap without any extra developer action. The same is true of legacy commands: a correctly-run upgrade's `legacy`-section removal in step 5 closes the command-shadowing gap covered in UC-2-E3, as a normal side effect of the upgrade rather than a separate remediation step.
+- **UC-2-A1: Upgrade closes an existing shadowing gap as a side effect** — if this machine already has hand-edited agent copies (the `fable`-model scenario in UC-8), a correctly-run upgrade's `legacy`-section removal in step 4 deletes them automatically, closing the gap without any extra developer action — there is no local copy left to shadow the plugin, and no repo content is written in its place. The same is true of legacy commands: a correctly-run upgrade's `legacy`-section removal closes the command-shadowing gap covered in UC-2-E3, as a normal side effect of the upgrade rather than a separate remediation step.
 
 ### Error Flows
 - **UC-2-E1: Upgrade is interrupted mid-way** — see UC-7 for the full interrupted-install scenario and recovery path.
-- **UC-2-E2: The manifest's `owns` section is missing one of the 13 agent paths (authoring defect)**
-  1. The manifest fails to enumerate one harness agent's path in `owns`
-  2. That one file is never refreshed during the upgrade
+- **UC-2-E2: The manifest's `legacy` section is missing one of the 13 agent paths (authoring defect)**
+  1. The manifest fails to enumerate one harness agent's path in `legacy`
+  2. That one file is never removed during the upgrade
   3. Its v3.1 (or hand-edited) content survives the upgrade unchanged
   4. `claude plugin validate` and `/plugin install` both still succeed, and this single stale file silently shadows the plugin's equivalent agent — this is the concrete mechanism behind UC-8's failure mode
 - **UC-2-E3: Legacy `~/.claude/commands/*.md` files survive the upgrade — command shadowing (structurally identical to UC-8's agent shadowing, applied to commands instead of agents)**
@@ -120,19 +118,19 @@
   8. **Remedy**: remove the surviving file(s) from `~/.claude/commands/` — either manually, or by re-running a corrected `install.sh` whose `legacy` section now lists the missing path — then re-invoke the affected skill and confirm its behavior now matches the plugin skill
 
 ### Edge Cases
-- **UC-2-EC1**: The legacy install had fewer than 13 agents (e.g., an agent was added to the harness after the developer's last install). The upgrade writes the missing agent file(s) fresh, rather than requiring them to pre-exist.
-- **UC-2-EC2**: The legacy install's rules directory has a rule file that no longer exists in v4.0's `src/rules/*.md` (a rule was retired upstream). The manifest-scoped refresh does not delete files no longer present in the source unless the manifest explicitly enumerates their removal — a documented limitation the Harness Maintainer must account for when retiring a rule file (the `legacy`-section mechanism used for the 5 command files is exactly this pattern applied correctly).
+- **UC-2-EC1**: The legacy install had fewer than 13 legacy agent files present (e.g., an agent was added to the harness after the developer's last v3.1 install, so it was never copied there in the first place). The upgrade removes whichever of the 13 are present and raises no error for the ones already absent — it never writes an agent file, present or missing, since `install.sh` has no agent content to write.
+- **UC-2-EC2**: The legacy install's rules directory has a rule file that no longer exists in v4.0's `src/rules/*.md` (a rule was retired upstream). The manifest-scoped refresh does not delete files no longer present in the source unless the manifest explicitly enumerates their removal — a documented limitation the Harness Maintainer must account for when retiring a rule file (the `legacy`-section mechanism used for the 5 command files and 13 agent files is exactly this pattern applied correctly).
 - **UC-2-EC3: Developer hand-edited one of the 5 legacy command files** — e.g., customized `~/.claude/commands/merge-ready.md` with project-specific notes or an altered gate list before v4.0 shipped
-  1. `install.sh`'s `legacy`-section removal in step 5 is unconditional — it does not diff the file's content against the original v3.1-shipped version before removing it; a hand-edited file is removed exactly like an unmodified one
+  1. `install.sh`'s `legacy`-section removal in step 4 is unconditional — it does not diff the file's content against the original v3.1-shipped version before removing it; a hand-edited file is removed exactly like an unmodified one
   2. Because the timestamped backup in step 2 captures the full pre-upgrade `~/.claude` (including `~/.claude/commands/`) before any removal happens, the hand-edited file is preserved there — no separate backup mechanism is needed
   3. `install.sh` prints an explicit warning naming each removed legacy command file and stating it was retired as part of the v3.1-to-v4.0 command-to-skill migration, together with the backup path it can be recovered from
   4. The developer's customization is not silently destroyed — it is recoverable via `--restore <backup-dir>` (UC-6) or by manually copying the single file back out of the backup directory — but it is also not preserved in place, since a stale local command silently shadowing the plugin (UC-2-E3) is judged the worse outcome versus a one-time, clearly-logged, backed-up removal
   5. `install.sh` does not attempt to merge or auto-port the customization into the plugin's `skills/<name>/SKILL.md`; if the developer wants the customization going forward, they must reapply it themselves against the plugin skill
 
 ### Data Requirements
-- **Input**: Pre-upgrade `~/.claude` state (including `~/.claude/commands/`); v4.0 repo content; `manifests/owned-files.txt` (`owns` and `legacy` sections)
-- **Output**: Refreshed `~/.claude/agents/*.md` (13 files), `~/.claude/rules/*.md`, `~/.claude/claude.md`; a new `~/.claude/.sdlc-receipt`; `~/.claude/commands/` emptied of the 5 legacy files
-- **Side Effects**: Timestamped backup created (captures the legacy command files before removal); 13 agent files overwritten; 5 legacy command files removed; 3 personal files untouched; a warning printed for any removed file that differed from the original v3.1-shipped content
+- **Input**: Pre-upgrade `~/.claude` state (including `~/.claude/commands/` and `~/.claude/agents/`); v4.0 repo content (`src/claude.md`, `src/rules/*.md` only — no agent content is read by `install.sh`); `manifests/owned-files.txt` (`owns` and `legacy` sections)
+- **Output**: Refreshed `~/.claude/rules/*.md`, `~/.claude/claude.md`; a new `~/.claude/.sdlc-receipt` (6 entries); `~/.claude/commands/` emptied of the 5 legacy files; `~/.claude/agents/` emptied of the 13 legacy harness files (3 personal files untouched)
+- **Side Effects**: Timestamped backup created (captures the legacy command and agent files before removal); 6 `owns` files (`claude.md` + 5 rules) overwritten; 13 legacy agent files removed; 5 legacy command files removed; 3 personal files untouched; a warning printed for any removed legacy file that differed from the original v3.1-shipped content
 
 ---
 
@@ -140,8 +138,8 @@
 
 **Actor**: Adopting Developer running `install.sh` (fresh install, upgrade, or `--uninstall`) on a machine with pre-existing personal agents
 **Preconditions**:
-- `~/.claude/agents/` contains 16 files: 13 harness-owned agent copies (matching the `owns` section of `manifests/owned-files.txt`) and 3 personal files unrelated to the harness: `brand-guardian.md`, `demo-script-writer.md`, `social-copywriter.md`
-- `manifests/owned-files.txt` correctly enumerates exactly the 13 harness agent paths in `owns` (plus the rule and `claude.md` paths), and does **not** list the 3 personal files (FR-4.6)
+- `~/.claude/agents/` contains 16 files: 13 legacy harness agent copies (matching the `legacy` section of `manifests/owned-files.txt` — these are v3.1-era remnants, never written by v4.0's `install.sh`) and 3 personal files unrelated to the harness: `brand-guardian.md`, `demo-script-writer.md`, `social-copywriter.md`
+- `manifests/owned-files.txt` correctly enumerates exactly the 13 harness agent paths in `legacy` (for removal, never refresh) and `claude.md` + the 5 rule paths in `owns` (for refresh), and does **not** list the 3 personal files anywhere (FR-4.6)
 - Every path in the manifest, in both `owns` and `legacy`, is a relative path (relative to `~/.claude`, per FR-4.7) with no leading `/` and no `..` traversal segments
 - The developer has not manually edited the manifest
 
@@ -149,20 +147,20 @@
 
 ### Primary Flow (Happy Path)
 1. Before making any change, the developer (or a QA test harness) records a checksum of every file currently in `~/.claude/agents/`.
-2. `install.sh` reads `manifests/owned-files.txt` and builds its removal/overwrite set exclusively from it — exactly the 13 harness paths.
-3. `install.sh` iterates only over the manifest's file list; for each entry present on disk, it removes or overwrites it.
+2. `install.sh` reads `manifests/owned-files.txt` and builds its removal/refresh set exclusively from it — the `owns` section's 6 memory-layer paths, plus the `legacy` section's 18 retired paths (13 of which are agent paths).
+3. `install.sh` iterates only over the manifest's file list; for each entry present on disk, it removes it (`legacy`) or overwrites it (`owns`) — never based on a directory scan.
 4. `install.sh` never enumerates `~/.claude/agents/` directly and never runs a glob-based deletion (e.g. `rm ~/.claude/agents/*.md`) against that directory.
 5. `install.sh` completes; the 3 personal files still exist at their original paths with unchanged content — byte-identical to their pre-install checksum.
 6. `ls ~/.claude/agents/*.md | wc -l` immediately after a real `--uninstall` returns `3` — only the personal files. Each of the 3 files passes `diff` against its pre-install snapshot with zero differences.
 
 **Postconditions**:
-- Exactly 3 files remain in `~/.claude/agents/` after `--uninstall` (or 16 after a fresh reinstall/upgrade that repopulates the 13 harness files)
+- Exactly 3 files remain in `~/.claude/agents/` after `--uninstall` (and remain exactly 3 after a fresh reinstall too — `install.sh` never writes agent files, so a fresh install cannot repopulate the 13; only an upgrade against a machine that still carries the 13 legacy files would find any to remove)
 - Each of the 3 personal files is byte-identical to its pre-install content
 - No file outside the manifest's enumerated set was created, modified, or deleted
 
 ### Alternative Flows
 - **UC-3-A1: `--dry-run` precedes the real operation** — see UC-4; the dry-run's printed list is verified to exclude all 3 personal files before the developer proceeds.
-- **UC-3-A2: Fresh install with no personal agents present** — the manifest-scoped copy writes only the 13 harness files; there is nothing to preserve and no conflict.
+- **UC-3-A2: Fresh install with no personal agents present** — `install.sh` never writes to `~/.claude/agents/` at all; there is nothing to preserve and no conflict, since the directory is not touched.
 
 ### Error Flows
 - **UC-3-E1: Manifest is stale/incomplete** — a harness file exists on disk but is missing from `manifests/owned-files.txt` (e.g., a renamed agent). `install.sh` does not know to remove or refresh it; the file survives as an orphan. This does not put the 3 personal files at risk (they are correctly never listed either way) but can leave a stale harness copy — the shadowing risk covered in UC-8, not a personal-file-destruction risk.
@@ -216,7 +214,7 @@
 ### Edge Cases
 - **UC-4-EC1**: The manifest is empty or corrupted (e.g., a zero-byte file, or a section header with no entries beneath it). `--dry-run --uninstall` prints "0 files" and would remove nothing; the developer is warned this is very likely wrong before running the real operation, since a legitimate install always has at least the `claude.md` and rule entries in `owns`.
 - **UC-4-EC2**: A manifest entry contains a path-traversal or out-of-tree segment (e.g., `../.ssh/id_rsa`). `--dry-run` still performs full validation before printing anything — it reports the offending entry and refuses to print a preview at all, rather than silently omitting the bad line and previewing only the safe entries. This mirrors the mandatory rejection behavior in UC-3-EC4, applied to the preview path instead of the destructive path.
-- **UC-4-EC3**: `--dry-run` is run on a machine with no prior install at all — it prints what a fresh install would create (the 13 agent paths, `claude.md`, 5 rule files) with no errors, since previewing an install does not require a pre-existing state.
+- **UC-4-EC3**: `--dry-run` is run on a machine with no prior install at all — it prints what a fresh install would create (exactly the 6 `owns` entries: `claude.md` and the 5 rule files; no agent paths, since `install.sh` never creates them) with no errors, since previewing an install does not require a pre-existing state.
 
 ### Data Requirements
 - **Input**: `manifests/owned-files.txt`; current `~/.claude` filesystem state
@@ -228,15 +226,15 @@
 ## UC-5: `--uninstall` Removes Exactly the Receipt's (or, Failing That, the Manifest's) Files
 
 **Actor**: Adopting Developer
-**Preconditions**: The harness is installed via `install.sh` (agents, rules, `claude.md` present per the manifest's `owns` section); the 3 personal agent files are also present in `~/.claude/agents/`; `~/.claude/commands/` may still hold one or more of the 5 `legacy` v3.1 command files if this is the first `install.sh` run on this machine to include manifest-driven legacy cleanup; an install receipt at `~/.claude/.sdlc-receipt` may or may not exist, depending on whether the current installation was placed by v4.0's `install.sh` (receipt present, per UC-1/UC-2 step 6-7) or inherited unchanged from a v3.1 install that predates receipts (receipt absent)
+**Preconditions**: The harness is installed via `install.sh` (rules and `claude.md` present per the manifest's `owns` section — 6 entries, never agents); the 3 personal agent files are also present in `~/.claude/agents/`, alongside any of the 13 legacy agent files not yet cleaned up by a prior upgrade run; `~/.claude/commands/` may still hold one or more of the 5 `legacy` v3.1 command files if this is the first `install.sh` run on this machine to include manifest-driven legacy cleanup; an install receipt at `~/.claude/.sdlc-receipt` may or may not exist, depending on whether the current installation was placed by v4.0's `install.sh` (receipt present, per UC-1/UC-2, listing exactly the 6 `owns` paths) or inherited unchanged from a v3.1 install that predates receipts (receipt absent)
 
 **Trigger**: Developer runs `bash install.sh --uninstall` (a real run, not `--dry-run`)
 
 ### Primary Flow (Happy Path — Receipt Present, FR-4.8)
-1. `install.sh` creates a timestamped backup directory containing the full pre-uninstall `~/.claude` state, including any legacy command files still present.
+1. `install.sh` creates a timestamped backup directory containing the full pre-uninstall `~/.claude` state, including any legacy command and agent files still present.
 2. `install.sh` checks for an install receipt at `~/.claude/.sdlc-receipt` — found.
-3. `install.sh` uses the receipt's file list as the authoritative removal set for the harness's own footprint (the 13 agent paths, `claude.md`, the 5 rule paths) — preferring it over the manifest's `owns` section, since the receipt records exactly what *this* install placed rather than the manifest's general description of what v4.0 owns.
-4. `install.sh` also reads the manifest's `legacy` section and removes exactly the listed files present on disk (any of the 5 v3.1 command files still under `~/.claude/commands/`) — legacy cleanup always comes from the manifest, since the receipt only ever records what v4.0's own `install.sh` created, never v3.1-era artifacts it didn't place.
+3. `install.sh` uses the receipt's file list as the authoritative removal set for the memory-layer `owns` footprint (`claude.md`, the 5 rule paths — 6 entries, never agents) — preferring it over the manifest's `owns` section, since the receipt records exactly what *this* install placed rather than the manifest's general description of what v4.0 owns.
+4. `install.sh` also reads the manifest's `legacy` section (18 entries) and removes exactly the listed files present on disk (any of the 5 v3.1 command files still under `~/.claude/commands/`, and any of the 13 v3.1 agent files still under `~/.claude/agents/`) — legacy cleanup always comes from the manifest, never the receipt, since the receipt only ever records what v4.0's own `install.sh` created (the 6 `owns` files), never v3.1-era artifacts it didn't place.
 5. `install.sh` removes the receipt file itself (`~/.claude/.sdlc-receipt`) as the final step, since it describes an installation that no longer exists.
 6. `install.sh` prints a summary: N receipt-driven files removed, M `legacy` files removed, backup location, and confirmation that removal was receipt/manifest-scoped (never a glob).
 7. The command exits `0`.
@@ -251,34 +249,35 @@
 - Any separately-installed plugin is unaffected — plugin removal is a Claude Code operation (`/plugin uninstall`), outside `install.sh`'s scope
 
 ### Alternative Flows
-- **UC-5-A1: `--uninstall` on an install.sh-only setup (no plugin ever installed)** — identical result; only the memory layer and receipt/manifest-tracked agent copies are removed, since that is all `install.sh` ever wrote.
+- **UC-5-A1: `--uninstall` on an install.sh-only setup (no plugin ever installed)** — identical result; only the memory-layer `owns` footprint (via receipt) and any manifest-tracked legacy remnants are removed, since that is the full scope of what `install.sh` ever wrote or ever cleans up.
 - **UC-5-A2: No receipt exists — fallback to the manifest (the expected case for every machine upgrading from v3.1)**
   1. `install.sh` checks for `~/.claude/.sdlc-receipt` — not found (this machine's harness files were placed by v3.1's script and no v4.0 `install.sh` run has happened yet on this machine, or the receipt was manually deleted)
-  2. `install.sh` falls back to the manifest's `owns` section as the removal set for the harness's own footprint, exactly as UC-5's primary flow described before receipts existed
+  2. `install.sh` falls back to the manifest's `owns` section as the removal set for the memory-layer footprint, exactly as UC-5's primary flow described before receipts existed
   3. Legacy-section removal, backup, and summary proceed identically to the primary flow
   4. The command exits `0` and completes successfully — this fallback is not a degraded or error path; it is the expected, fully-supported day-one behavior on any machine that has never run v4.0's `install.sh`
-- **UC-5-A3: AC-11 verification — uninstall still works from the receipt alone when the manifest is unavailable**
+- **UC-5-A3: AC-11 verification — uninstall still works from the receipt alone for the `owns` footprint when the manifest is unavailable**
   1. The manifest file `manifests/owned-files.txt` is renamed or deleted (this is exactly AC-11's verification setup), while `~/.claude/.sdlc-receipt` remains present from a prior v4.0 install
   2. Developer runs `bash install.sh --uninstall`
-  3. `install.sh` checks for the receipt — found — and uses it as the removal set for the 13 agent paths, `claude.md`, and the 5 rule paths, exactly as in the primary flow
-  4. `install.sh` attempts to read the manifest's `legacy` section for legacy-command cleanup — the manifest file cannot be found
-  5. `install.sh` does not fail the entire uninstall over the missing manifest; it skips legacy-section cleanup, prints an explicit note that legacy cleanup was skipped because the manifest was unavailable, and completes the receipt-driven removal
-  6. The command exits `0`; `~/.claude/claude.md`, the rule files, and the 13 agent files (per the receipt) are all removed; the 3 personal files remain untouched, since the receipt — like the manifest — only ever lists harness-owned paths
-  7. This directly confirms AC-11: uninstall succeeds from the receipt alone with the manifest absent
+  3. `install.sh` checks for the receipt — found — and uses it as the removal set for `claude.md` and the 5 rule paths (6 entries), exactly as in the primary flow
+  4. `install.sh` attempts to read the manifest's `legacy` section for legacy-command and legacy-agent cleanup — the manifest file cannot be found
+  5. `install.sh` does not fail the entire `owns`-footprint removal over the missing manifest; it skips `legacy`-section cleanup, prints an explicit note that legacy cleanup (5 commands + 13 agents) was skipped because the manifest was unavailable, and completes the receipt-driven removal for `claude.md` and the rules
+  6. The command exits `0`; `~/.claude/claude.md` and the rule files (per the receipt's 6 entries) are removed; any legacy agent or command files still present are **not** removed in this run, since `legacy` cleanup requires the manifest and none is available; the 3 personal files remain untouched regardless
+  7. This directly confirms AC-11: uninstall succeeds from the receipt alone for the footprint the receipt actually covers, with the manifest absent — note this is a narrower guarantee than the pre-correction design, since agents were never in the receipt's `owns` footprint to begin with
 
 ### Error Flows
 - **UC-5-E1: `--uninstall` run when nothing is installed** — neither the receipt nor any manifest-listed path exists on disk. `install.sh` reports "nothing to uninstall" and exits `0` (not an error condition).
 - **UC-5-E2: `--uninstall` interrupted mid-run** — see UC-7 for the full interrupted-operation scenario and recovery path, which applies symmetrically to uninstall as it does to install.
 - **UC-5-E3: Receipt exists but is malformed** (e.g., an empty file, a missing version on line 1, or a data line that fails the same relative-path/no-traversal validation as manifest entries — see UC-3-EC4) — `install.sh` treats the receipt as untrustworthy: it prints a warning naming the specific problem (empty file / missing version / invalid entry) and falls back to the manifest's `owns` section for removal, per UC-5-A2, rather than attempting a partial or unsafe removal from a receipt it cannot fully parse. If the manifest is also unavailable in this specific combination (malformed receipt **and** missing manifest), `install.sh` has no safe removal set for the `owns` footprint; it refuses to proceed with that portion of the uninstall and exits non-zero rather than guessing, though legacy-section removal from the manifest is likewise unavailable in that case for the same reason.
+- **UC-5-E4 (security requirement): Receipt names a file structurally valid but outside the manifest's `owns` section** — e.g. a receipt entry reading `agents/brand-guardian.md` (a personal, non-harness path). Because `install.sh` intersects every receipt entry against the manifest's `owns` list before acting (`manifest_owns_contains`), an entry that passes path-safety validation but is not itself a real `owns` entry is skipped with an explicit "unrecognized receipt entry, skipped" message — never deleted. This holds regardless of how the entry got into the receipt (hand-edited, or a future receipt-writing defect); a receipt can only ever narrow the removal set relative to the manifest, never broaden it.
 
 ### Edge Cases
 - **UC-5-EC1**: `--uninstall` is run, then the developer immediately runs `bash install.sh` again (reinstall) without `--restore`. This produces a fresh install per UC-1's primary flow — a valid and supported way to "reset" a corrupted local state.
 - **UC-5-EC2**: The receipt lists a file that no longer exists on disk (the developer manually deleted it before running `--uninstall`). Receipt-driven removal skips it without error, exactly as manifest-driven removal already does in UC-3-EC2 — absence of a listed file is not a failure condition.
 
 ### Data Requirements
-- **Input**: `~/.claude/.sdlc-receipt` if present (preferred); `manifests/owned-files.txt` (`owns` and `legacy` sections) as fallback for the harness footprint, and always for `legacy`; current `~/.claude` state
-- **Output**: Console report of files removed (receipt- or manifest-driven) and `legacy` files removed; the 3 personal files reported as untouched (or simply absent from the report, since they were never in scope)
-- **Side Effects**: Receipt- or manifest-listed `owns` files removed from `~/.claude`; manifest-listed `legacy` files removed; the receipt file itself removed; a new timestamped backup directory created
+- **Input**: `~/.claude/.sdlc-receipt` if present (preferred, 6 entries max, intersected against the manifest's `owns` section); `manifests/owned-files.txt` (`owns` — 6 entries — and `legacy` — 18 entries) as fallback for the memory-layer footprint, and always for `legacy`; current `~/.claude` state
+- **Output**: Console report of files removed (receipt- or manifest-driven `owns`, and manifest-driven `legacy`); any out-of-scope receipt entry reported as skipped, not removed; the 3 personal files reported as untouched (or simply absent from the report, since they were never in scope)
+- **Side Effects**: Receipt- or manifest-listed `owns` files removed from `~/.claude` (`claude.md` + 5 rules); manifest-listed `legacy` files removed (5 commands + 13 agents, when the manifest is available); the receipt file itself removed; a new timestamped backup directory created
 
 ---
 
@@ -293,7 +292,7 @@
 1. Developer notes the pre-uninstall snapshot exists as `~/.claude/backup-20260814-101500/` (created automatically by the preceding `--uninstall` run, per UC-5).
 2. Developer runs `bash install.sh --uninstall`.
 3. Developer runs `bash install.sh --restore ~/.claude/backup-20260814-101500`.
-4. `install.sh` copies the backup's contents back into `~/.claude`, overwriting current state.
+4. `install.sh` copies back into `~/.claude` only the allowlisted top-level structure a backup is permitted to contain (`claude.md`, `agents`, `commands`, `rules`, `.sdlc-receipt`), overwriting current state entry-by-entry; any other top-level entry present in the backup directory is reported and skipped, never copied (a defense against a tampered or foreign directory being passed as `<backup-dir>` — see UC-6-EC3).
 5. The command exits `0` and prints a restore summary.
 6. Developer runs `diff -r ~/.claude/backup-20260814-101500 ~/.claude` (excluding the backup directory itself and any newly created backup produced by the restore operation) — returns no differences.
 
@@ -302,7 +301,7 @@
 - `diff -r` between the backup and the restored state shows zero differences
 
 ### Alternative Flows
-- **UC-6-A1: `--restore` used after a full reinstall to a different version**, not just after `--uninstall` — the mechanism is identical: the backup's content fully overwrites whatever is currently present, regardless of what changed it.
+- **UC-6-A1: `--restore` used after a full reinstall to a different version**, not just after `--uninstall` — the mechanism is identical: the backup's allowlisted content fully overwrites whatever is currently present, regardless of what changed it.
 
 ### Error Flows
 - **UC-6-E1: `--restore` given a path that is not a valid backup directory** (missing the expected internal structure) — `install.sh` reports a clear error and exits non-zero without touching `~/.claude`.
@@ -311,11 +310,13 @@
 ### Edge Cases
 - **UC-6-EC1**: Multiple backup directories exist from several prior operations over time. `--restore` requires the developer to name the exact directory; `install.sh` does not guess or default to "the most recent" — omitting the argument produces a usage error, not an auto-selected restore.
 - **UC-6-EC2**: `--restore` is run twice in a row against the same backup directory. The operation is idempotent: the second restore reproduces the same state, and `diff -r` remains clean after either run.
+- **UC-6-EC3 (security requirement): The named directory contains an extra top-level entry no legitimate backup would ever have** — e.g. a `hooks.json`, a `.bashrc`, or any file/directory outside `claude.md`, `agents`, `commands`, `rules`, `.sdlc-receipt`. `install.sh` copies only the allowlisted entries that are present; the extra entry is named in a "skipped unexpected entry in backup" message and never copied into `~/.claude`. This holds whether the extra entry arrived via a tampered backup directory or a directory the developer points `--restore` at that was never produced by this installer at all.
+- **UC-6-EC4 (security requirement): The named directory contains a symlink anywhere inside it** — e.g. `agents` (or any file within it) is a symlink rather than a real file/directory, potentially pointing outside the backup entirely. `install.sh` refuses the restore outright rather than following the symlink during the copy: it exits non-zero with a message naming the symlink, and `~/.claude` is left untouched.
 
 ### Data Requirements
-- **Input**: The specified backup directory's contents; current `~/.claude` state
-- **Output**: `~/.claude` overwritten to match the backup
-- **Side Effects**: Existing `~/.claude` content (post-uninstall or post-reinstall) is replaced; the backup directory itself is not deleted by the restore
+- **Input**: The specified backup directory's contents, filtered to the allowlisted top-level structure; current `~/.claude` state
+- **Output**: `~/.claude` overwritten to match the backup's allowlisted entries; a report of any skipped, non-allowlisted entries
+- **Side Effects**: Existing `~/.claude` content (post-uninstall or post-reinstall) is replaced for allowlisted entries only; non-allowlisted entries in the backup directory are never copied; the backup directory itself is not deleted by the restore
 
 ---
 
@@ -327,12 +328,12 @@
 **Trigger**: The `install.sh` process is terminated before completing its full manifest-driven copy/removal loop
 
 ### Primary Flow (Interruption + Recovery)
-1. `install.sh` has created the timestamped backup and begun overwriting/removing manifest-listed files.
-2. The process is killed after processing, say, 8 of the 13 harness agent entries and before finishing the `claude.md`/rules copy.
-3. `~/.claude` is left in a mixed state: some agent files refreshed, some still at prior content, `claude.md` and rules possibly untouched or partially updated.
-4. The developer notices the interruption (the shell shows the process was killed, or `/agents` inside Claude Code shows inconsistent results across the 13 agents).
+1. `install.sh` has created the timestamped backup and begun refreshing `owns` entries / removing `legacy`-listed files.
+2. The process is killed after processing, say, 8 of the 13 legacy agent entries during their removal, and before finishing the `claude.md`/rules refresh.
+3. `~/.claude` is left in a mixed state: some legacy agent files already removed, some still present, `claude.md` and rules possibly untouched or partially updated.
+4. The developer notices the interruption (the shell shows the process was killed, or `/agents` inside Claude Code shows inconsistent results across the 13 agents, since a subset are still shadowed by surviving legacy copies).
 5. The developer re-runs `bash install.sh`.
-6. Because every operation is manifest-scoped and unconditional per entry (not "only if previously absent"), the re-run safely converges: files already correctly copied are overwritten again with identical content (a no-op in effect), and files not yet reached are copied now.
+6. Because every operation is manifest-scoped and unconditional per entry (not "only if previously absent"), the re-run safely converges: `owns` files already correctly refreshed are overwritten again with identical content (a no-op in effect), `owns` files not yet reached are refreshed now, and any remaining `legacy` files (agents or commands) not yet removed are removed now.
 7. `install.sh` finishes cleanly on the second run; the resulting state matches a normal, uninterrupted run.
 
 **Postconditions**: After the recovery re-run, `~/.claude` matches the fully-installed expected state; the interruption left no permanent corruption because every operation is safely re-runnable.
@@ -345,7 +346,7 @@
 - **UC-7-E2: Interruption occurs after harness files are removed but before the new version's files are copied** — `~/.claude` is left with the harness partially or fully absent (e.g., no `claude.md` at all). Until the developer re-runs `install.sh`, the mandatory autonomous-pipeline instruction is not loaded; sessions in this window behave as if the memory layer is entirely uninstalled. The developer must complete the re-run before relying on the harness's automatic pipeline trigger.
 
 ### Edge Cases
-- **UC-7-EC1**: The interrupted run had already removed/refreshed `~/.claude/agents/planner.md` (a harness file) but had not yet reached the end of the loop. The 3 personal files are never part of the removal/refresh loop regardless of interruption point, since the loop only ever iterates the manifest — so they remain intact irrespective of when the kill occurs.
+- **UC-7-EC1**: The interrupted run had already removed `~/.claude/agents/planner.md` (a legacy agent file) but had not yet reached the end of the `legacy`-removal loop. The 3 personal files are never part of the removal/refresh loop regardless of interruption point, since the loop only ever iterates the manifest — so they remain intact irrespective of when the kill occurs.
 - **UC-7-EC2**: The developer's retry is also interrupted (killed a second time). The subsequent re-run remains safely idempotent for the same reason: manifest-scoped, unconditional per-entry overwrite/removal has no dependency on how many prior attempts partially completed.
 
 ### Data Requirements
@@ -374,18 +375,18 @@
 6. The developer concludes the plugin's `planner` is shadowed — every `/implement-slice` and `/bootstrap-feature` invocation of `planner` on this machine has been running the stale, hand-edited prompt/model since the "migration."
 
 ### Primary Flow (Resolution)
-7. The developer runs `bash install.sh` (a normal upgrade re-run, which unconditionally refreshes all 13 manifest-listed agent paths per UC-2) or `bash install.sh --uninstall` followed by a fresh install.
-8. The three stale, hand-edited files are overwritten with the repo's current content (or removed entirely, in the uninstall path) — this succeeds without touching the 3 unrelated personal files, per UC-3.
+7. The developer runs `bash install.sh` (a normal upgrade re-run, which unconditionally removes all 13 manifest-listed legacy agent paths per UC-2) or `bash install.sh --uninstall` followed by a fresh install.
+8. The three stale, hand-edited files are removed entirely — `install.sh` has no v4.0 agent content to write in their place, so there is nothing to overwrite them with; this succeeds without touching the 3 unrelated personal files, per UC-3.
 9. The developer re-runs `/agents`.
-10. `planner`, `architect`, and `security-auditor` now resolve with content matching the plugin's copies; the resolved `model:` values match the repo's frontmatter, not `fable`.
+10. `planner`, `architect`, and `security-auditor` now resolve to the plugin's copies with no local file left to compete; the resolved `model:` values match the repo's frontmatter, not `fable`.
 
 **Postconditions**:
-- `~/.claude/agents/planner.md`, `~/.claude/agents/architect.md`, and `~/.claude/agents/security-auditor.md` either no longer exist or match the repo's current content exactly
-- `/agents` resolves all 13 harness agents to non-drifted content
+- `~/.claude/agents/planner.md`, `~/.claude/agents/architect.md`, and `~/.claude/agents/security-auditor.md` no longer exist
+- `/agents` resolves all 13 harness agents to the plugin's non-drifted content, with no local `~/.claude/agents/` copy remaining to shadow or drift from it
 - The 3 personal agents remain present and unaffected
 
 ### Alternative Flows
-- **UC-8-A1: Only one of the three (say `planner`) is stale** — the other two were already refreshed in a prior partial run. Detection and resolution apply per-agent; `/agents` after cleanup shows the previously-clean two still correct and the newly-cleaned `planner` also correct.
+- **UC-8-A1: Only one of the three (say `planner`) is stale** — the other two were already removed in a prior partial run. Detection and resolution apply per-agent; `/agents` after cleanup shows all three resolving to the plugin, regardless of which had already been cleaned up.
 
 ### Error Flows
 - **UC-8-E1: The manifest itself is missing one of the three stale paths** (an authoring defect in `manifests/owned-files.txt`) — running the refresh/uninstall does not touch it, and `/agents` after the "completed" migration still shows the stale `fable`-model copy shadowing the plugin. This is the concrete failure mode the PRD names as Risk 2: "the migration will look complete... while actually running stale prompts." Detection requires the explicit `/agents` verification step — `claude plugin validate` and `/plugin install` succeeding are both insufficient on their own.
@@ -393,13 +394,13 @@
 - **UC-8-E3: See UC-2-E3 for the command-level analog of this same failure** — legacy `~/.claude/commands/*.md` files (rather than `~/.claude/agents/*.md` files) surviving a migration and shadowing the plugin's skills instead of its agents. The detection mechanism (`/agents` here vs. inspecting `~/.claude/commands/` and the skill's executed behavior there) differs because Claude Code resolves agent names and command/skill names through separate namespaces, but the underlying cause — a manifest-scoped cleanup step that didn't run or was incompletely enumerated — is identical.
 
 ### Edge Cases
-- **UC-8-EC1**: A personal agent happens to be named identically to a harness agent — e.g., the developer independently wrote their own `~/.claude/agents/planner.md` for an unrelated purpose, coincidentally sharing the name. Manifest-scoped removal/refresh would overwrite or delete it as if it were the harness's own copy, because the operation is keyed on path, not on content or provenance. This is a known limitation: the manifest can only track paths it owns; a same-path personal file cannot be distinguished from a stale harness copy by `install.sh`. The PRD's mitigation for this class of risk is `/agents` verification after install, not blind trust in path-based ownership.
-- **UC-8-EC2**: All 13 legacy agent copies are present with mixed states — some hand-edited, some byte-identical to the repo. A refresh overwrites all 13 uniformly, since the operation is manifest-driven and unconditional, not conditional on detecting divergence first — this is correct, because any stale copy (edited or not) must not remain once the plugin is authoritative.
+- **UC-8-EC1**: A personal agent happens to be named identically to a harness agent — e.g., the developer independently wrote their own `~/.claude/agents/planner.md` for an unrelated purpose, coincidentally sharing the name. Manifest-scoped `legacy` removal would delete it as if it were the harness's own copy, because the operation is keyed on path, not on content or provenance. This is a known limitation: the manifest can only track paths it owns; a same-path personal file cannot be distinguished from a stale harness copy by `install.sh`. The PRD's mitigation for this class of risk is `/agents` verification after install, not blind trust in path-based ownership.
+- **UC-8-EC2**: All 13 legacy agent copies are present with mixed states — some hand-edited, some byte-identical to the repo. Removal deletes all 13 uniformly, since the operation is manifest-driven and unconditional, not conditional on detecting divergence first — this is correct, because any stale local copy (edited or not) must not remain once the plugin is authoritative, and there is no v4.0 content for `install.sh` to write back in its place regardless.
 
 ### Data Requirements
-- **Input**: `/agents` output (agent name → resolved file path); contents of the resolved `~/.claude/agents/*.md` files; `manifests/owned-files.txt`
-- **Output**: Confirmation that resolved paths and content match the plugin/repo source, not a stale user-level copy
-- **Side Effects**: Refresh or removal of the 3 stale files from `~/.claude/agents/`; no change to the plugin's own files or to the 3 personal agents
+- **Input**: `/agents` output (agent name → resolved file path); contents of the resolved `~/.claude/agents/*.md` files (if any remain); `manifests/owned-files.txt`
+- **Output**: Confirmation that resolved paths and content match the plugin source, not a stale user-level copy
+- **Side Effects**: Removal of the 3 stale files from `~/.claude/agents/`; no change to the plugin's own files or to the 3 personal agents
 
 ---
 
@@ -475,31 +476,32 @@
 
 **Trigger**: `bash install.sh` is run in isolation; the developer never runs `/plugin marketplace add` or `/plugin install`
 
-### Primary Flow (Happy Path — Full Functionality Retained)
-1. `install.sh` copies the 13 agent files into `~/.claude/agents/*.md`, `src/claude.md` into `~/.claude/claude.md`, and each `src/rules/*.md` into `~/.claude/rules/*.md` — the same set it always writes, per NFR-2.
-2. No plugin skills are registered anywhere on this machine — `/develop-feature` typed as a literal slash command is not a recognized, plugin-registered skill.
+### Primary Flow (Happy Path — Memory Layer Active, No Specialist Agents — corrected per FR-3.5/NFR-2)
+1. `install.sh` copies `src/claude.md` into `~/.claude/claude.md` and each `src/rules/*.md` into `~/.claude/rules/*.md` — the 6-entry `owns` footprint it always writes. It does **not** write any of the 13 agent files anywhere; agents ship via the plugin only (FR-2.5), and this machine has no plugin installed.
+2. No plugin skills or agents are registered anywhere on this machine — `/develop-feature` typed as a literal slash command is not a recognized, plugin-registered skill, and there is no `prd-writer`, `architect`, `qa-planner`, or any of the other 12 specialist subagents to delegate to.
 3. The developer describes a feature request in plain language (an unprefixed request), rather than typing a slash command.
-4. `~/.claude/claude.md`'s mandatory-workflow instruction, loaded as user memory, directs Claude to run the full documentation-and-implementation pipeline for any feature request; Claude invokes the relevant agents (via subagent/Task-tool invocation, which does not require a registered slash command) in the documented order.
-5. The pipeline completes to merge-ready using only the 13 agents plus the memory-layer instruction — no plugin skill was ever invoked.
+4. `~/.claude/claude.md`'s mandatory-workflow instruction, loaded as user memory, directs Claude to run the full documentation-and-implementation pipeline for any feature request. Because no specialist subagents exist on this machine, Claude runs every pipeline phase **inline** — PRD, use cases, architecture review, QA test cases, planning, and implementation are performed directly by the primary session, not delegated via subagent/Task-tool invocation to `prd-writer`/`ba-analyst`/`architect`/`qa-planner`/`planner`/etc.
+5. The pipeline still completes to merge-ready — the documentation-first, TDD, quality-gates structure is still followed, driven entirely by the memory-layer instruction — but every phase that a plugin install would normally hand off to a named specialist agent instead runs as an inline step of the same session.
 
 **Postconditions**:
-- `~/.claude/agents/` contains the 13 harness agents; `~/.claude/claude.md` and `~/.claude/rules/*.md` are present and loaded
-- The full autonomous pipeline is functional via natural-language requests, per NFR-2's "full pipeline functionality" guarantee
+- `~/.claude/agents/` is untouched by `install.sh` (any pre-existing personal files remain; no harness agent file exists there)
+- `~/.claude/claude.md` and `~/.claude/rules/*.md` are present and loaded
+- The mandatory pipeline instruction and all 5 process rules are active, and Claude follows the documented workflow — but with **no specialist subagents** to delegate to, so pipeline phases run inline rather than through `prd-writer`, `architect`, `qa-planner`, and the rest (the corrected NFR-2; this is the primary capability difference between the two install paths, not a minor caveat)
 - No plugin-registered skill exists on this machine
 
 ### Alternative Flows
-- **UC-10-A1: Developer later installs the plugin as well** — this transitions the machine to the fully-migrated state (agents + memory + skills all present); see UC-2/UC-8 for what happens if the newly-installed plugin's agents are shadowed by the pre-existing `~/.claude/agents/` copies.
+- **UC-10-A1: Developer later installs the plugin as well** — this transitions the machine to the fully-migrated state (specialist agents + memory + skills all present, phases now delegated rather than inline); see UC-2/UC-8 for what happens if the newly-installed plugin's agents would otherwise be shadowed by a pre-existing `~/.claude/agents/` copy (not a risk here, since `install.sh`-only usage never wrote one).
 
 ### Error Flows
-- **UC-10-E1: Developer types a literal slash command that only exists as a plugin skill** (e.g., types `/develop-feature` expecting it to behave as a registered command) — since no plugin is installed, Claude Code does not recognize it as a formal registered command. The developer must either describe the feature in natural language (triggering the memory-layer instruction per the primary flow) or install the plugin to get literal slash-command registration. This distinction — and the fact that install.sh-only usage still works via natural-language requests — must be documented so the developer does not conclude the harness is broken.
+- **UC-10-E1: Developer types a literal slash command that only exists as a plugin skill** (e.g., types `/develop-feature` expecting it to behave as a registered command) — since no plugin is installed, Claude Code does not recognize it as a formal registered command. The developer must either describe the feature in natural language (triggering the memory-layer instruction per the primary flow, with phases running inline) or install the plugin to get literal slash-command registration and specialist-agent delegation. This distinction — and the fact that install.sh-only usage still works via natural-language requests, just without delegated agents — must be documented so the developer does not conclude the harness is broken.
 
 ### Edge Cases
-- **UC-10-EC1**: The developer's `~/.claude/agents/` directory already has 3 personal agents from before (the same reference-machine scenario as UC-3). `install.sh`-only usage never touches them, exactly as in every other install path.
-- **UC-10-EC2**: The developer runs `bash install.sh --uninstall` on this install.sh-only setup. All 13 agent files, `claude.md`, and the 5 rule files are removed (per UC-5); the machine reverts to having no harness functionality at all, with no plugin remnants to clean up since none was ever installed.
+- **UC-10-EC1**: The developer's `~/.claude/agents/` directory already has 3 personal agents from before (the same reference-machine scenario as UC-3). `install.sh`-only usage never touches them — it never writes to `~/.claude/agents/` at all, exactly as in every other install path.
+- **UC-10-EC2**: The developer runs `bash install.sh --uninstall` on this install.sh-only setup. `claude.md` and the 5 rule files (6 entries) are removed (per UC-5); there were no agent files to remove, since install.sh-only usage never wrote any; the machine reverts to having no harness functionality at all, with no plugin remnants to clean up since none was ever installed.
 
 ### Data Requirements
-- **Input**: Repo checkout contents; developer's natural-language feature description
-- **Output**: A fully functional pipeline invoked without any plugin skill
+- **Input**: Repo checkout contents (`src/claude.md`, `src/rules/*.md` only); developer's natural-language feature description
+- **Output**: A pipeline that still runs to merge-ready, with every phase performed inline by the primary session instead of delegated to specialist subagents
 - **Side Effects**: Identical filesystem side effects to UC-1/UC-2; no plugin-related state exists
 
 ---

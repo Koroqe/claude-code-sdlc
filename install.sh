@@ -216,11 +216,12 @@ resolve_claude_dir() {
 # Validation runs over the WHOLE file before any destructive action, so a bad
 # entry at line 40 cannot leave the first 39 already applied.
 # ----------------------------------------------------------------------------
-# Trim leading/trailing whitespace ONLY. Internal whitespace, CR from a CRLF
-# file, and every other character outside the allowlist must reach
-# validate_entry() intact so it can be rejected — stripping it here would
-# silently rewrite `rules/a b.md` into a valid-looking `rules/ab.md` and
-# quietly act on a path the manifest never named.
+# Trim leading/trailing whitespace only — which does normalise a trailing CR,
+# so a CRLF-formatted manifest is read correctly. Everything else, including
+# INTERNAL whitespace and internal CR, must reach validate_entry() intact so it
+# can be rejected: stripping it here would silently rewrite `rules/a b.md` into
+# a valid-looking `rules/ab.md` and quietly act on a path the manifest never
+# named.
 trim_ws() {
   local s="$1"
   s="${s%"${s##*[![:space:]]}"}"
@@ -253,6 +254,16 @@ validate_entry() {
     *//*|*/)
       say_untrusted "  rejected entry: " "$entry"
       log_error "$source line $line_no: contains an empty path segment or a trailing slash"
+      return 1 ;;
+  esac
+  # Depth bound. A `case` glob's `*` matches `/` too, so the structural
+  # patterns below would otherwise admit `agents/a/b/c.md`. Reject anything
+  # deeper than <dir>/<file> explicitly, so the allowlist enforces the bound
+  # its own comment claims rather than leaning on guarded_rm to catch it later.
+  case "$entry" in
+    */*/*)
+      say_untrusted "  rejected entry: " "$entry"
+      log_error "$source line $line_no: nested deeper than <directory>/<file>"
       return 1 ;;
   esac
   case "$entry" in
@@ -653,6 +664,15 @@ do_restore() {
       say_untrusted "Refusing to restore: not a recognised backup name: " "$base"
       exit 1 ;;
   esac
+  # The pattern above pins only the first 22 characters; the trailing `*` would
+  # otherwise admit raw ESC bytes in a directory name, which then reach `echo -e`
+  # via the confirmation prompt and the success line and can forge output around
+  # them. Constrain the whole name to a safe charset.
+  case "$base" in
+    *[!A-Za-z0-9.-]*)
+      say_untrusted "Refusing to restore: backup name contains unexpected characters: " "$base"
+      exit 1 ;;
+  esac
 
   # A symlink anywhere inside the backup could redirect a copy out of the tree.
   if [ -n "$(find "$resolved" -type l 2>/dev/null | head -n 1)" ]; then
@@ -665,7 +685,11 @@ do_restore() {
   # mechanism does not itself create.
   local allowed="claude.md agents commands rules .sdlc-receipt"
   local item name ok
-  for item in "$resolved"/* "$resolved"/.sdlc-receipt; do
+  # Include dotfiles in the scan. The copy loop below is allowlist-driven so a
+  # planted `.bashrc` or `.env` could never be written anyway, but reporting is
+  # the point: a tampered backup's hidden files should be visible, not ride
+  # along unmentioned.
+  for item in "$resolved"/* "$resolved"/.[!.]* "$resolved"/..?*; do
     [ -e "$item" ] || continue
     name="$(basename -- "$item")"
     ok=false
@@ -769,13 +793,22 @@ install_user_config() {
 
   mkdir -p -- "$CLAUDE_DIR/rules"
 
-  cp -- "$SCRIPT_DIR/src/claude.md" "$CLAUDE_DIR/claude.md"
-  log_ok "claude.md"
-
-  local rule
-  for rule in "$SCRIPT_DIR"/src/rules/*.md; do
-    cp -- "$rule" "$CLAUDE_DIR/rules/"
-    log_ok "rules/$(basename -- "$rule")"
+  # Copy exactly what the manifest declares — never a glob. Driving the copy
+  # from `owns` is what keeps the installed set and the receipt in lockstep: a
+  # glob that drifted from the manifest would either orphan files the
+  # uninstaller can never remove, or write a receipt claiming files that were
+  # never placed.
+  local entry src
+  for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+    src="$SCRIPT_DIR/src/$entry"
+    if [ ! -f "$src" ]; then
+      say_untrusted "Manifest declares a file the repo does not provide: " "$entry"
+      log_error "Refusing to continue with an incomplete install."
+      exit 1
+    fi
+    mkdir -p -- "$(dirname -- "$CLAUDE_DIR/$entry")"
+    cp -- "$src" "$CLAUDE_DIR/$entry"
+    log_ok "$entry"
   done
 
   remove_legacy

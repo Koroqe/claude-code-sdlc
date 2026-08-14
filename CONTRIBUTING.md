@@ -59,14 +59,21 @@ Project scaffold templates live in `templates/`. These are what users get when t
 # Install from your local checkout
 bash install.sh --local --yes
 
-# Verify files were installed (commands no longer copy to ~/.claude/commands/ —
-# they ship only as the plugin's skills, validated separately below)
-ls ~/.claude/agents/
+# Verify the memory layer was installed. This is ALL install.sh writes:
+# claude.md plus the 5 rules. Agents and skills ship in the plugin, and
+# install.sh deliberately does not copy them to ~/.claude — a user-level copy
+# would shadow the plugin's and freeze that agent at the version you copied.
 ls ~/.claude/rules/
 cat ~/.claude/claude.md
+cat ~/.claude/.sdlc-receipt     # exactly what this install placed
+
+# Preview or undo an install without guessing
+bash install.sh --local --dry-run
+bash install.sh --local --uninstall --dry-run
 
 # Verify the plugin's agents and skills
 claude plugin validate .
+node scripts/ci/validate-agents.js && node scripts/ci/validate-skills.js
 
 # Test in a real project
 cd your-project
