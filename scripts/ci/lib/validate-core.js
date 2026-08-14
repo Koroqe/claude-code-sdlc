@@ -104,6 +104,37 @@ function listNestedFiles(dir, fileName) {
 }
 
 /**
+ * Recursively collect files under `dir`, skipping any path segment in
+ * `excludeDirs`. Missing dir -> []. Used by the repo-wide scanners.
+ */
+function walkFiles(dir, { excludeDirs = [], test = () => true } = {}) {
+  const out = [];
+  const skip = new Set(excludeDirs);
+
+  function walk(current) {
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (skip.has(entry.name)) continue;
+        walk(full);
+      } else if (entry.isFile() && test(entry.name, full)) {
+        out.push(full);
+      }
+    }
+  }
+
+  walk(dir);
+  return out.sort();
+}
+
+/**
  * Minimal YAML frontmatter reader — enough for the flat `key: value` blocks
  * the harness actually uses, and deliberately no more. Returns raw string
  * values; interpreting them is each validator's job.
@@ -227,6 +258,7 @@ module.exports = {
   parseArgs,
   listFiles,
   listNestedFiles,
+  walkFiles,
   parseFrontmatter,
   parseList,
   Validator,
