@@ -846,19 +846,21 @@ install_user_config() {
   # never placed.
   local entry src
 
-  # Check every source exists BEFORE copying any of them, so a manifest that
-  # names a missing file fails with nothing written rather than half-installed.
+  # Preflight EVERY entry — source present and destination safe — before
+  # copying any of them. Checking destinations inline in the copy loop would
+  # mean a symlink on the third entry aborts with the first two already
+  # written; this way a rejected entry leaves nothing installed at all.
   for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
     if [ ! -f "$SCRIPT_DIR/src/$entry" ]; then
       say_untrusted "Manifest declares a file the repo does not provide: " "$entry"
       log_error "Refusing to start an install that cannot complete. Nothing was changed."
       exit 1
     fi
+    guarded_write_target "$entry"
   done
 
   for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
     src="$SCRIPT_DIR/src/$entry"
-    guarded_write_target "$entry"
     cp -- "$src" "$CLAUDE_DIR/$entry"
     log_ok "$entry"
   done
