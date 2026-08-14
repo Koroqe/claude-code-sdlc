@@ -2,6 +2,8 @@
 
 > Based on [PRD](../PRD.md) -- Section 3 and [Use Cases](../use-cases/model-tier-optimization_use_cases.md)
 
+> **Status caveat.** PRD Section 3 is marked `[SUPERSEDED]`. None of its functional requirements were implemented as written — the `model:` values in agent frontmatter are the result of a manual edit that happens to match the intended tiers, not of Section 3's mechanism. These test cases still pass, because they assert the tier values actually present in `agents/*.md`, and they are retained for that reason. The replacement mechanism (a profile applied at install time, plus a CI drift check) arrives in roadmap feature F4, which will supersede this document.
+
 **Note:** This project contains no runtime code. All agents, commands, and rules are markdown files with YAML frontmatter. "Testing" means verifying file existence, structural correctness, content presence, and cross-reference integrity by reading files and checking their contents. The bulk of these tests use `grep -l` and direct file reads to assert tier assignments.
 
 ---

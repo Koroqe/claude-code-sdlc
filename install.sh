@@ -372,6 +372,47 @@ guarded_rm() {
   rm -f -- "$path"
 }
 
+# The mirror of guarded_rm for the WRITE path. Removal was given symlink and
+# containment checks from the start; writing needs exactly the same defense,
+# for the same reason. Without it a pre-existing `~/.claude/rules -> /somewhere`
+# symlink silently redirects every installed file out of the tree while the
+# installer reports success.
+guarded_write_target() {
+  local entry="$1"
+  local top="${entry%%/*}"
+
+  if [ "$top" != "$entry" ]; then
+    if [ -L "$CLAUDE_DIR/$top" ]; then
+      say_untrusted "Refusing to install into a symlinked directory: " "$top"
+      log_error "$CLAUDE_DIR/$top is a symlink. Move it aside and re-run."
+      exit 1
+    fi
+    if [ -e "$CLAUDE_DIR/$top" ] && [ ! -d "$CLAUDE_DIR/$top" ]; then
+      say_untrusted "Refusing to install: expected a directory, found a file: " "$top"
+      exit 1
+    fi
+    mkdir -p -- "$CLAUDE_DIR/$top"
+  fi
+
+  if [ -L "$CLAUDE_DIR/$entry" ]; then
+    say_untrusted "Refusing to overwrite a symlink: " "$entry"
+    log_error "Move it aside and re-run."
+    exit 1
+  fi
+
+  local parent
+  parent="$(cd -- "$(dirname -- "$CLAUDE_DIR/$entry")" 2>/dev/null && pwd -P)" || {
+    say_untrusted "Refusing to install: cannot resolve destination for " "$entry"
+    exit 1
+  }
+  case "$parent" in
+    "$CLAUDE_DIR"|"$CLAUDE_DIR"/*) ;;
+    *)
+      say_untrusted "Refusing to install: destination resolves outside $CLAUDE_DIR: " "$entry"
+      exit 1 ;;
+  esac
+}
+
 prune_empty_dirs() {
   local dir
   for dir in agents commands rules; do
@@ -443,7 +484,14 @@ backup_existing() {
 
   [ -f "$CLAUDE_DIR/claude.md" ] && cp -- "$CLAUDE_DIR/claude.md" "$staging/claude.md"
   for dir in agents commands rules; do
-    if [ -d "$CLAUDE_DIR/$dir" ] && [ ! -L "$CLAUDE_DIR/$dir" ]; then
+    if [ -L "$CLAUDE_DIR/$dir" ]; then
+      # Not backed up: following it would copy someone else's directory into
+      # our backup, and restoring it later would write through the link. Say so
+      # rather than skipping in silence.
+      log_warn "$CLAUDE_DIR/$dir is a symlink — not backed up, and it will not be written to."
+      continue
+    fi
+    if [ -d "$CLAUDE_DIR/$dir" ]; then
       cp -R -P -- "$CLAUDE_DIR/$dir" "$staging/$dir"
     fi
   done
@@ -791,22 +839,26 @@ install_user_config() {
   sweep_stale_staging
   backup_existing
 
-  mkdir -p -- "$CLAUDE_DIR/rules"
-
   # Copy exactly what the manifest declares — never a glob. Driving the copy
   # from `owns` is what keeps the installed set and the receipt in lockstep: a
   # glob that drifted from the manifest would either orphan files the
   # uninstaller can never remove, or write a receipt claiming files that were
   # never placed.
   local entry src
+
+  # Check every source exists BEFORE copying any of them, so a manifest that
+  # names a missing file fails with nothing written rather than half-installed.
   for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
-    src="$SCRIPT_DIR/src/$entry"
-    if [ ! -f "$src" ]; then
+    if [ ! -f "$SCRIPT_DIR/src/$entry" ]; then
       say_untrusted "Manifest declares a file the repo does not provide: " "$entry"
-      log_error "Refusing to continue with an incomplete install."
+      log_error "Refusing to start an install that cannot complete. Nothing was changed."
       exit 1
     fi
-    mkdir -p -- "$(dirname -- "$CLAUDE_DIR/$entry")"
+  done
+
+  for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+    src="$SCRIPT_DIR/src/$entry"
+    guarded_write_target "$entry"
     cp -- "$src" "$CLAUDE_DIR/$entry"
     log_ok "$entry"
   done
