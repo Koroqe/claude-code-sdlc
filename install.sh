@@ -19,7 +19,7 @@ set -euo pipefail
 #   bash install.sh --help         # Show help
 # ============================================================================
 
-VERSION="2.1.0"
+VERSION="4.0.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 CLAUDE_DIR="$HOME/.claude"
 BACKUP_DIR=""
@@ -44,7 +44,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 print_help() {
   cat << 'HELPEOF'
-Claude Code SDLC Installer v2.1.0
+Claude Code SDLC Installer v4.0.0
 
 Turn Claude Code into a full dev team with 13 specialized AI agents.
 

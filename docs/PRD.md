@@ -151,7 +151,7 @@ Not applicable. This project has no API.
 
 ## 2. Execution Waves — Parallel Slice Implementation
 
-**Status:** [DRAFT]
+**Status:** [SHIPPED]
 **Date:** 2026-04-08
 **Priority:** Medium
 **Related:** Section 1 (FR-3: Executable Plan Format, FR-2: Deviation Rules)
@@ -344,8 +344,9 @@ Not applicable. This project has no API.
 
 ## 3. Agent Model Tier Optimization
 
-**Status:** [DRAFT]
+**Status:** [SUPERSEDED]
 **Date:** 2026-05-01
+**Superseded by:** Roadmap feature F4 (Adaptive tier routing + model routing). This section's approach — hardcoding `model:` in each agent's frontmatter — is replaced by profile-driven rewriting at install time (`quality` / `balanced` / `budget` / `inherit`) plus a CI drift check. None of this section's functional requirements are implemented as specified; the shipped `model:` fields are the artifact of a manual edit, not of FR-1..FR-3 below.
 **Priority:** Medium
 **Related:** Section 1 (NFR-4: uniform-opus-tier policy — superseded by this section)
 
@@ -719,7 +720,7 @@ Not applicable. This project has no API.
 
 ## 5. Changelog Automation
 
-**Status:** [DRAFT]
+**Status:** [SHIPPED]
 **Date:** 2026-06-02
 **Priority:** Medium
 **Related:** Section 2 (FR-2.6: orchestrator-only writes in parallel mode), Section 4 (FR-5: merge-ready finalization pattern)
