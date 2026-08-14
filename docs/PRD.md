@@ -1139,3 +1139,194 @@ None. This project has no API server; `claude plugin validate`, CI workflows, an
 10. **Dependency: Mandatory `security-auditor` pre-review for the `install.sh` manifest/uninstall/restore/dry-run slice.** The slice implementing FR-4 (manifest, `--uninstall`, `--restore`, `--dry-run`, path-safety validation, receipt, and the removal of both the legacy commands-copy loop and the legacy agents-copy loop) performs destructive deletion inside `$HOME`, accepts a user-supplied `--restore <backup-dir>` argument that is read and copied from, and must guarantee backup atomicity (temp-dir + rename, never an in-place write that could leave a partial, unusable backup mid-failure). Given this combination — destructive filesystem operations, an attacker-influenceable path argument, and the path-traversal surface described in FR-4.7 — this slice REQUIRES a `security-auditor` review before merge, not just the standard Phase 4 gate; this is called out explicitly here so the implementation plan schedules it as a pre-review, not a post-hoc check.
 11. **Dependency: This machine already runs additional hook entries in `~/.claude/settings.json`** from unrelated tooling. This feature does not add hooks (reserved for F2a), but the CI hook-config validator (FR-5.4) must be written against the eventual `hooks/hooks.json` schema without assuming it is the only hook configuration present on a user's machine.
 12. **Note: PRD-vs-implementation reconciliation performed at merge-ready, not assumed.** The goal-backward verifier and code reviewer flagged three places where this section's requirement text claimed something the shipped implementation deliberately does not do: FR-1.1 required a `hooks` component path field that would have pointed `plugin.json` at a nonexistent directory (the implementation correctly omits it until F2a adds `hooks/`); FR-7.2 listed `CHANGELOG.md` in the command-reference sweep scope (the implementation correctly left it untouched, since its entries are historical records); and FR-7.2 listed `.claude/scratchpad.md` in the same scope (the implementation correctly left it untouched, since it is transient working state). In each case the implementation's judgment was correct and this PRD section was reworded to match it — recorded here so the next reader sees that PRD-vs-code agreement was actively checked at merge-ready, not assumed to hold because the PRD was written first.
+
+---
+
+## 7. Hook Infrastructure and Non-Blocking Hooks
+
+**Status:** [DRAFT]
+**Date:** 2026-08-15
+**Priority:** High
+**Related:** Section 6 (Plugin Repackaging and Harness CI) — this feature fulfills the `hooks` component-path deferral Section 6 FR-1.1 explicitly left open ("the `hooks` field becomes required once F2a... adds a `hooks/` directory to the repo"); it extends Section 6 NFR-1's Node-is-CI-only scope into a third, distinct Node context (the hook runtime — see NFR-1 below); it consumes Section 6 FR-4.8's per-install receipt (`~/.claude/.sdlc-receipt`) as the drift-check input for FR-5.4; it closes the residual entry-point gap Section 6 FR-8.3 explicitly left open (the skill preflight only fires on explicit `/develop-feature` or `/bootstrap-feature` invocation); and it turns Section 6 FR-5.4's forward-looking, currently-vacuous hook-config validator (`scripts/ci/validate-hooks.js`) into a real check against a populated `hooks/hooks.json` (FR-8.4 below). Section 8 (the roadmap's F2b, blocking guards) is the deliberately separate follow-on feature that gives hooks the ability to `deny` a tool call; nothing in this section ships that capability.
+
+### 7.1 Description
+
+Stand up the plugin's hook runtime — the shared wrapper, configuration file, environment-variable controls, and three hook handlers — so that later features (starting with Section 8) have infrastructure to build blocking guards on top of. This feature itself ships only hooks that **observe or advise**: they read state and inject context, or run a command and report the result. None of them can block a tool call, block the Stop event, or otherwise stop an unattended run.
+
+**Why:** Every invariant this harness currently enforces — never commit on `main`, re-read a file before editing it, subagents never write the scratchpad, run `date -u` for the changelog timestamp, no AI attribution in commits — exists only as prose inside a prompt. Model compliance is the sole enforcement mechanism. That is the core reliability gap identified in the v4.0 roadmap: the pipeline is autonomous, but nothing stops a single missed instruction from silently violating any of those rules while every downstream gate still reports green. Mechanical enforcement requires a hook runtime to exist first. This feature builds that runtime and proves it out with hooks that carry real, useful behavior (session continuity across compaction, batched format/typecheck) but carry zero risk of dead-ending an unattended run, so the runtime itself is validated before Section 8 adds anything that can say no.
+
+**Design Decisions:**
+1. **Infrastructure and non-blocking hooks are shipped together, blocking guards are not.** Shipping the wrapper, the fail-open contract, and the runtime controls (FR-2 through FR-4) without any hook that can actually block proves the plumbing works under real, low-stakes conditions before Section 8 adds hooks whose entire purpose is to say no to a tool call. A newly-built blocking mechanism is exactly the kind of thing that should not be validated for the first time by something that can also strand an unattended run.
+2. **One shared wrapper, not one bootstrap per hook entry.** A community harness surveyed for the v4.0 roadmap inlines a `node -e "..."` bootstrap in every `hooks.json` entry — duplicated per hook, unreadable in a JSON string, and fragile to edit. This feature rejects that pattern explicitly: every hook entry in `hooks/hooks.json` invokes `hooks/lib/run-hook.js`, passing only a hook id, and the wrapper owns version-assertion, timeout, fail-open, and dispatch logic exactly once.
+3. **The fail-open contract is normative, not aspirational.** A hook framework's defining risk is that a hook which malfunctions on every tool call is worse than the prose instruction it replaced — prose degrades gracefully (it's occasionally ignored), a crashing blocking hook does not (it stops every run, every time, until someone notices and disables it). Because this harness's defining property is that its pipeline runs unattended, FR-3 states the fail-open contract as an unconditional requirement of `run-hook.js` itself, not a best-effort behavior left to each hook's own error handling.
+4. **`session:start:spine` is this feature's highest-leverage hook.** It is the only mechanism, other than reading the raw scratchpad by hand, by which a resumed or context-compacted session recovers where an autonomous run left off. It also carries the harness drift check (comparing the installed memory-layer version against the plugin version) and closes the unprefixed-request gap Section 6 FR-8 could not reach.
+5. **`post:edit:accumulate` → `stop:typecheck-format` batches quality checks at the response boundary, not the edit boundary.** Running format and typecheck after every single `Edit` call, as a naive PostToolUse hook would, multiplies command invocations by edit count for no benefit — the meaningful checkpoint is "the response is about to end," not "one file changed." The accumulator hook and the Stop hook are therefore two cooperating hooks, not one.
+6. **The Node boundary now has three distinct zones, not two.** Section 6 NFR-1 drew one line: Node is CI-only, and `install.sh` must never invoke it. This feature adds a third zone that Section 6 did not need to distinguish: the hook runtime, which Claude Code itself spawns directly during a live session (on `SessionStart`, `PostToolUse`, and `Stop`) — never during CI, and never from `install.sh`. All three zones remain disjoint: CI runs the validators, `install.sh` runs neither `node` nor `jq` (unchanged from Section 6), and Claude Code's own hook engine runs `run-hook.js`.
+7. **Permissions defaults close a direct autonomy failure, not a convenience gap.** An unattended run that stalls on a permission prompt has, in practice, stopped — there is no one at the keyboard to answer it. `templates/settings.json` shipping real `allow`/`deny` lists is therefore in scope for a feature about reliability, even though it touches no hook file.
+
+### 7.2 User Story
+
+As a developer running the Claude Code SDLC pipeline unattended, I want the harness to observe and advise through hooks — resurfacing exactly where a resumed or compacted session left off, and batching format/typecheck checks once per response instead of once per edit — so that the pipeline recovers its own state without me re-explaining it and code-quality checks happen automatically, without any hook ever being able to stall my run by malfunctioning.
+
+### 7.3 Functional Requirements
+
+#### FR-1: Hook Configuration
+
+Add the plugin-loaded configuration file that makes every current and future hook fire, and close the `hooks` component-path deferral Section 6 explicitly left open.
+
+1. **FR-1.1:** `hooks/hooks.json` MUST exist at the plugin root. It MUST be the file Claude Code loads automatically the moment the plugin is installed — no additional copy into a project's or user's `settings.json` is required or permitted (see FR-7.3).
+2. **FR-1.2:** `.claude-plugin/plugin.json` MUST gain a `hooks` component path field set to `"./hooks/"`, alongside the existing `agents` and `skills` fields. This is the field Section 6 FR-1.1 deliberately omitted because no `hooks/` directory existed at that time; FR-1.1 there states in writing that "F2a's implementation is responsible for adding it to `plugin.json`" — this requirement is that follow-through.
+3. **FR-1.3:** `claude plugin validate .` run from the repo root MUST continue to exit `0` after both `hooks/hooks.json` and the `plugin.json` `hooks` field are added (Section 6 AC-1 must not regress).
+4. **FR-1.4:** `hooks/hooks.json` MUST declare exactly the 3 hook handlers this feature ships (FR-5, FR-6): one `SessionStart` entry, one `PostToolUse` entry matched on `Edit|Write`, and one `Stop` entry — each entry's handler using the `command` type and invoking `hooks/lib/run-hook.js` (FR-2), and each declaring the namespaced `id` required by FR-4.1.
+
+#### FR-2: Shared Wrapper
+
+One wrapper module every hook entry invokes, replacing the per-entry inline-bootstrap pattern rejected in Design Decision 2.
+
+1. **FR-2.1:** Every hook entry in `hooks/hooks.json` MUST invoke handlers exclusively through `hooks/lib/run-hook.js`. No hook entry MUST inline a `node -e ...` (or equivalent) bootstrap script directly in the JSON configuration.
+2. **FR-2.2:** `run-hook.js` MUST resolve the plugin's own root directory from the `${CLAUDE_PLUGIN_ROOT}` environment variable Claude Code provides to hook processes, not from a path relative to the current working directory, so hook resolution is stable regardless of which project the hook fires in.
+3. **FR-2.3:** `run-hook.js` MUST assert a minimum Node version before dispatching to any handler, and MUST report an unmet version loudly (a one-line `systemMessage`, per FR-3.4) rather than failing silently or producing an opaque stack trace.
+4. **FR-2.4:** `run-hook.js` MUST apply a per-hook timeout, independently configurable per hook id, and MUST treat exceeding that timeout as a fail-open exit per FR-3.2.
+5. **FR-2.5:** `run-hook.js` MUST dispatch to the correct handler logic by hook id (the ids defined in FR-4.1), so one wrapper module serves all hook entries rather than one wrapper per hook.
+
+#### FR-3: Fail-Open Contract
+
+This is the feature's normative center: a hook may block only by deciding to, never as a side effect of malfunction. A blocking hook that crashes on every tool call is strictly worse than the prose rule it replaces — prose degrades gracefully when occasionally ignored; a crashing blocking hook stops every run, every time, until someone notices and disables it. Because this harness's defining property is that its pipeline runs to merge-ready unattended, every clause below is a hard requirement of `run-hook.js`, not a convention left to individual hook authors.
+
+1. **FR-3.1:** Any hook handler invoked through `run-hook.js` that throws an uncaught exception MUST result in the wrapper process exiting `0`.
+2. **FR-3.2:** Any hook handler that exceeds its configured timeout (FR-2.4) MUST result in the wrapper process exiting `0`.
+3. **FR-3.3:** If `run-hook.js` cannot spawn or run under a Node runtime satisfying its minimum-version assertion (FR-2.3), the hook MUST be treated as a no-op: the wrapper process MUST exit `0` and the surrounding tool call or session/session-lifecycle event MUST proceed exactly as if no hook were configured at all.
+4. **FR-3.4:** Every fail-open exit described in FR-3.1 through FR-3.3 MUST emit a one-line `systemMessage` identifying which hook id failed and why (`exception`, `timeout`, or `node-unavailable`), so the failure is visible without ever becoming blocking.
+5. **FR-3.5:** No hook shipped by this feature (FR-5, FR-6) MUST return a `deny` decision or otherwise block a tool call or the `Stop` event under any input or condition — this feature ships observe/advise hooks exclusively. The ability for a hook to deny is deferred to Section 8.
+6. **FR-3.6:** A hook's ability to block (once Section 8 introduces it) MUST always be the result of the hook's own deliberate logic evaluating its input, never a fallback behavior of a crash, timeout, or missing runtime — FR-3.1 through FR-3.3 apply identically to every hook this harness ever ships, present or future, not only to the 3 hooks in this feature.
+
+#### FR-4: Runtime Controls
+
+Namespaced ids, kill switches, and a profile system that gates which hooks run.
+
+1. **FR-4.1:** Every hook entry in `hooks/hooks.json` MUST declare a namespaced id in the form `<scope>:<event>:<name>` — this feature's 3 ids are `session:start:spine`, `post:edit:accumulate`, and `stop:typecheck-format`.
+2. **FR-4.2:** Setting the environment variable `SDLC_HOOKS_ENABLED=0` MUST cause `run-hook.js` to exit `0` immediately for every configured hook id, without executing any hook's logic.
+3. **FR-4.3:** Setting `SDLC_DISABLED_HOOKS` to a comma-separated list of hook ids MUST cause `run-hook.js` to exit `0` immediately for exactly the listed ids, and MUST leave every other configured hook unaffected.
+4. **FR-4.4:** Setting `SDLC_HOOK_PROFILE` to `minimal`, `standard`, or `strict` MUST gate which hooks execute. Each hook this feature ships MUST declare, in its own configuration or handler metadata, which of the 3 profiles it belongs to; `run-hook.js` MUST skip (exit `0` for) a hook whose declared profiles do not include the currently active profile.
+5. **FR-4.5:** If `SDLC_HOOK_PROFILE` is set to any value other than `minimal`, `standard`, or `strict`, `run-hook.js` MUST fall back to `standard` rather than failing, blocking, or treating the invalid value as if no hooks were configured.
+6. **FR-4.6:** If `SDLC_HOOK_PROFILE` is unset, `run-hook.js` MUST behave as if it were set to `standard`.
+7. **FR-4.7:** All 3 hooks shipped by this feature (FR-5, FR-6) MUST declare membership in the `standard` profile at minimum, so a default (unconfigured) installation runs them.
+
+#### FR-5: `session:start:spine`
+
+A SessionStart hook that re-enters the autonomous loop at the correct point after a resume or compaction, and reports harness version drift.
+
+1. **FR-5.1:** `session:start:spine` MUST read `.claude/scratchpad.md` in the current project, when present, and inject the current feature name, branch, wave, and slice into the session via `additionalContext`.
+2. **FR-5.2:** The injected context MUST be capped at `SDLC_SESSION_CONTEXT_MAX_CHARS` characters (default `4000`). When the source content exceeds the cap, the hook MUST truncate rather than omit the injection entirely.
+3. **FR-5.3:** If `.claude/scratchpad.md` does not exist in the current project, `session:start:spine` MUST no-op with respect to scratchpad injection (no `additionalContext` from this source, no error) — a project with no scratchpad MUST be unaffected by this hook's presence.
+4. **FR-5.4:** `session:start:spine` MUST perform a harness drift check: read the installed memory-layer version from `~/.claude/.sdlc-receipt` (the receipt Section 6 FR-4.8 defines, line 1 of that file) and compare it against the plugin's own `version` field in `.claude-plugin/plugin.json`. If the two differ, the hook MUST report the mismatch via `additionalContext` or `systemMessage` at session start.
+5. **FR-5.5:** If `~/.claude/.sdlc-receipt` is absent, the drift check MUST no-op silently (no warning, no error) — it MUST NOT report a false mismatch on a machine where the memory layer was never installed via `install.sh` (for example, a plugin-only trial install).
+6. **FR-5.6:** `session:start:spine` is the mechanism that closes the residual gap Section 6 FR-8.3 explicitly left open: the entry-point skill preflight (`skills/develop-feature/SKILL.md`, `skills/bootstrap-feature/SKILL.md`) only fires on an explicit `/develop-feature` or `/bootstrap-feature` invocation, so a feature request made without either prefix reaches no preflight check at all. `session:start:spine` runs on every session start regardless of how the pipeline is subsequently entered, and so is not subject to that gap.
+7. **FR-5.7:** A session resumed or compacted mid-feature MUST re-enter the autonomous loop at the correct wave and slice using only the `additionalContext` injected by this hook — without the agent needing to ask the user what the current state is.
+
+#### FR-6: `post:edit:accumulate` → `stop:typecheck-format`
+
+Two cooperating hooks that batch format and typecheck at the response boundary instead of the edit boundary.
+
+1. **FR-6.1:** A PostToolUse hook matched on `Edit|Write`, id `post:edit:accumulate`, MUST append each edited or written file's path to a per-session scratch file dedicated to this purpose. This accumulator file MUST NOT be `.claude/scratchpad.md` — writing to the pipeline's own scratchpad from a hook would conflict with the orchestrator-only scratchpad-write rule in `src/rules/scratchpad.md`.
+2. **FR-6.2:** A Stop hook, id `stop:typecheck-format`, MUST read the paths accumulated by `post:edit:accumulate`, run the project's declared format and typecheck commands exactly once for the response that is about to stop, and then clear the accumulator.
+3. **FR-6.3:** Format and typecheck commands MUST run at most once per response, never once per edited file, even when a single response edits multiple files.
+4. **FR-6.4:** If the project's `CLAUDE.md` declares no typecheck command, `stop:typecheck-format` MUST no-op with a visible note (a `systemMessage` stating that no typecheck command is configured) and MUST NOT block the `Stop` event.
+5. **FR-6.5:** This repository (`claude-code-sdlc` itself) has no `package.json` and declares no typecheck command — it dogfoods its own pipeline on markdown, shell, and CI-only JavaScript. The no-op path defined in FR-6.4 is therefore this repo's default, everyday behavior, not an edge case, and the fixture-driven tests required by FR-8 MUST treat it as the primary scenario for `stop:typecheck-format`, not an afterthought case appended to the suite.
+6. **FR-6.6:** `stop:typecheck-format` MUST NOT block the `Stop` event under any outcome — a failing format or typecheck command MUST be reported visibly but MUST NOT prevent the response from completing, consistent with FR-3.5 (this feature ships no blocking hooks).
+
+#### FR-7: Permissions Defaults
+
+Real `allow`/`deny` lists so unattended runs stop stalling on permission prompts.
+
+1. **FR-7.1:** `templates/settings.json` MUST gain a `permissions.deny` list. It MUST cover, at minimum, destructive commands (e.g. recursive/forced deletion outside a project's own working tree, forced or history-rewriting git operations against shared branches) and exfiltration-shaped commands (e.g. piping a fetched remote script directly into a shell, or transmitting local file contents to an external endpoint).
+2. **FR-7.2:** `templates/settings.json`'s `permissions.allow` list MUST be expanded beyond its current 3 entries to cover the routine, low-risk commands the pipeline actually issues during an unattended run (e.g. running the project's own test/build/typecheck commands, reading and writing within the project's own working tree), so that a `/develop-feature` run does not stall on a permission prompt for commands the pipeline itself generates as part of its documented behavior.
+3. **FR-7.3:** `hooks/hooks.json` MUST NEVER be copied into `templates/settings.json` or into any project's `.claude/settings.json`. Plugin hooks auto-load directly from the plugin's own `hooks/hooks.json` (FR-1.1); pasting the same hook configuration into `settings.json` causes every hook in it to execute twice per matching event.
+4. **FR-7.4:** `templates/settings.json`'s existing `permissions.allow` entries (`Bash(git commit*)`, `Edit(.claude/scratchpad.md)`, `Write(.claude/scratchpad.md)`) MUST be preserved, not replaced, by the expansion in FR-7.2.
+
+#### FR-8: Hook Tests
+
+Fixture-driven tests for every hook, including the fail-open cases, wired into the CI validator already anticipated for this purpose.
+
+1. **FR-8.1:** Every hook shipped by this feature MUST have a fixture-driven test that feeds crafted stdin JSON to the hook (invoked through `run-hook.js`) and asserts both the process exit code and the shape of any stdout JSON produced.
+2. **FR-8.2:** Test coverage MUST include, for each hook, at least one negative case where the hook correctly does not fire or does not produce its usual output — for example, `session:start:spine` against a project with no `.claude/scratchpad.md` (FR-5.3), and `stop:typecheck-format` against a project with no typecheck command configured (FR-6.4/FR-6.5) — asserting no output or side effect beyond the documented no-op note.
+3. **FR-8.3:** Test coverage MUST include all 3 fail-open cases from FR-3: a hook handler that throws, a hook handler that exceeds its configured timeout, and a simulated Node-unavailable condition — each asserted to exit `0` and each asserted to emit the `systemMessage` required by FR-3.4.
+4. **FR-8.4:** `scripts/ci/validate-hooks.js` MUST be extended so that its existing schema checks (event names, handler `type`, `id` presence — already implemented in anticipation of this feature) run against the real `hooks/hooks.json` this feature ships, moving the validator off the vacuous absent-file pass path it currently takes (Section 6 FR-5.4/FR-5.9) onto a genuine check of a populated configuration with 3 handler entries.
+5. **FR-8.5:** `.github/workflows/ci.yml` MUST be extended to run the fixture-driven hook tests from FR-8.1 through FR-8.3 as part of the existing `validate-assets` job, alongside the current validator invocations and their falsification/anti-vacuity steps.
+
+### 7.4 Non-Functional Requirements
+
+1. **NFR-1 (extends Section 6 NFR-1 to a third, distinct Node context):** Section 6 NFR-1 scoped this repo's introduction of JavaScript to CI tooling only, with `install.sh` barred from invoking `node` or `jq`. This feature introduces a third context Section 6 did not need: the hook runtime, which Claude Code itself spawns directly on live session and tool-call events (`SessionStart`, `PostToolUse`, `Stop`) — never during CI, and never from `install.sh`. `install.sh` remains barred from invoking `node` or `jq`, unchanged; hooks are not part of the installer's execution path and are never invoked by it. Node code shipped by this feature MUST have **zero npm runtime dependencies** (no `npm install` step required for hooks to run) and MUST share one common wrapper module (`hooks/lib/run-hook.js`, FR-2.1) rather than duplicating version-assertion, timeout, or dispatch logic per hook.
+2. **NFR-2 (backward compatible):** A project with the plugin not installed, or run with `SDLC_HOOKS_ENABLED=0` set, MUST behave identically to a Section-6-only installation with no hooks configured at all — no observable behavior change, no missing functionality beyond the hooks themselves.
+3. **NFR-3 (no autonomy regression):** Nothing added by this feature may require a human to remember to run it manually — all 3 hooks fire automatically from existing Claude Code lifecycle events. No hook shipped by this feature may block a tool call, block the `Stop` event, or otherwise require human intervention to let a run proceed (FR-3.5, FR-6.4, FR-6.6).
+4. **NFR-4 (asset budget):** This feature adds 3 hooks (`session:start:spine`, `post:edit:accumulate`, `stop:typecheck-format`) against the v4.0 hard budget of ≤12 hooks. Post-feature totals: 13 agents / 5 skills / 3 hooks — agent and skill counts are unchanged from Section 6.
+
+### 7.5 Acceptance Criteria
+
+1. **AC-1:** `claude plugin validate .` run from the repo root exits `0` after `hooks/hooks.json` exists and `.claude-plugin/plugin.json` declares the `hooks` component path field pointing at `./hooks/`.
+2. **AC-2:** Every one of the 3 hook ids declared in `hooks/hooks.json` has a corresponding fixture-driven test asserting exit code and stdout JSON shape, including at least one negative case per hook (FR-8.2) and all 3 fail-open cases — throw, timeout, Node-unavailable — each asserted to exit `0` (FR-8.3).
+3. **AC-3:** Setting `SDLC_DISABLED_HOOKS=session:start:spine` in the environment for a session start disables exactly `session:start:spine` — verifiable by a fixture test asserting no `additionalContext` is injected from that hook — while `post:edit:accumulate` and `stop:typecheck-format` continue to fire normally in the same run.
+4. **AC-4:** Given a `.claude/scratchpad.md` populated with an in-progress wave/slice, `session:start:spine`'s `additionalContext` output contains the correct feature name, branch, wave number, and slice number — verifiable by a fixture test comparing the hook's stdout against the scratchpad fixture's known values.
+5. **AC-5:** Running `stop:typecheck-format` against a fixture representing this repo's own configuration (no `package.json`, no typecheck command declared) exits `0`, emits the visible no-op `systemMessage` required by FR-6.4, and does not block the `Stop` event — verified by the fixture test required by FR-6.5/FR-8.2 as the primary (not edge-case) scenario for this hook.
+6. **AC-6:** `hooks/hooks.json` contains no reference to, and is never copied into, `templates/settings.json` — verifiable by inspecting `templates/settings.json` and confirming it contains a `permissions` object only, no `hooks` key of any kind.
+7. **AC-7:** `templates/settings.json`'s `permissions.deny` list is non-empty and its `permissions.allow` list contains both the 3 pre-existing entries (`Bash(git commit*)`, `Edit(.claude/scratchpad.md)`, `Write(.claude/scratchpad.md)`) and the entries added under FR-7.2.
+8. **AC-8:** `node scripts/ci/validate-hooks.js` exits `0` against the real `hooks/hooks.json` shipped by this feature, and exits non-zero against a deliberately seeded bad `hooks/hooks.json` fixture (missing `id`, unknown handler `type`, or a malformed `hooks` array) — extending the validator's existing anti-vacuity behavior (Section 6 FR-5.9) from a trivial pass on an absent file to a genuine check on a populated one.
+9. **AC-9:** `.github/workflows/ci.yml`'s `validate-assets` job runs the hook fixture tests added under FR-8.1 through FR-8.3, and the job fails if any fixture test fails.
+10. **AC-10:** Added per-tool-call latency from the 3 hooks is measured (wall-clock delta across a fixed sequence of tool calls, hooks enabled vs. `SDLC_HOOKS_ENABLED=0`) and reported in the implementation record, on top of the baseline of the 14 hook entries already registered in `~/.claude/settings.json` on the reference machine (Risk 2 below) — not merely asserted to be negligible without measurement.
+11. **AC-11:** A session started with no `.claude/scratchpad.md` present in the project produces no `additionalContext` injection from `session:start:spine` and no error — verifiable by the fixture test required by FR-8.2.
+12. **AC-12:** A session started where `~/.claude/.sdlc-receipt`'s version differs from `.claude-plugin/plugin.json`'s `version` field produces a visible drift report at session start; a session where the two match produces no drift report; a session where the receipt is absent produces no drift report and no error (FR-5.4, FR-5.5) — each verifiable by a dedicated fixture test.
+
+### 7.6 Affected Components
+
+#### New Files
+
+| File | Purpose |
+|------|---------|
+| `hooks/hooks.json` | Plugin-loaded hook configuration declaring the 3 handler entries (`SessionStart`, `PostToolUse` on `Edit\|Write`, `Stop`), each routed through `run-hook.js` (FR-1) |
+| `hooks/lib/run-hook.js` | Shared wrapper — `${CLAUDE_PLUGIN_ROOT}` resolution, Node-version assertion, per-hook timeouts, the fail-open contract, and dispatch by hook id (FR-2, FR-3, FR-4) |
+| `hooks/handlers/session-start-spine.js` | `session:start:spine` handler logic (FR-5) |
+| `hooks/handlers/post-edit-accumulate.js` | `post:edit:accumulate` handler logic (FR-6) |
+| `hooks/handlers/stop-typecheck-format.js` | `stop:typecheck-format` handler logic (FR-6) |
+| `tests/fixtures/hooks/*` | Crafted stdin fixtures for every hook's positive, negative, and fail-open test cases (FR-8.1 through FR-8.3) |
+
+*(Exact handler filenames under `hooks/handlers/` are illustrative and may be finalized by the planner during `/bootstrap-feature`; `hooks/hooks.json` and `hooks/lib/run-hook.js` are fixed by FR-1.1 and FR-2.1 respectively.)*
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|------|---------|---------------------|
+| `.claude-plugin/plugin.json` | Add `hooks: "./hooks/"` component path field | FR-1.2 |
+| `templates/settings.json` | Add `permissions.deny`; expand `permissions.allow` beyond the current 3 entries; preserve existing entries | FR-7.1, FR-7.2, FR-7.4 |
+| `scripts/ci/validate-hooks.js` | No schema changes required — its existing checks now run against a real, populated `hooks/hooks.json` instead of the absent-file pass path | FR-8.4 |
+| `.github/workflows/ci.yml` | Add hook fixture-test invocation to the `validate-assets` job | FR-8.5 |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|------|--------|
+| `install.sh` | Hooks run under Claude Code's own hook engine, never under the installer; `install.sh` remains barred from invoking `node` or `jq` per Section 6 NFR-1, unchanged by this feature. |
+| `manifests/owned-files.txt` | The manifest enumerates `install.sh`'s `~/.claude` footprint only; hooks ship exclusively through the plugin (FR-1.1) and are never installed by `install.sh`. |
+| `agents/*.md` (13 files) | No agent role or prompt changes; this feature is infrastructure and non-blocking hooks only. |
+| `skills/*/SKILL.md` (5 files) | No skill changes; the residual entry-point gap this feature closes (FR-5.6) is closed by a hook, not a skill edit. |
+| `src/claude.md`, `src/rules/*.md` | The memory layer's content is unaffected; nothing in this feature changes the pipeline instruction or process rules text itself. |
+
+### 7.7 UI Changes
+
+None. This feature adds Node-based hook handlers that run inside Claude Code's own tool-call and session lifecycle; there is no web application, page, or user-facing component. The only observable surface is `additionalContext`/`systemMessage` text injected into the agent's own context window, not a UI.
+
+### 7.8 Schema Changes
+
+None. This project has no database of any kind; nothing in this feature introduces one.
+
+### 7.9 Affected Endpoints
+
+None. This project has no API server; hooks execute as local child processes spawned directly by Claude Code's own hook engine on the developer's machine, not as network endpoints.
+
+### 7.10 Risks and Dependencies
+
+1. **Risk: Hook malfunction becoming policy.** A hook that crashes, hangs, or cannot spawn Node on every tool call would functionally replace this harness's prose-only enforcement with a *worse* mechanism — one that halts every run instead of merely being occasionally ignored. Mitigation: FR-3's fail-open contract makes every malfunction mode (throw, timeout, Node-unavailable) an unconditional exit-`0` at the `run-hook.js` layer, not a per-hook convention; FR-8.3 requires a fixture test proving each of the 3 fail-open cases actually exits `0`.
+2. **Risk: This machine already runs 14 hook entries in `~/.claude/settings.json`, several with empty matchers on `PreToolUse`/`PostToolUse`.** This feature's 3 hooks stack on top of that existing configuration on every matching tool call; ordering, cumulative latency, and exit-code interaction between the pre-existing 14 entries and this feature's 3 cannot be assumed negligible — it must be measured. Mitigation: AC-10 requires measured, reported per-tool-call latency (hooks enabled vs. `SDLC_HOOKS_ENABLED=0`) rather than an unverified assertion of negligibility.
+3. **Risk: Double execution if `hooks/hooks.json` is pasted into `settings.json`.** Plugin hooks auto-load from the plugin's own `hooks/hooks.json` the moment the plugin is installed; a well-intentioned copy of the same configuration into a project's or user's `settings.json` would register every hook twice, doubling side effects (duplicate `additionalContext` injections, `post:edit:accumulate` recording each path twice) and doubling any measured latency from Risk 2. Mitigation: FR-7.3 states this as a hard requirement, AC-6 makes it machine-verifiable by inspecting `templates/settings.json` for the absence of any `hooks` key, and the risk is called out explicitly in the templates file's own comments (an implementation detail, not a requirement text change).
+4. **Risk: Hook stdin does not carry context-window usage — only the statusline JSON does.** A future context-budget monitor cannot be built as a hook on top of this feature's infrastructure alone; it needs the statusline (the roadmap's F4) shipped first, and per the roadmap's Risk 8, a side-channel bridge between the two must degrade visibly (not silently) if the statusline is not running. Mitigation: this feature does not attempt a context monitor — `session:start:spine`'s drift check and scratchpad injection are the only state this feature reads — and the dependency on F4 is recorded here so a future feature does not silently assume stdin carries data it does not.
+5. **Dependency: Section 6 (Plugin Repackaging and Harness CI) must exist first.** This feature's plugin manifest field (FR-1.2), CI validator extension (FR-8.4), and drift-check input (FR-5.4, reading Section 6 FR-4.8's install receipt) all assume the plugin scaffold, `scripts/ci/validate-hooks.js`, and the manifest-driven installer Section 6 produces. Per the roadmap's stated execution order (F1 → F2a → F2b), this feature is F2a and lands immediately after Section 6.
+6. **Dependency: This feature is a prerequisite for Section 8 (the roadmap's F2b, blocking guards).** Every blocking guard in Section 8 is expected to be implemented as a hook invoked through `hooks/lib/run-hook.js` and subject to the same fail-open contract (FR-3) this feature establishes. Section 8 cannot begin until this feature's wrapper, configuration file, and runtime controls exist.
