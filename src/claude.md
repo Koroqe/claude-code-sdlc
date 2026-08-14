@@ -50,6 +50,8 @@ N+1. Code review, security audit, build, E2E, docs verification, changelog entry
 
 When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 
+*(The commands referenced below are plugin skills, resolvable in full as `/claude-code-sdlc:<name>` — e.g. `/claude-code-sdlc:bootstrap-feature`. The bare form used throughout this file works automatically as long as no other installed plugin defines a skill by the same name.)*
+
 1. **Run `/bootstrap-feature` FIRST** — this creates ALL documentation:
    - Product Manager writes PRD section (prd-writer agent)
    - Business Analyst writes use cases (ba-analyst agent)

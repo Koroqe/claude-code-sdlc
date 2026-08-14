@@ -1,0 +1,116 @@
+name: Harness CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Least privilege: these jobs only read the checked-out tree. Nothing here
+# needs write access to the repository, packages, or any other scope.
+permissions:
+  contents: read
+
+jobs:
+  validate-assets:
+    name: Validate harness assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Guarantees a Node runtime is present and is at or above the floor the
+      # shared wrapper asserts. Without this step a missing Node would surface
+      # as a shell 127, not as a named failure.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No `npm install` anywhere in this workflow — the validators are
+      # zero-dependency by design (PRD Section 6, NFR-1).
+      - name: Report Node version
+        run: node --version
+
+      # --- Validators must PASS against the real tree -------------------
+      - name: Validate agents
+        run: node scripts/ci/validate-agents.js
+
+      - name: Validate skills
+        run: node scripts/ci/validate-skills.js
+
+      - name: Validate hooks
+        run: node scripts/ci/validate-hooks.js
+
+      - name: Validate no personal paths
+        run: node scripts/ci/validate-personal-paths.js
+
+      - name: Validate unicode safety
+        run: node scripts/ci/validate-unicode-safety.js
+
+      - name: Validate version consistency
+        run: node scripts/ci/validate-version-consistency.js
+
+      # --- Falsifiability: each validator must FAIL on a seeded defect ---
+      # A validator that only ever passes proves nothing. These steps invert
+      # the exit code, so CI goes red if a validator stops catching the bug it
+      # was written to catch.
+      - name: Falsify — agents validator catches a bad agent
+        run: '! node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1'
+
+      - name: Falsify — skills validator catches a bad skill
+        run: '! node scripts/ci/validate-skills.js --root tests/fixtures/ci/bad-skill --min 1'
+
+      - name: Falsify — hooks validator catches a bad hooks.json
+        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks'
+
+      - name: Falsify — personal-path validator catches a leaked home path
+        run: '! node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/bad-personal-path --min 1'
+
+      - name: Falsify — unicode validator catches invisible and homoglyph characters
+        run: '! node scripts/ci/validate-unicode-safety.js --root tests/fixtures/ci/bad-unicode --min 0'
+
+      - name: Falsify — version validator catches disagreeing versions
+        run: '! node scripts/ci/validate-version-consistency.js --root tests/fixtures/ci/bad-version'
+
+      # --- Positive control: allowlisted placeholders must still PASS ----
+      - name: Control — documented path placeholders are accepted
+        run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/good-personal-path --min 1
+
+      # --- Anti-vacuity: a validator matching zero files must FAIL -------
+      # This is the check that stops "exits 0" from meaning "found nothing".
+      - name: Anti-vacuity — agents validator fails on an empty tree
+        run: '! node scripts/ci/validate-agents.js --root "$(mktemp -d)"'
+
+      - name: Anti-vacuity — skills validator fails on an empty tree
+        run: '! node scripts/ci/validate-skills.js --root "$(mktemp -d)"'
+
+      - name: Anti-vacuity — personal-path validator fails on an empty tree
+        run: '! node scripts/ci/validate-personal-paths.js --root "$(mktemp -d)"'
+
+      - name: Anti-vacuity — unicode validator fails on an empty tree
+        run: '! node scripts/ci/validate-unicode-safety.js --root "$(mktemp -d)"'
+
+      - name: Anti-vacuity — version validator fails on an empty tree
+        run: '! node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)"'
+
+  shell-syntax:
+    name: Installer shell syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check install.sh parses
+        run: bash -n install.sh
+
+      # PRD Section 6, NFR-1 / AC-9: the Node boundary stays at CI. The
+      # installer runs on adopter machines and must depend on nothing but a
+      # POSIX shell. Portable word-boundary form — GNU-only \b is not assumed.
+      - name: Assert install.sh invokes neither node nor jq
+        run: |
+          if grep -nE '(^|[^a-zA-Z])(node|jq)([^a-zA-Z]|$)' install.sh | grep -v '^[0-9]*: *#'; then
+            echo "install.sh must not invoke node or jq (PRD Section 6, NFR-1 / AC-9)"
+            exit 1
+          fi

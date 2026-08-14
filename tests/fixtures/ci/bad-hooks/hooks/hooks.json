@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "NotARealEvent": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "telepathy",
+            "command": "echo seeded-bad-fixture"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ This guard makes double-writes impossible even if the trigger-ownership heuristi
 
 ## Trigger Ownership — write exactly once per completed unit
 
-Each completed unit of work must produce **exactly one** changelog entry. Ownership of the write is assigned as follows:
+Each completed unit of work must produce **exactly one** changelog entry. Ownership of the write is assigned as follows. *(The commands named below are plugin skills, resolvable in full as `/claude-code-sdlc:<name>`; the bare form used throughout this document works automatically unless another installed plugin defines a same-named skill.)*
 
 - **`/merge-ready`** writes one entry as its finalization step, after all quality gates PASS. This covers any feature or fix taken through the quality gates.
 - **A standalone `/implement-slice`** — invoked directly by the user, NOT driven by `/develop-feature`, and NOT running as a parallel-wave subagent — writes one entry for standalone fixes.

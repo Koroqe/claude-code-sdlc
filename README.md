@@ -5,7 +5,7 @@
 13 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-3.1.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.0.0-green.svg)]()
 
 ---
 
@@ -38,6 +38,8 @@ Claude Code out of the box:
 
 ## Install
 
+This harness ships in two parts, and **both are required**: a Claude Code plugin (agents + skills) and a memory layer installed by `install.sh` (`~/.claude/claude.md` and `~/.claude/rules/*.md`).
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
 ```
@@ -50,6 +52,17 @@ cd claude-code-sdlc
 bash install.sh --yes
 ```
 
+Then, inside a Claude Code session, install the plugin itself:
+
+```
+/plugin marketplace add <path-or-repo>
+/plugin install claude-code-sdlc@claude-code-sdlc
+```
+
+**Installing the plugin alone is not sufficient.** `bash install.sh` is still required — it is the only thing that installs the memory layer (`~/.claude/claude.md` and `~/.claude/rules/*.md`), because plugins have no user-memory component type. Skip it and the autonomous pipeline never engages for unprefixed natural-language feature requests, even though the plugin's agents and skills are otherwise fully installed and invocable.
+
+This split is deliberate, not an installer that forgot to do its job: Claude Code auto-loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as user memory on every session — the only channel the mandatory, always-on pipeline instruction can travel through — while the plugin system has no equivalent mechanism, so the executable agents and skills move to the plugin and the memory layer stays on `install.sh`.
+
 Scaffold a new project:
 
 ```bash
@@ -59,6 +72,8 @@ cd your-project && bash install.sh --init-project
 ---
 
 ## How It Works
+
+The commands below are plugin skills. Written in full they resolve as `/claude-code-sdlc:<name>` (e.g. `/claude-code-sdlc:bootstrap-feature`); the shorter bare form shown throughout this document (e.g. `/bootstrap-feature`) resolves automatically as long as no other installed plugin defines a skill by the same name — if one does, use the namespaced form to disambiguate.
 
 ```
 Feature Request
@@ -194,10 +209,18 @@ Creates:
 
 ## Customization
 
-- **Edit agents** — each is a standalone `.md` file in `~/.claude/agents/`
+Agents and skills are packaged as a Claude Code plugin (`agents/*.md`, `skills/*/SKILL.md` in this repo) and come **only** from there. `install.sh` installs the memory layer and nothing else: `~/.claude/claude.md` and `~/.claude/rules/*.md`.
+
+It has to work this way. Claude Code resolves subagents by precedence — a user-level `~/.claude/agents/planner.md` outranks a plugin's `planner`, and unlike skills, **plugin subagents are not namespaced**, so a shadowed one is unreachable by any name. If `install.sh` also wrote the agents into `~/.claude/agents/`, those copies would win permanently and every future agent update shipped in the plugin would silently do nothing. Skills do not have this problem: `/claude-code-sdlc:develop-feature` coexists with any same-named skill from another source.
+
+For the same reason, upgrading from v3.x **removes** the 13 agent files and 5 command files that older versions installed into `~/.claude/`. Left in place they would shadow their plugin replacements. Removal is scoped to a manifest, never a wildcard, so your own agents in `~/.claude/agents/` are untouched — and everything removed is captured in a timestamped backup first.
+
+**What an `install.sh`-only setup gets** (plugin never installed): the memory layer is active, so the mandatory pipeline instruction and all five process rules load on every session and Claude follows the documented workflow. But there are no specialist subagents to delegate to, so the phases run inline rather than through `prd-writer`, `architect`, `qa-planner` and the rest. Install the plugin for the full agency.
+
+- **Edit agents** — each is a standalone `.md` file in `agents/`, shipped via the plugin. Do not copy them to `~/.claude/agents/`: user-level agents shadow plugin agents permanently, so a local copy freezes that agent at the version you copied.
 - **Add agents** — create a new `.md` with YAML frontmatter (`name`, `description`, `tools`, `model`)
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
-- **Fork and reinstall** — edit in `src/agents/`, run `bash install.sh --local --yes`
+- **Fork and reinstall** — edit in `agents/`, run `bash install.sh --local --yes` and reinstall the plugin
 
 ### Model Tiers
 
