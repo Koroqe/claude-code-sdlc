@@ -209,9 +209,15 @@ Creates:
 
 ## Customization
 
-Agents and skills are packaged as a Claude Code plugin (`agents/*.md`, `skills/*/SKILL.md` in this repo). `install.sh` additionally mirrors the 13 agents to `~/.claude/agents/` so install.sh-only setups (plugin never installed) keep full pipeline functionality — `~/.claude/claude.md` and `~/.claude/rules/*.md` are the only pieces exclusive to `install.sh`; commands are no longer copied to `~/.claude/commands/` at all, since they now ship solely as the plugin's skills.
+Agents and skills are packaged as a Claude Code plugin (`agents/*.md`, `skills/*/SKILL.md` in this repo) and come **only** from there. `install.sh` installs the memory layer and nothing else: `~/.claude/claude.md` and `~/.claude/rules/*.md`.
 
-- **Edit agents** — each is a standalone `.md` file in `agents/` (also mirrored to `~/.claude/agents/` by `install.sh`)
+It has to work this way. Claude Code resolves subagents by precedence — a user-level `~/.claude/agents/planner.md` outranks a plugin's `planner`, and unlike skills, **plugin subagents are not namespaced**, so a shadowed one is unreachable by any name. If `install.sh` also wrote the agents into `~/.claude/agents/`, those copies would win permanently and every future agent update shipped in the plugin would silently do nothing. Skills do not have this problem: `/claude-code-sdlc:develop-feature` coexists with any same-named skill from another source.
+
+For the same reason, upgrading from v3.x **removes** the 13 agent files and 5 command files that older versions installed into `~/.claude/`. Left in place they would shadow their plugin replacements. Removal is scoped to a manifest, never a wildcard, so your own agents in `~/.claude/agents/` are untouched — and everything removed is captured in a timestamped backup first.
+
+**What an `install.sh`-only setup gets** (plugin never installed): the memory layer is active, so the mandatory pipeline instruction and all five process rules load on every session and Claude follows the documented workflow. But there are no specialist subagents to delegate to, so the phases run inline rather than through `prd-writer`, `architect`, `qa-planner` and the rest. Install the plugin for the full agency.
+
+- **Edit agents** — each is a standalone `.md` file in `agents/`, shipped via the plugin. Do not copy them to `~/.claude/agents/`: user-level agents shadow plugin agents permanently, so a local copy freezes that agent at the version you copied.
 - **Add agents** — create a new `.md` with YAML frontmatter (`name`, `description`, `tools`, `model`)
 - **Change models** — set `model: opus`, `sonnet`, or `haiku` per agent in frontmatter
 - **Fork and reinstall** — edit in `agents/`, run `bash install.sh --local --yes` and reinstall the plugin
