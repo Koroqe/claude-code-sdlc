@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-14
+
+### Plugin Repackaging and Harness CI — 23:15 UTC
+**Summary:** The toolkit now installs as a Claude Code plugin, and it cleans up the older files that would otherwise quietly override it. Your own personal files are never touched.
+**Details:** The agents and pipeline commands now ship as a plugin, while a small installer keeps the always-on instructions in place — both parts are needed, and the setup guide explains why. Upgrading removes files from earlier versions that would have silently overridden the new ones, so an upgrade genuinely takes effect. Removal follows an explicit list, never a wildcard, and takes a backup first. New preview, undo and restore options let you see or reverse any change. Automated checks now guard the toolkit's own files.
+**Technical details:** Repackages the harness as a Claude Code plugin with a marketplace manifest; agents and skills are now distributed through it, while a slimmed installer retains only the user-memory layer, because that channel has no plugin equivalent. Upgrades remove superseded v3.x agent and command copies that would otherwise take precedence over their plugin replacements and make future updates ineffective. Installer gains manifest-scoped removal, an install receipt, atomic backup, and preview/uninstall/restore modes, all guarded against writing or deleting outside its own directory. Adds a CI suite that validates the harness's own assets and proves each check fails on a seeded defect. No runtime service, data or deployment changes.
+
 ## 2026-06-02
 
 ### Changelog: CTO-level Technical details — 23:35 UTC
