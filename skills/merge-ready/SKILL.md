@@ -1,6 +1,19 @@
+---
+description: Run all quality gates before merge — git hygiene, documentation completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy and UI/UX — then write the changelog entry.
+argument-hint: "[gate name to rerun]"
+arguments: [gate]
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
+---
+
 # Command: Merge Ready
 
 Run a full quality gate before merge. All checks must pass.
+
+## Arguments
+
+`$gate` (also available as `$ARGUMENTS`) optionally names a single gate to rerun. When empty, run every gate in order.
+
+**Literal-token flag rule:** a documented flag is active ONLY if its literal token appears in `$ARGUMENTS`. Never infer that a flag was passed because the documentation describes it.
 
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)

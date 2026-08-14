@@ -1,4 +1,33 @@
+---
+description: Run the documentation phase of the SDLC pipeline for a feature — PRD, use cases, architecture review, QA test cases, implementation plan, feature branch and scratchpad. Produces no code.
+argument-hint: "<feature description>"
+arguments: [feature]
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
+---
+
 # Command: Bootstrap Feature
+
+## Arguments
+
+The feature to document is `$feature` (also available as `$ARGUMENTS`). When it is empty, ask the user what to document before Step 1 — do NOT infer a feature from surrounding context.
+
+**Literal-token flag rule:** a documented flag is active ONLY if its literal token appears in `$ARGUMENTS`. Never infer that a flag was passed because the documentation describes it.
+
+## Preflight: Memory Layer Check
+
+Run this FIRST, before Step 1. It takes one Read.
+
+1. Check that `~/.claude/claude.md` exists and contains the marker heading `## Autonomous Development Workflow (MANDATORY)`.
+2. If the file is missing, or the marker is absent, print this warning verbatim and **continue anyway**:
+
+   > WARNING: the SDLC memory layer is not installed. `~/.claude/claude.md` is missing or does not
+   > contain the pipeline instruction, so the autonomous workflow is not active for unprefixed
+   > requests in this session. Installing the plugin alone is not sufficient — run
+   > `bash install.sh` from the claude-code-sdlc repo to install the memory layer.
+
+3. **Never block on this check.** A missing memory layer degrades autonomy; it does not invalidate this run. Warn once and proceed to Step 1.
+
+Known limitation: this preflight only fires when this skill is invoked explicitly. An unprefixed natural-language feature request bypasses it entirely, because nothing runs. That gap closes when the SessionStart hook lands (roadmap F2a).
 
 ## Agency Documentation Pipeline
 

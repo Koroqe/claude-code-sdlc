@@ -1,6 +1,19 @@
+---
+description: Implement the next smallest slice from the current plan using TDD — tests first, then code, then verification, then an atomic commit. Reads the plan from the scratchpad.
+argument-hint: "[slice number] [no-changelog]"
+arguments: [slice]
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
+---
+
 # Command: Implement Slice
 
 Implement only the next smallest slice from the plan using TDD.
+
+## Arguments
+
+`$slice` (also available as `$ARGUMENTS`) optionally names the slice to implement. When empty, take the next pending slice from `.claude/scratchpad.md`.
+
+**Literal-token flag rule:** a documented flag is active ONLY if its literal token appears in `$ARGUMENTS`. In particular, the `no-changelog` suppression flag is in effect ONLY when the literal token `no-changelog` was passed. Never infer it from context, and never assume it because the documentation describes it.
 
 ## Pre-flight Checks
 

@@ -1,6 +1,17 @@
+---
+description: Rebuild session context from the scratchpad after compaction or when resuming work — restores current feature, branch, wave and slice progress, and reports context health.
+argument-hint: "[archive]"
+arguments: [mode]
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash
+---
+
 # Command: Context Refresh
 
 Rebuild context from scratchpad to maintain clarity during long sessions.
+
+## Arguments
+
+`$mode` (also available as `$ARGUMENTS`) optionally requests a specific mode. **Literal-token flag rule:** a documented flag is active ONLY if its literal token appears in `$ARGUMENTS`. Never infer that a flag was passed because the documentation describes it.
 
 ## Process
 
