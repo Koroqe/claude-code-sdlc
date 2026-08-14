@@ -48,6 +48,9 @@ AUTO_YES=false
 LOCAL_MODE=false
 SCRIPT_DIR=""
 CLONED_TEMP=false
+DO_UNINSTALL=false
+DRY_RUN=false
+RESTORE_DIR=""
 
 # Populated by load_manifest()
 MANIFEST_OWNS=()
@@ -91,10 +94,19 @@ USAGE:
   bash install.sh [OPTIONS]
 
 OPTIONS:
-  --init-project   Scaffold .claude/ template + docs/ in current directory
-  --yes            Skip confirmation prompts
-  --local          Use local checkout instead of cloning from GitHub
-  --help           Show this help message
+  --init-project     Scaffold .claude/ template + docs/ in current directory
+  --yes              Skip confirmation prompts
+  --local            Use local checkout instead of cloning from GitHub
+  --dry-run          Print what would change and exit without touching anything
+  --uninstall        Remove the files this harness installed
+  --restore <dir>    Restore ~/.claude from one of this installer's backups
+  --help             Show this help message
+
+  --dry-run combines with --uninstall and --restore to preview them.
+
+  --uninstall removes only what the install receipt and manifest list. Files
+  you added yourself — including your own agents in ~/.claude/agents/ — are
+  never removed, and a backup is taken before anything is deleted.
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (loaded as user memory)
@@ -204,6 +216,18 @@ resolve_claude_dir() {
 # Validation runs over the WHOLE file before any destructive action, so a bad
 # entry at line 40 cannot leave the first 39 already applied.
 # ----------------------------------------------------------------------------
+# Trim leading/trailing whitespace ONLY. Internal whitespace, CR from a CRLF
+# file, and every other character outside the allowlist must reach
+# validate_entry() intact so it can be rejected — stripping it here would
+# silently rewrite `rules/a b.md` into a valid-looking `rules/ab.md` and
+# quietly act on a path the manifest never named.
+trim_ws() {
+  local s="$1"
+  s="${s%"${s##*[![:space:]]}"}"
+  s="${s#"${s%%[![:space:]]*}"}"
+  printf '%s' "$s"
+}
+
 validate_entry() {
   local entry="$1" line_no="$2" source="$3"
 
@@ -262,7 +286,7 @@ load_manifest() {
     case "$line" in
       '#'*) continue ;;
     esac
-    entry="$(printf '%s' "$line" | tr -d '[:space:]')"
+    entry="$(trim_ws "$line")"
     [ -z "$entry" ] && continue
 
     if [ "$entry" = "owns" ]; then section="owns"; continue; fi
@@ -456,6 +480,238 @@ write_receipt() {
     done
   } > "$tmp"
   mv -- "$tmp" "$CLAUDE_DIR/.sdlc-receipt"
+}
+
+# ----------------------------------------------------------------------------
+# Receipt reading
+#
+# The receipt lives in the user's home directory and drives deletion, so it is
+# trusted LESS than the manifest, not more. Its entries are intersected with
+# the manifest's `owns` section: a receipt may narrow what gets removed (an
+# older version installed fewer files) but must never broaden it.
+#
+# Without that intersection, path validation alone would not protect the user's
+# own agents — `agents/brand-guardian.md` is a perfectly well-formed relative
+# path confined to ~/.claude, so a receipt edited to name it would pass every
+# structural check and then be deleted.
+# ----------------------------------------------------------------------------
+manifest_owns_contains() {
+  local needle="$1" entry
+  for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+    [ "$entry" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+# Populates REMOVAL_SET with (receipt ∩ owns) when a usable receipt exists,
+# falling back to the full `owns` list otherwise.
+REMOVAL_SET=()
+build_removal_set() {
+  local receipt="$CLAUDE_DIR/.sdlc-receipt"
+  REMOVAL_SET=()
+
+  if [ ! -f "$receipt" ]; then
+    log_info "No install receipt found — falling back to the manifest (expected when upgrading from v3.x)."
+    REMOVAL_SET=(${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"})
+    return 0
+  fi
+
+  local line="" entry="" line_no=0 version_seen=false
+  local -a candidates=()
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_no=$((line_no + 1))
+    entry="$(trim_ws "$line")"
+    [ -z "$entry" ] && continue
+
+    if [ "$version_seen" = false ]; then
+      case "$entry" in
+        [0-9]*.[0-9]*.[0-9]*) version_seen=true; continue ;;
+        *)
+          log_warn "Install receipt is malformed (line 1 is not a version) — falling back to the manifest."
+          REMOVAL_SET=(${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"})
+          return 0 ;;
+      esac
+    fi
+
+    if ! validate_entry "$entry" "$line_no" "receipt"; then
+      log_warn "Install receipt failed validation — falling back to the manifest."
+      REMOVAL_SET=(${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"})
+      return 0
+    fi
+
+    if manifest_owns_contains "$entry"; then
+      candidates+=("$entry")
+    else
+      say_untrusted "  unrecognized receipt entry, skipped: " "$entry"
+    fi
+  done < "$receipt"
+
+  if [ "$version_seen" = false ]; then
+    log_warn "Install receipt is empty — falling back to the manifest."
+    REMOVAL_SET=(${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"})
+    return 0
+  fi
+
+  REMOVAL_SET=(${candidates[@]+"${candidates[@]}"})
+}
+
+# ----------------------------------------------------------------------------
+# Uninstall / dry-run / restore
+# ----------------------------------------------------------------------------
+do_uninstall() {
+  resolve_claude_dir
+  get_source_dir
+  load_manifest
+  build_removal_set
+
+  local entry present=0
+  local -a targets=()
+  for entry in ${REMOVAL_SET[@]+"${REMOVAL_SET[@]}"} ${MANIFEST_LEGACY[@]+"${MANIFEST_LEGACY[@]}"}; do
+    if [ -e "$CLAUDE_DIR/$entry" ] || [ -L "$CLAUDE_DIR/$entry" ]; then
+      targets+=("$entry")
+      present=$((present + 1))
+    fi
+  done
+
+  if [ "$DRY_RUN" = true ]; then
+    echo ""
+    log_info "Dry run — the following $present file(s) WOULD be removed from $CLAUDE_DIR:"
+    for entry in ${targets[@]+"${targets[@]}"}; do
+      say_untrusted "  " "$entry"
+    done
+    [ -f "$CLAUDE_DIR/.sdlc-receipt" ] && echo "  .sdlc-receipt"
+    echo ""
+    log_info "No files were changed."
+    cleanup_source_dir
+    return 0
+  fi
+
+  if [ "$present" -eq 0 ]; then
+    log_info "Nothing to uninstall — no harness files found in $CLAUDE_DIR."
+    cleanup_source_dir
+    return 0
+  fi
+
+  if ! confirm "Remove $present harness file(s) from $CLAUDE_DIR?"; then
+    log_info "Aborted."
+    cleanup_source_dir
+    return 0
+  fi
+
+  sweep_stale_staging
+  backup_existing
+
+  local removed=0
+  for entry in ${targets[@]+"${targets[@]}"}; do
+    guarded_rm "$entry"
+    say_untrusted "  removed: " "$entry"
+    removed=$((removed + 1))
+  done
+
+  # The receipt goes last: if the run is interrupted, a surviving receipt still
+  # describes what was installed.
+  rm -f -- "$CLAUDE_DIR/.sdlc-receipt"
+  prune_empty_dirs
+
+  echo ""
+  log_ok "Removed $removed file(s). Your own files in $CLAUDE_DIR were not touched."
+  [ -n "$BACKUP_DIR" ] && log_info "Backup of the previous state: $BACKUP_DIR"
+  cleanup_source_dir
+}
+
+# `--restore` is the sharpest surface in this script: it reads a directory the
+# caller names and copies it over ~/.claude. Everything below exists to stop it
+# becoming a way to write arbitrary content — a hook config, a shell rc, a
+# symlink redirecting later writes — into the user's Claude Code directory.
+do_restore() {
+  resolve_claude_dir
+
+  local resolved
+  resolved="$(cd -- "$RESTORE_DIR" 2>/dev/null && pwd -P)" || {
+    say_untrusted "Not a readable directory: " "$RESTORE_DIR"
+    exit 1
+  }
+
+  if [ -L "$RESTORE_DIR" ]; then
+    log_error "Refusing to restore from a symlink."
+    exit 1
+  fi
+
+  # It must be one of OUR backups: directly inside ~/.claude, named
+  # backup-YYYYMMDD-HHMMSS (optionally with a collision suffix).
+  local parent base
+  parent="$(dirname -- "$resolved")"
+  base="$(basename -- "$resolved")"
+  if [ "$parent" != "$CLAUDE_DIR" ]; then
+    log_error "Refusing to restore: the directory is not inside $CLAUDE_DIR."
+    exit 1
+  fi
+  case "$base" in
+    backup-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]*) ;;
+    *)
+      say_untrusted "Refusing to restore: not a recognised backup name: " "$base"
+      exit 1 ;;
+  esac
+
+  # A symlink anywhere inside the backup could redirect a copy out of the tree.
+  if [ -n "$(find "$resolved" -type l 2>/dev/null | head -n 1)" ]; then
+    log_error "Refusing to restore: the backup contains symlinks."
+    exit 1
+  fi
+
+  # Copy only the structure a backup is allowed to contain. Anything else is
+  # reported and skipped, so restore can never introduce a file name the backup
+  # mechanism does not itself create.
+  local allowed="claude.md agents commands rules .sdlc-receipt"
+  local item name ok
+  for item in "$resolved"/* "$resolved"/.sdlc-receipt; do
+    [ -e "$item" ] || continue
+    name="$(basename -- "$item")"
+    ok=false
+    for a in $allowed; do [ "$name" = "$a" ] && ok=true; done
+    if [ "$ok" = false ]; then
+      say_untrusted "  skipped unexpected entry in backup: " "$name"
+    fi
+  done
+
+  if [ "$DRY_RUN" = true ]; then
+    echo ""
+    log_info "Dry run — would restore from $resolved into $CLAUDE_DIR:"
+    for a in $allowed; do
+      [ -e "$resolved/$a" ] && echo "  $a"
+    done
+    echo ""
+    log_info "No files were changed."
+    return 0
+  fi
+
+  if ! confirm "Restore $CLAUDE_DIR from $base?"; then
+    log_info "Aborted."
+    return 0
+  fi
+
+  # Restore is itself reversible: snapshot the current state first.
+  sweep_stale_staging
+  backup_existing
+
+  for a in $allowed; do
+    [ -e "$resolved/$a" ] || continue
+    rm -rf -- "${CLAUDE_DIR:?}/$a"
+    cp -R -P -- "$resolved/$a" "$CLAUDE_DIR/$a"
+    log_ok "restored $a"
+  done
+
+  # If the backup predates receipts, the restored tree has none — leaving a
+  # newer receipt behind would misdescribe what is installed and would drive
+  # the next uninstall.
+  if [ ! -e "$resolved/.sdlc-receipt" ]; then
+    rm -f -- "$CLAUDE_DIR/.sdlc-receipt"
+  fi
+
+  echo ""
+  log_ok "Restored $CLAUDE_DIR from $base"
+  [ -n "$BACKUP_DIR" ] && log_info "The pre-restore state was saved to $BACKUP_DIR"
 }
 
 # ----------------------------------------------------------------------------
@@ -668,6 +924,21 @@ main() {
       --init-project) INIT_PROJECT=true; shift ;;
       --yes) AUTO_YES=true; shift ;;
       --local) LOCAL_MODE=true; shift ;;
+      --uninstall) DO_UNINSTALL=true; shift ;;
+      --dry-run) DRY_RUN=true; shift ;;
+      --restore)
+        # A missing argument must not silently swallow the next flag as a path.
+        if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+          log_error "--restore requires a backup directory argument."
+          exit 1
+        fi
+        case "$2" in
+          -*)
+            say_untrusted "--restore requires a directory, got an option: " "$2"
+            exit 1 ;;
+        esac
+        RESTORE_DIR="$2"
+        shift 2 ;;
       --help|-h) print_help; exit 0 ;;
       *)
         say_untrusted "Unknown option: " "$1"
@@ -675,6 +946,53 @@ main() {
         exit 1 ;;
     esac
   done
+
+  # Mutually exclusive modes — refuse rather than guess which one was meant.
+  if [ "$DO_UNINSTALL" = true ] && [ -n "$RESTORE_DIR" ]; then
+    log_error "--uninstall and --restore cannot be combined."
+    exit 1
+  fi
+  if [ -n "$RESTORE_DIR" ] && [ "$INIT_PROJECT" = true ]; then
+    log_error "--restore and --init-project cannot be combined."
+    exit 1
+  fi
+  if [ "$DO_UNINSTALL" = true ] && [ "$INIT_PROJECT" = true ]; then
+    log_error "--uninstall and --init-project cannot be combined."
+    exit 1
+  fi
+
+  if [ -n "$RESTORE_DIR" ]; then
+    do_restore
+    return 0
+  fi
+
+  if [ "$DO_UNINSTALL" = true ]; then
+    do_uninstall
+    return 0
+  fi
+
+  if [ "$DRY_RUN" = true ]; then
+    resolve_claude_dir
+    get_source_dir
+    load_manifest
+    echo ""
+    log_info "Dry run — the following would be installed into $CLAUDE_DIR:"
+    local entry
+    for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+      say_untrusted "  install: " "$entry"
+    done
+    local legacy_present=0
+    for entry in ${MANIFEST_LEGACY[@]+"${MANIFEST_LEGACY[@]}"}; do
+      if [ -e "$CLAUDE_DIR/$entry" ] || [ -L "$CLAUDE_DIR/$entry" ]; then
+        say_untrusted "  remove (retired v3.x): " "$entry"
+        legacy_present=$((legacy_present + 1))
+      fi
+    done
+    echo ""
+    log_info "$legacy_present retired file(s) present. No files were changed."
+    cleanup_source_dir
+    return 0
+  fi
 
   install_user_config
 
