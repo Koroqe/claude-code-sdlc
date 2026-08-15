@@ -79,6 +79,18 @@ Delegate to `planner` agent:
 - Flag slices needing architect or security pre-review
 - Reference actual project files discovered during exploration
 
+#### Step 5a: Plan Critic — Adversarial Plan Review
+After the `planner` agent produces the plan and before Step 6 (Git Setup), invoke `plan-critic` against the plan file. This is the first point at which a plan produced entirely by `/bootstrap-feature` (no interactive plan-mode involved) is critiqued at all.
+
+Run the same critique-and-fix loop `src/claude.md`'s plan-mode "Plan Critic Pass" section uses:
+1. Invoke `plan-critic` against the plan file (loop 1).
+2. If it returns any BLOCKER finding, fix the plan file for every BLOCKER and WARNING finding, then re-invoke `plan-critic` against the revised plan (loop 2).
+3. Repeat once more if needed (loop 3).
+4. If zero BLOCKER findings remain after any loop, proceed immediately to Step 6 — remaining WARNING findings are acceptable and recorded.
+5. If a BLOCKER finding still remains after loop 3, escalate per Rule 4 (`error-recovery.md`): stop, present the remaining BLOCKER findings verbatim, state the decision needed, and present the options. Do NOT proceed to Step 6 with an unresolved BLOCKER.
+
+If `plan-critic` cannot be resolved (memory-layer-only install with no plugin agents present), warn — naming `plan-critic` explicitly as unresolvable — and proceed to Step 6 without a critique. Never skip the critic pass silently.
+
 ### Step 6: Git Setup
 - Verify `git status` is clean
 - Create feature branch: `feat/<feature-slug>`
@@ -114,6 +126,12 @@ This is CRITICAL for surviving context compaction during long sessions.
 - Created: docs/qa/<feature>_test_cases.md
 - Total test cases: [count]
 - Use-case coverage: [all UC-X mapped / gaps]
+
+## Plan Critique
+- Verdict: PASS (zero BLOCKER findings) / ESCALATED (unresolved BLOCKER after 3 loops) / SKIPPED (plan-critic unresolvable)
+- Loops run: [1-3]
+- Findings: [count] BLOCKER, [count] WARNING, [count] INFO
+- Unresolved BLOCKERs (if escalated): [list]
 
 ## Plan (5-9 slices across N waves)
 ### Wave 1
