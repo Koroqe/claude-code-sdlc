@@ -64,6 +64,15 @@ jobs:
       - name: Falsify — hooks validator catches a bad hooks.json
         run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks'
 
+      - name: Falsify — hooks validator rejects an inline node -e bootstrap
+        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-inline-bootstrap'
+
+      - name: Falsify — hooks validator rejects a hook bypassing the wrapper
+        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-foreign-script'
+
+      - name: Falsify — hooks validator rejects a hook with no id
+        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-missing-id'
+
       - name: Falsify — personal-path validator catches a leaked home path
         run: '! node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/bad-personal-path --min 1'
 
@@ -94,6 +103,44 @@ jobs:
       - name: Anti-vacuity — version validator fails on an empty tree
         run: '! node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)"'
 
+  hook-tests:
+    name: Hook contract tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No `npm install`: the hooks are zero-dependency by design.
+      - name: Run hook fixture tests
+        run: node tests/hooks/run-tests.js
+
+  hook-syntax-floor:
+    name: Hook wrapper parses on old Node
+    runs-on: ubuntu-latest
+
+    # The wrapper's fail-open contract depends on its Node version gate being
+    # reachable. If the file cannot even be PARSED by an old Node, the gate
+    # never runs and nothing is reported — so parsing under an old runtime is
+    # itself the thing under test. Claude Code may be launched from a GUI whose
+    # PATH resolves a much older node than an interactive shell would.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up an old Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14'
+
+      - name: Wrapper must parse under Node 14
+        run: node --check hooks/lib/run-hook.js
+
   shell-syntax:
     name: Installer shell syntax
     runs-on: ubuntu-latest
@@ -112,5 +159,14 @@ jobs:
         run: |
           if grep -nE '(^|[^a-zA-Z])(node|jq)([^a-zA-Z]|$)' install.sh | grep -v '^[0-9]*: *#'; then
             echo "install.sh must not invoke node or jq (PRD Section 6, NFR-1 / AC-9)"
+            exit 1
+          fi
+
+      # The installer belongs to a different Node zone than the hooks: it must
+      # run on a bare POSIX shell, so it must not reach into hooks/ either.
+      - name: Assert install.sh does not reference the hook runtime
+        run: |
+          if grep -n 'hooks/lib\|run-hook' install.sh | grep -v '^[0-9]*: *#'; then
+            echo "install.sh must not reference the hook runtime (PRD Section 7, NFR-1)"
             exit 1
           fi

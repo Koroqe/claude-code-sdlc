@@ -1,0 +1,7 @@
+# Transient state written by the claude-code-sdlc hooks. Never commit it:
+# the pipeline commits after every slice, so an untracked file under .claude/
+# would eventually be swept into someone's commit.
+.claude/tmp/
+
+.DS_Store
+node_modules/

@@ -1,103 +1,85 @@
-## Feature: Plugin Repackaging and Harness CI (v4.0 roadmap F1)
-## Branch: feat/plugin-repackaging
+## Feature: Hook Infrastructure and Non-Blocking Hooks (v4.0 roadmap F2a)
+## Branch: feat/hook-infrastructure
 ## Status: quality-gates
 
 ## Plan
 
-Docs: `docs/PRD.md` §6 · `docs/use-cases/plugin-repackaging_use_cases.md` (UC-1..UC-14) ·
-`docs/qa/plugin-repackaging_test_cases.md` (177 TCs, 22 sections) · Architecture: **PASS** (rev 2)
-Roadmap: `/Users/aleksei/.claude/plans/alright-there-s-a-lot-merry-minsky.md` (F1 of F1–F5)
-Bootstrap docs commit: 59222e9
+Docs: `docs/PRD.md` §7 · `docs/use-cases/hook-infrastructure_use_cases.md` (UC-1..UC-10) ·
+`docs/qa/hook-infrastructure_test_cases.md` (~135 TCs, 17 sections) · Architecture: **PASS with constraints**
+Roadmap: `/Users/aleksei/.claude/plans/alright-there-s-a-lot-merry-minsky.md` (F2a of F1-F5; F1 SHIPPED)
 
 ### Wave 1 [complete]
-- [x] Slice 1: Relocate `src/agents/` → `agents/` (13 files, all R100 renames) — dccf59a
-- [x] Slice 2: Version → 4.0.0 (README:8, install.sh:22, install.sh:47) + PRD §2/§5 SHIPPED, §3 SUPERSEDED, §4 DRAFT — d305e82
+- [x] Slice 1: `hooks/hooks.json` + `hooks/lib/run-hook.js` (ES5 floor) + plugin.json `hooks` + harness — f7f2da8
+- [x] Slice 2: `.gitignore` + `templates/.gitignore` + install.sh scaffold step — 385e744
+- [x] Slice 3: `templates/settings.json` allow/deny per security ruling — 9700746
 
 ### Wave 2 [complete]
-- [x] Slice 3: `src/commands/*.md` → `skills/<name>/SKILL.md` + 4 frontmatter fields + `$ARGUMENTS` + FR-8 preflight — 1e95634
+- [x] Slice 4: Runtime controls verified (kill switch, disable list, profiles) — 035763f
 
 ### Wave 3 [complete]
-- [x] Slice 4: `.claude-plugin/{plugin,marketplace}.json` — `claude plugin validate .` passes clean — c6f4fd5
-- [x] Slice 5: `scripts/ci/lib/validate-core.js` + validate-{agents,skills,hooks}.js + fixtures — 67547fb
+- [x] Slice 5: `session:start:spine` + `hooks/lib/sanitize.js` — b593feb
+- [x] Slice 6: `post:edit:accumulate` + `hooks/lib/accumulator.js` — ef826f0
 
 ### Wave 4 [complete]
-- [x] Slice 6: validate-{personal-paths,unicode-safety,version-consistency}.js + `.github/workflows/ci.yml` — cfe80ed
-- [x] Slice 7: Reference sweep, 19 files (install.sh's 10 refs deferred to Slice 8) — 4319cf6
+- [x] Slice 7: `stop:typecheck-format` + trust registry + `install.sh --trust-project` — 3e28bb7
 
 ### Wave 5 [complete]
-- [x] Slice 8: Installer core rebuild — manifest, receipt, legacy cleanup, atomic backup — 2bfe515
+- [x] Slice 8: validator wrapper-routing check + 3 fixtures + 3 CI jobs — 2799d57
+- [x] Slice 9: latency measurement + README hooks section — d18ff72
 
-### Wave 6 [complete]
-- [x] Slice 9: `--uninstall`, `--restore`, `--dry-run` with receipt∩manifest intersection — a8a88cf
+## Security ruling applied (FR-6.14 resolved)
 
-## CI status (all local, 21/21 green)
+Execution of a project-declared command is gated on THREE conditions, all local
+reads, none interactive:
+1. `realpath(cwd)` exactly matches a line in `~/.claude/sdlc-trusted-projects`
+   (out-of-repo; a project-local marker would be committable by a hostile repo)
+2. Command matches an ASCII shape regex; argv[0] has no path separators
+3. `SDLC_EXEC_PROJECT_COMMANDS` is not `0`
+Any failure → report the command, execute nothing, exit 0. Registry written
+only by `install.sh --trust-project`, never by a hook or agent.
 
-6 validators pass on HEAD; each fails on its seeded fixture; each fails on an empty tree
-(anti-vacuity); placeholder positive control passes; `bash -n install.sh` passes; AC-9
-(no `node`/`jq` in install.sh) passes and was proven falsifiable against a dirtied copy.
-Fixture runs use `--min` to lower the anti-vacuity floor so each fixture fails for its own
-defect rather than tripping the count check first.
+## Measured
 
-## Deviations from plan (recorded)
-
-- Slice 6 extended `scripts/ci/lib/validate-core.js` (a Slice 5 file) with a `walkFiles` helper and
-  a `--min` flag. Safe because waves ran sequentially, not in parallel — no exclusive-ownership
-  conflict. Rule 1/2 (free).
-- `.gitignore` added out-of-slice (`.DS_Store`, `.vscode/`) so Gate 0's clean-tree check can pass.
-- Slice 7 swept 19 files, not 20: `.claude/scratchpad.md` is orchestrator-owned and excluded.
-
-## OPEN QUESTION blocking Slice 8 design
-
-Does `install.sh` still install agents into `~/.claude/agents/`?
-- If YES: user-level copies may permanently shadow the plugin's agents, making plugin updates
-  ineffective — the plugin's `agents/` becomes dead weight.
-- If NO: an install.sh-only adopter (UC-10, NFR-2) has no agents to delegate to.
-The manifest `owns` list (19 entries incl. 13 agents) currently assumes YES.
-Awaiting authoritative answer on subagent precedence between user-level and plugin sources.
+Hook cost: 21.4 ms/call, of which ~1.5 ms is hook logic (rest is Node startup).
+Budget was 150 ms/call. 262 checks across 6 test files.
 
 ## Key design (binding — do not re-litigate)
 
-- **Node is CI-only.** `scripts/ci/*.js` may use Node (zero npm deps). `install.sh` MUST NEVER invoke
-  `node` or `jq` (AC-9). Manifest and receipt are newline-delimited plain text so dependency-free
-  bash can parse them.
-- **Hybrid split.** Plugin owns `agents/`, `skills/`, (later) `hooks/`. `install.sh` keeps owning
-  `~/.claude/claude.md` and `~/.claude/rules/*.md` — plugins have NO user-memory component type.
-  `src/claude.md` and `src/rules/*` DO NOT move. A pure-plugin migration would pass every check and
-  silently delete the autonomous-pipeline instruction.
-- **Manifest** `manifests/owned-files.txt`: `owns` section = 19 entries (13 agents + claude.md +
-  5 rules); `legacy` section = 5 entries (`commands/*.md` retired from v3.1). Never lists the user's
-  3 personal agents (brand-guardian, demo-script-writer, social-copywriter).
-- **Receipt** `~/.claude/.sdlc-receipt`: line 1 = version, then one relative path per line.
-  `--uninstall` prefers receipt, falls back to manifest `owns` (the v3.1-upgrade case).
-- **Path safety**: reject leading `/` and any `..` segment in manifest OR receipt entries.
-  **Abort the whole run**, never skip-one. Applies to `--dry-run` preview too.
-- **Removal is manifest/receipt-scoped, never a glob.** `~/.claude/agents/` holds 16 files; 3 are
-  the user's own and must survive every install/upgrade/uninstall.
-- **Legacy command shadowing**: v3.1 copied 5 commands to `~/.claude/commands/`. If they survive,
-  `/develop-feature` silently runs the stale v3.1 prompt while every signal reports green.
-- **Autonomy constraint**: no slice may add a step a human must remember to run. FR-8 preflight
-  warns and CONTINUES — never blocks.
+- **Three Node zones, each with its own failure posture.** CI validators fail-closed; `install.sh`
+  uses NO Node (existing CI grep enforces); hooks fail-open. `hooks/lib/` and `scripts/ci/lib/`
+  MUST NOT import from each other — CI reads `hooks/hooks.json` as data only.
+- **Fail-open contract.** Any hook that throws, times out, or cannot spawn Node exits 0 with a
+  one-line `systemMessage`. **No hook in F2a may exit 2 or block.** Blocking is F2b.
+- **Fail-open is for mechanism failure ONLY.** It is tolerable when the invariant has a named
+  merge-ready backstop. The fail-closed layer for irreversible actions is `permissions.deny`,
+  enforced by Claude Code itself — never a PreToolUse hook. F2b must name each guard's backstop.
+- **Syntax floor.** `run-hook.js` and anything it requires before the version gate must parse under
+  the oldest plausible Node, or the version check is unreachable and fail-open is unfulfillable.
+- **Injected-context rule.** `additionalContext` carries only runtime-read machine state plus
+  framing labels — never session-invariant instruction text (that belongs in the memory layer).
+  Binds F5's instinct injection through the same hook.
+- **Accumulator.** `.claude/tmp/<sanitized-session-id>.paths`, project-local, gitignored,
+  append-only, Stop clears its own, opportunistic GC, paths resolved from stdin `cwd`.
+  `session_id` sanitized to `[A-Za-z0-9_-]` — arrives on stdin, never trusted for path building.
+- **Profile system KEPT** (planner's explicit decision against the architect's shed-candidate flag):
+  `minimal` = spine only (observe, never execute project-declared commands); the two
+  command-adjacent hooks are `standard`/`strict`. Non-vacuous before F2b.
 
-## Architecture action items (folded in)
+## Security pre-reviews required BEFORE implementing
 
-- CI-validator slice moved from draft wave 2 → waves 3–4 and split in two (validators before assets
-  existed made "exit 0 on HEAD" vacuously true). Exactly one slice owns `ci.yml`.
-- Validators must fail on zero matched files (FR-5.9) — anti-vacuity.
-- Slices 1 and 3 are both `git mv` and are in separate waves (`.git/index.lock` contention).
-- Slice 8's done-condition includes end-to-end sandbox install (`HOME=$SANDBOX bash install.sh
-  --local --yes`) — installer is broken on-branch from Slice 1 until Slice 8; must provably end
-  before merge. **Do not merge before Wave 5 completes.**
-- Sweep scope verified at 21 files (not 17): 6 use-case + 5 QA files, `install.sh`'s 10 refs.
-  `templates/CLAUDE.md` verified at 0 matches — OUT of scope.
+- **Slice 3** — every scaffolded project inherits the permission policy; one broad allow weakens all.
+- **Slice 5** — injects project-owned file content into model context on every session start, in any
+  repo the adopter opens. Prompt-injection surface by construction.
+- **Slice 7** — executes commands declared by the *project's* CLAUDE.md, spawned by the hook engine
+  and therefore NOT mediated by the permission system. Sharpest surface in the feature. FR-6.14's
+  trust-signal mechanism is deliberately open pending this ruling; it MUST be non-interactive
+  (an unattended run can never wait on a prompt).
 
 ## Blockers
 
 - none
 
-## Known issues to resolve at merge-ready
+## Completed
 
-- **QA TC 2.1.3 is wrong**: it expects `src/agents/*.md` to still exist after relocation, which
-  contradicts PRD FR-2.1 (relocated, not copied), QA 2.2.6, and the mid-branch-breakage premise.
-  Plan implements a true `git mv`. Correct the QA doc — do not implement a copy.
-- PRD §4 NFR-1 ("no runtime code") is superseded by §6 NFR-1 for CI tooling. Annotate §4 itself when
-  F5's planned §4 revision lands.
+- F1 (Plugin Repackaging, PRD §6) SHIPPED — merged to main 6e0c55e, pushed, GitHub CI green
+  (both jobs, 25 steps: 6 validators + 6 falsify + 5 anti-vacuity + control + shell job).

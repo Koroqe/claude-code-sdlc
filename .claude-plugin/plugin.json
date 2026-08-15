@@ -9,5 +9,6 @@
   "homepage": "https://github.com/Koroqe/claude-code-sdlc",
   "license": "MIT",
   "agents": "./agents/",
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
 }

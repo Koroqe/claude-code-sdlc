@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-15
+
+### Hook Infrastructure — 01:35 UTC
+**Summary:** The toolkit can now notice things for itself: it remembers where you left off, batches its checks instead of repeating them, and never runs a project's own commands unless you have said that project is trusted.
+**Details:** Resuming work now picks up at the right point, because the current feature, branch and step are read from the project's notes at session start. Formatting and type checks run once at the end of a response instead of after every edit. Commands defined by a project only run in projects you have explicitly trusted; elsewhere the toolkit reports what it would have run. All of it steps aside rather than interrupting: if any part fails, work simply continues.
+**Technical details:** Adds a lifecycle-hook runtime to the plugin with three non-blocking hooks and a shared wrapper carrying a fail-open contract, a runtime-version gate and kill switches. Project-declared command execution is gated on a machine-local registry held outside any repository, so a cloned repository cannot authorise itself; untrusted projects get a report only. Session context injection is limited to typed fields with sanitisation, since project files reach the model. Also ships permission defaults for scaffolded projects and CI jobs covering the hooks. No user-facing screens, endpoints, data or deployment changes.
+
 ## 2026-08-14
 
 ### Plugin Repackaging and Harness CI — 23:15 UTC

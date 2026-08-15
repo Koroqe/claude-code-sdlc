@@ -28,6 +28,9 @@ const VALID_EVENTS = new Set([
 
 const VALID_HANDLER_TYPES = new Set(['command', 'http', 'mcp_tool', 'prompt', 'agent']);
 
+/** Every command hook must invoke this, and nothing else. */
+const REQUIRED_WRAPPER = 'hooks/lib/run-hook.js';
+
 core.run('validate-hooks', (v, args) => {
   const file = path.join(args.root, 'hooks', 'hooks.json');
 
@@ -78,6 +81,18 @@ core.run('validate-hooks', (v, args) => {
         }
         if (handler && !handler.id) {
           v.error(rel, `handler in \`hooks.${event}\` has no \`id\` — namespaced ids are required so a hook can be disabled by name`);
+        }
+        // Every hook must go through the shared wrapper. The wrapper is where
+        // the fail-open contract, the Node version gate and the kill switches
+        // live, so a hook that bypassed it would bypass all three — and would
+        // do so invisibly, which is the worst version of that failure.
+        if (handler && handler.type === 'command' && handler.command) {
+          if (handler.command.indexOf(REQUIRED_WRAPPER) === -1) {
+            v.error(rel, `handler \`${handler.id || event}\` does not route through ${REQUIRED_WRAPPER} — it would bypass the fail-open contract, the Node version gate and the runtime kill switches`);
+          }
+          if (/node\s+(-e|--eval)\b/.test(handler.command)) {
+            v.error(rel, `handler \`${handler.id || event}\` uses an inline \`node -e\` bootstrap — put the logic in the wrapper instead`);
+          }
         }
       }
     }
