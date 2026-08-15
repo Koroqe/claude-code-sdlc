@@ -74,6 +74,10 @@
       "Read(.env.*)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Write(.env)",
+      "Write(.env.*)",
 
       "Bash(sudo:*)",
       "Bash(rm -rf /:*)",

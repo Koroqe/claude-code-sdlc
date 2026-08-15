@@ -65,6 +65,32 @@ function accumulatorPath(projectRoot, sessionId) {
   return file;
 }
 
+/**
+ * Refuse to touch the accumulator through a symlink.
+ *
+ * A hostile repository can commit `.claude/tmp -> /somewhere/else` (gitignore
+ * does not stop a committed path arriving in a clone). Following it would make
+ * every Edit in that repo write outside the project, and would let the
+ * age-based GC unlink the adopter's files.
+ *
+ * This lives here, not in the callers, so every caller inherits it. The first
+ * version of this code guarded only in the Stop hook, and the accumulate hook
+ * — which runs on every single edit — silently didn't.
+ */
+function pathIsSafe(projectRoot) {
+  const candidates = [path.join(path.resolve(projectRoot), '.claude'), accumulatorDir(projectRoot)];
+  for (const dir of candidates) {
+    let stat;
+    try {
+      stat = fs.lstatSync(dir);
+    } catch (err) {
+      continue; // absent is fine — it will be created as a real directory
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
+  }
+  return true;
+}
+
 /** Resolve the project root from a hook stdin payload. */
 function projectRootFromInput(input) {
   if (input && typeof input.cwd === 'string' && input.cwd) {
@@ -77,6 +103,7 @@ function projectRootFromInput(input) {
 function appendPath(projectRoot, sessionId, filePath) {
   const file = accumulatorPath(projectRoot, sessionId);
   if (!file || !filePath) return false;
+  if (!pathIsSafe(projectRoot)) return false;
 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   // Append mode: small O_APPEND writes are atomic on POSIX, so parallel-wave
@@ -87,6 +114,7 @@ function appendPath(projectRoot, sessionId, filePath) {
 
 /** Read the accumulated paths, de-duplicated, tolerating a corrupt file. */
 function readPaths(projectRoot, sessionId) {
+  if (!pathIsSafe(projectRoot)) return [];
   const file = accumulatorPath(projectRoot, sessionId);
   if (!file || !fs.existsSync(file)) return [];
 
@@ -110,6 +138,7 @@ function readPaths(projectRoot, sessionId) {
 
 /** Remove this session's own file. Never throws. */
 function clear(projectRoot, sessionId) {
+  if (!pathIsSafe(projectRoot)) return;
   const file = accumulatorPath(projectRoot, sessionId);
   if (!file) return;
   try {
@@ -126,6 +155,7 @@ function clear(projectRoot, sessionId) {
  * is not ours by name.
  */
 function collectGarbage(projectRoot, keepSessionId) {
+  if (!pathIsSafe(projectRoot)) return 0;
   const dir = accumulatorDir(projectRoot);
   const keep = sanitizeSessionId(keepSessionId) + '.paths';
   let removed = 0;
@@ -137,7 +167,7 @@ function collectGarbage(projectRoot, keepSessionId) {
       if (name === keep || !name.endsWith('.paths')) continue;
       const full = path.join(dir, name);
       try {
-        const stat = fs.statSync(full);
+        const stat = fs.lstatSync(full);
         if (!stat.isFile()) continue;
         if (Date.now() - stat.mtimeMs < STALE_MS) continue;
         fs.unlinkSync(full);
@@ -154,6 +184,7 @@ function collectGarbage(projectRoot, keepSessionId) {
 
 module.exports = {
   TMP_DIRNAME,
+  pathIsSafe,
   STALE_MS,
   GC_LIMIT,
   sanitizeSessionId,

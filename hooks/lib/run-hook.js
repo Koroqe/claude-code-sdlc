@@ -26,6 +26,23 @@
  *
  * No hook in this feature blocks at all: exit code 2 appears nowhere under
  * hooks/, and CI asserts that.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THE TIMEOUT BELOW CAN AND CANNOT DO — do not mistake one for the other.
+ *
+ * SDLC_HOOK_TIMEOUT_MS schedules a JS timer. Node is single-threaded, so that
+ * timer can only fire between turns of the event loop. It therefore bounds an
+ * ASYNCHRONOUS handler, and nothing else. A handler that blocks synchronously
+ * — a busy loop, a huge readFileSync, a spawnSync on a hanging child — cannot
+ * be interrupted by it, and the timer will not fire until the handler has
+ * already returned.
+ *
+ * The real backstop for a synchronous hang is the `timeout` field on each
+ * entry in hooks/hooks.json, which Claude Code enforces by killing the
+ * process from outside. That is the mechanism keeping a wedged hook from
+ * stalling a session, and it is why every entry there carries an explicit
+ * timeout. Keep them set.
+ * ---------------------------------------------------------------------------
  */
 
 'use strict';
@@ -60,8 +77,11 @@ var HOOKS = {
 /* ------------------------------------------------------------------ output */
 
 /* Emit and exit 0. This is the only exit path in the file. */
+var emitted = false;
+
 function emit(payload) {
   var out;
+  emitted = true;
   try {
     out = JSON.stringify(payload);
   } catch (err) {
@@ -208,8 +228,29 @@ function main() {
     root = path.resolve(__dirname, '..', '..');
   }
 
-  var handlersDir = process.env.SDLC_HOOK_HANDLERS_DIR ||
-    path.join(root, 'hooks', 'handlers');
+  /* Handler directory.
+   *
+   * The override exists for tests, and it feeds require() — so it is confined
+   * to the plugin root. Without that, anything able to set this variable in
+   * the hook's environment could point it at a module of its choosing and get
+   * arbitrary code execution inside the hook process, bypassing every gate
+   * downstream: the trust registry, the command shape check, the sanitizer.
+   * A project cannot write inside the installed plugin, so containment there
+   * is the boundary. */
+  var defaultHandlers = path.join(root, 'hooks', 'handlers');
+  var handlersDir = defaultHandlers;
+  var override = process.env.SDLC_HOOK_HANDLERS_DIR;
+  if (override) {
+    var resolvedRoot = path.resolve(root);
+    var resolvedOverride = path.resolve(override);
+    if (resolvedOverride === resolvedRoot ||
+        resolvedOverride.indexOf(resolvedRoot + path.sep) === 0) {
+      handlersDir = resolvedOverride;
+    } else {
+      emitNote(hookId, 'handler directory override outside the plugin root was ignored — run continues');
+      return;
+    }
+  }
   var handlerPath = path.join(handlersDir, spec.handler);
 
   var timeoutMs = parseInt(process.env.SDLC_HOOK_TIMEOUT_MS, 10);
@@ -255,6 +296,29 @@ function main() {
       emit(payload);
     }
 
+    /* finish() itself can throw — a result whose toString explodes reaches
+     * sanitizeMessage. On the synchronous path the surrounding try/catch
+     * covers that; on the promise path there is no surrounding catch, so an
+     * exception here would become an unhandled rejection and exit non-zero.
+     * That is precisely the failure this contract forbids, so both paths call
+     * through this guard. */
+    function finishGuarded(result) {
+      try {
+        finishGuarded(result);
+      } catch (err) {
+        if (settled && !emitted) {
+          // finish() failed after claiming the slot; force a clean exit.
+          emitSilent();
+          return;
+        }
+        if (settled) { return; }
+        settled = true;
+        clearTimeout(timer);
+        emitNote(hookId, 'exception building output: ' +
+          (err && err.message ? err.message : 'unknown') + ' — run continues');
+      }
+    }
+
     var handler;
     try {
       if (!fs.existsSync(handlerPath)) {
@@ -277,7 +341,7 @@ function main() {
     try {
       var result = typeof handler === 'function' ? handler(input) : handler.run(input);
       if (result && typeof result.then === 'function') {
-        result.then(finish, function (err) {
+        result.then(finishGuarded, function (err) {
           if (settled) { return; }
           settled = true;
           clearTimeout(timer);

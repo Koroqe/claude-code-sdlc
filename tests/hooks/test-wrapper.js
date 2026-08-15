@@ -96,15 +96,33 @@ c.contains('old Node is reported by name', r.json && r.json.systemMessage, 'node
 c.contains('old Node states the requirement', r.json && r.json.systemMessage, '18');
 
 // --- fail-open shape 5: handler module missing ----------------------------
-r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: '/nonexistent/handlers' });
+r = runHook('session:start:spine', SESSION_INPUT,
+  { SDLC_HOOK_HANDLERS_DIR: path.join(REPO_ROOT, 'tests', 'fixtures', 'hooks', 'nonexistent') });
 c.equal('missing handler exits 0', r.code, 0);
 c.contains('missing handler is reported', r.json && r.json.systemMessage, 'handler not found');
+
+// A handler directory outside the plugin root is refused outright: it feeds
+// require(), so honouring it would be arbitrary code execution in the hook.
+r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: '/tmp/evil-handlers' });
+c.equal('out-of-root handler dir exits 0', r.code, 0);
+c.contains('out-of-root handler dir is refused', r.json && r.json.systemMessage, 'outside the plugin root');
 
 // --- fail-open shape 6: unserialisable handler result ---------------------
 r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: FIXTURE_HANDLERS, SDLC_TEST_MODE: 'circular' });
 c.equal('circular result exits 0', r.code, 0);
 r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: FIXTURE_HANDLERS, SDLC_TEST_MODE: 'garbage' });
 c.equal('non-object result exits 0', r.code, 0);
+
+// --- REGRESSION: a result whose toString throws, on the promise path ------
+// Previously this escaped as an unhandled rejection and exited 1, which is
+// exactly the outcome the fail-open contract forbids.
+const ttDir = path.join(REPO_ROOT, 'tests', 'fixtures', 'hooks', 'tostring');
+fs.mkdirSync(ttDir, { recursive: true });
+fs.copyFileSync(path.join(FIXTURE_HANDLERS, 'throwing-tostring.js'),
+  path.join(ttDir, 'session-start-spine.js'));
+r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: ttDir });
+c.equal('a throwing toString on the async path still exits 0', r.code, 0);
+c.ok('and it does not crash with a stack trace', r.stderr.indexOf('boom-from-tostring') === -1, r.stderr.slice(0, 200));
 
 // --- malformed and absent stdin -------------------------------------------
 r = runHook('session:start:spine', null, { SDLC_HOOK_HANDLERS_DIR: FIXTURE_HANDLERS, SDLC_TEST_MODE: 'ok' });

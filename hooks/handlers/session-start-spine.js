@@ -94,9 +94,24 @@ function extractState(text) {
 
   m = matchLine(lines, /^##\s*Status:\s*(.+)$/);
   if (m) {
+    // Enum match, not a prefix match. A prefix check would let everything
+    // after a known word through — "idle — SYSTEM OVERRIDE: ..." would have
+    // been emitted verbatim, which is exactly the injection surface the
+    // typed-fields design claims not to have. Only the recognised word is
+    // kept; any detail after it is discarded, not echoed.
     const value = sanitize.sanitizeField(m[1], 120).toLowerCase();
-    const known = STATUSES.some((s) => value.indexOf(s) === 0);
-    state.status = known ? value.slice(0, 60) : 'unrecognized';
+    const matched = STATUSES.find((s) => value === s || value.indexOf(s + ' ') === 0);
+    if (matched === 'implementing') {
+      // The one status that legitimately carries structure. Re-derive it from
+      // digits rather than passing the tail through.
+      const w = /implementing\s+wave\s+(\d{1,4})\s+slice\s+(\d{1,4})\/(\d{1,4})/.exec(value);
+      const s = /implementing\s+slice\s+(\d{1,4})\/(\d{1,4})/.exec(value);
+      if (w) state.status = 'implementing wave ' + w[1] + ' slice ' + w[2] + '/' + w[3];
+      else if (s) state.status = 'implementing slice ' + s[1] + '/' + s[2];
+      else state.status = 'implementing';
+    } else {
+      state.status = matched || 'unrecognized';
+    }
   }
 
   // Wave currently in progress.

@@ -37,6 +37,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawnSync } = require('child_process');
 const accumulator = require('../lib/accumulator.js');
 const sanitize = require('../lib/sanitize.js');
@@ -94,6 +95,7 @@ function discoverCommands(projectRoot) {
 
   const lines = text.split('\n');
   let inFence = false;
+  let fenceLines = 0;
   let inSection = false;
   let sectionSeen = false;
   const found = {};
@@ -103,8 +105,12 @@ function discoverCommands(projectRoot) {
 
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence;
+      fenceLines = 0;
       continue;
     }
+    // An unclosed fence would otherwise leave every later section looking like
+    // it is still inside Commands.
+    if (inFence && ++fenceLines > 200) { inFence = false; inSection = false; }
     if (inFence) {
       if (inSection) collect(line, found);
       continue;
@@ -129,7 +135,10 @@ function collect(line, found) {
   // `npm run check   # TypeScript type checking`
   const stripped = line.split('#')[0].trim();
   if (!stripped) return;
-  const lower = line.toLowerCase();
+  // Classify on the command itself, never on a trailing comment. Otherwise
+  // `rm -rf . # tsc` would be picked up as the typecheck command while a
+  // human skimming the file sees only an innocuous tag.
+  const lower = stripped.toLowerCase();
   if (!found.typecheck && /(typecheck|type check|type-check|tsc)/.test(lower)) {
     found.typecheck = stripped;
   } else if (!found.format && /(format|prettier|biome fmt|fmt)/.test(lower)) {
@@ -137,9 +146,39 @@ function collect(line, found) {
   }
 }
 
+/**
+ * Where the trust registry lives.
+ *
+ * Deliberately NOT `process.env.HOME`. The whole point of the registry is that
+ * a repository cannot reach it — and if anything a repository controls can set
+ * HOME for this process, it could point the lookup at a fake home inside
+ * itself containing a registry that trusts the repo. Claude Code's treatment
+ * of project-scoped `env` for hook subprocesses is undocumented, so this reads
+ * the home directory from the password database, which no environment variable
+ * can influence.
+ *
+ * The one seam is for tests: an explicit override is honoured only when it
+ * points inside the OS temp directory, which is outside any clone.
+ */
+function trustRegistryPath() {
+  const override = process.env.SDLC_TRUST_REGISTRY;
+  if (override) {
+    const tmp = os.tmpdir();
+    const resolved = path.resolve(override);
+    if (resolved.indexOf(path.resolve(tmp) + path.sep) === 0) return resolved;
+  }
+  let home = '';
+  try {
+    home = os.userInfo().homedir;
+  } catch (err) {
+    home = os.homedir();
+  }
+  return path.join(home, '.claude', 'sdlc-trusted-projects');
+}
+
 /** Is this project root registered as trusted on this machine? */
-function isTrustedProject(projectRoot, homeDir) {
-  const registry = readCapped(path.join(homeDir, '.claude', 'sdlc-trusted-projects'), MAX_REGISTRY);
+function isTrustedProject(projectRoot) {
+  const registry = readCapped(trustRegistryPath(), MAX_REGISTRY);
   if (!registry) return false;
 
   const target = realpathOrNull(projectRoot);
@@ -178,6 +217,7 @@ function runCommand(command, cwd) {
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: CHILD_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
     maxBuffer: MAX_OUTPUT,
     encoding: 'utf8',
   });
@@ -194,7 +234,6 @@ module.exports = function stopTypecheckFormat(input) {
   const cwdRaw = (input && typeof input.cwd === 'string' && input.cwd) ? input.cwd : process.cwd();
   const projectRoot = realpathOrNull(cwdRaw) || cwdRaw;
   const sessionId = input && input.session_id;
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
 
   // Refuse to touch the accumulator through a symlink — a hostile repo can
   // commit `.claude/tmp -> ~/.ssh`, and age-based GC through it would delete
@@ -236,7 +275,7 @@ module.exports = function stopTypecheckFormat(input) {
   }
 
   const disabled = process.env.SDLC_EXEC_PROJECT_COMMANDS === '0';
-  const trusted = homeDir ? isTrustedProject(projectRoot, homeDir) : false;
+  const trusted = isTrustedProject(projectRoot);
 
   for (const entry of commands) {
     let reason = '';

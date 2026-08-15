@@ -209,8 +209,16 @@ Creates:
 
 ## Hooks
 
-The plugin registers three hooks. None of them can block: every one exits 0
-whatever happens, so a malfunctioning hook can never halt an unattended run.
+The plugin registers three hooks. None of them blocks: every one exits 0
+whatever happens, so a malfunctioning hook cannot halt an unattended run.
+
+One honest limitation. That guarantee covers the hook *deciding* anything and
+every asynchronous failure — a throw, a rejected promise, a missing handler, a
+Node too old, an unserialisable result. It cannot cover a handler that blocks
+the thread synchronously, because a JavaScript timer cannot interrupt
+synchronous code. The backstop for that case is the `timeout` on each entry in
+`hooks/hooks.json`, which Claude Code enforces by killing the process from
+outside.
 
 | Hook | Fires | Does |
 |------|-------|------|
