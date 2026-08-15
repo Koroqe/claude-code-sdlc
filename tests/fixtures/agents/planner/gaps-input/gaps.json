@@ -1,0 +1,23 @@
+{
+  "_fixture_purpose": "TC-3.1 — a realistic Gate 6 `gaps` array with mixed levels; every entry carries all four required fields (level, finding, location, verifies_with). Feed this array to `planner` as structured input and confirm it returns >=1 replan slice per gap, each using the standard Files:/Changes:/Verify:/Done when: fields, with the Verify: condition operationalizing the stated verifies_with text.",
+  "gaps": [
+    {
+      "level": 4,
+      "finding": "no test exercises POST /api/widgets",
+      "location": "src/routes/widgets.ts:42",
+      "verifies_with": "an integration test posting a non-trivial payload and asserting the 201 response body"
+    },
+    {
+      "level": 2,
+      "finding": "BLOCKER-tier stub marker found in the widget update handler",
+      "location": "src/routes/widgets.ts:88",
+      "verifies_with": "replace the throw new Error('Not implemented') body with the real update logic and add a test asserting a 200 response with the updated fields"
+    },
+    {
+      "level": 3,
+      "finding": "WidgetCreatedEvent handler is defined but never imported by the event bus",
+      "location": "src/events/widgetCreated.ts:1",
+      "verifies_with": "wire the handler into src/events/bus.ts's registration list and add a test asserting the handler fires on a WidgetCreatedEvent"
+    }
+  ]
+}
