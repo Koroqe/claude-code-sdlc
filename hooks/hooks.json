@@ -34,6 +34,18 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "id": "pre:edit:read-guard",
+            "type": "command",
+            "description": "Records that a file was read, so the PreToolUse half can tell a fresh edit from one made against stale, pre-compaction memory.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:edit:read-guard",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {
@@ -41,6 +53,58 @@
             "type": "command",
             "description": "Records each edited path so the Stop hook can run format and typecheck once per response instead of once per edit.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook post:edit:accumulate",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "id": "pre:bash:git-guard",
+            "type": "command",
+            "description": "Refuses commits on main, bulk staging, AI attribution, non-conventional messages and unrequested pushes.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:bash:git-guard",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "id": "pre:write:shrink-guard",
+            "type": "command",
+            "description": "Refuses a whole-file Write that would gut a curated document.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:write:shrink-guard",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "id": "pre:edit:read-guard",
+            "type": "command",
+            "description": "Refuses an edit to a file not read this session.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:edit:read-guard",
+            "timeout": 10
+          },
+          {
+            "id": "pre:edit:config-protection",
+            "type": "command",
+            "description": "Refuses edits that weaken quality configuration or silence type and lint checks.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:edit:config-protection",
+            "timeout": 10
+          },
+          {
+            "id": "pre:agent:isolation-guard",
+            "type": "command",
+            "description": "Refuses a parallel-wave subagent writing the scratchpad or changelog; the orchestrator owns both.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:agent:isolation-guard",
             "timeout": 10
           }
         ]
@@ -55,6 +119,13 @@
             "description": "Runs the project's declared format and typecheck commands once over everything edited this response. No-ops visibly when the project declares no such command.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:typecheck-format",
             "timeout": 180
+          },
+          {
+            "id": "stop:changelog-guard",
+            "type": "command",
+            "description": "Checks the shape of a changelog entry written this response, and that it is not a duplicate under today.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:changelog-guard",
+            "timeout": 20
           }
         ]
       }
