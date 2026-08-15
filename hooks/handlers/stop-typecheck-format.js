@@ -160,12 +160,24 @@ function collect(line, found) {
  * The one seam is for tests: an explicit override is honoured only when it
  * points inside the OS temp directory, which is outside any clone.
  */
-function trustRegistryPath() {
+function trustRegistryPath(projectRoot) {
   const override = process.env.SDLC_TRUST_REGISTRY;
   if (override) {
-    const tmp = os.tmpdir();
-    const resolved = path.resolve(override);
-    if (resolved.indexOf(path.resolve(tmp) + path.sep) === 0) return resolved;
+    const resolved = realpathOrNull(override) || path.resolve(override);
+    // os.tmpdir() reads TMPDIR, so gating on it alone would leave the seam
+    // environment-controlled — a repo could set TMPDIR into its own clone and
+    // point the registry at a file it ships. The load-bearing check is
+    // therefore the project-root exclusion: the clone is the only location an
+    // attacker can write to before execution, so a registry inside it is
+    // never honoured, whatever TMPDIR says.
+    const root = realpathOrNull(projectRoot);
+    const insideProject = root &&
+      (resolved === root || resolved.indexOf(root + path.sep) === 0);
+    // Both sides must be realpath'd: on macOS os.tmpdir() reports /var/... while
+    // the resolved path is /private/var/..., and the prefix test would fail.
+    const tmpRoot = realpathOrNull(os.tmpdir()) || path.resolve(os.tmpdir());
+    const insideTmp = resolved.indexOf(tmpRoot + path.sep) === 0;
+    if (insideTmp && !insideProject) return resolved;
   }
   let home = '';
   try {
@@ -178,7 +190,7 @@ function trustRegistryPath() {
 
 /** Is this project root registered as trusted on this machine? */
 function isTrustedProject(projectRoot) {
-  const registry = readCapped(trustRegistryPath(), MAX_REGISTRY);
+  const registry = readCapped(trustRegistryPath(projectRoot), MAX_REGISTRY);
   if (!registry) return false;
 
   const target = realpathOrNull(projectRoot);

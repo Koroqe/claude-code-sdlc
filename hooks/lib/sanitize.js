@@ -32,7 +32,13 @@
 const CONTROL_CHARS = /[\x00-\x1F\x7F-\x9F]/g;
 const INVISIBLE = /[\u200B-\u200F\u2060\uFEFF\u00AD]/g;
 const BIDI = /[\u202A-\u202E\u2066-\u2069]/g;
-const LONE_SURROGATE = /[\uD800-\uDFFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/* A HIGH surrogate not followed by a low one, or a low surrogate not preceded
+ * by a high one. The first alternative must use \uD800-\uDBFF, not the full
+ * surrogate range: with the full range the low half of a perfectly valid pair
+ * matches (it is a surrogate, and the unit after it is not a low surrogate),
+ * so every emoji and non-BMP character would be mangled into exactly the
+ * malformed output this rule exists to remove. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/g;
 /* eslint-enable no-control-regex */
 
 /**

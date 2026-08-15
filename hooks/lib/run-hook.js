@@ -304,7 +304,7 @@ function main() {
      * through this guard. */
     function finishGuarded(result) {
       try {
-        finishGuarded(result);
+        finish(result);
       } catch (err) {
         if (settled && !emitted) {
           // finish() failed after claiming the slot; force a clean exit.

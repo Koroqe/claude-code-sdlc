@@ -175,6 +175,20 @@ r = stop(noEdits, homeTrusting([noEdits]), { PATH: spyPath });
 c.contains('no edits means no run', msg(r), 'no files edited');
 c.equal('no edits executed nothing', fs.readFileSync(spyLog, 'utf8'), '');
 
+// --- REGRESSION: a registry inside the project is never honoured ---------
+// os.tmpdir() reads TMPDIR, so gating the test seam on it alone would leave
+// the trust boundary environment-controlled: a repo could point TMPDIR into
+// its own clone and ship a registry that trusts itself. The project-root
+// exclusion is what actually closes that, so it is tested directly.
+const selfTrust = project('self-trust', CLAUDE_MD, ['/a.ts']);
+const inRepoRegistry = path.join(selfTrust, 'fake-registry');
+fs.writeFileSync(inRepoRegistry, fs.realpathSync(selfTrust) + '\n');
+fs.writeFileSync(spyLog, '');
+r = stop(selfTrust, inRepoRegistry, { PATH: spyPath, TMPDIR: selfTrust });
+c.equal('a self-trusting in-repo registry exits 0', r.code, 0);
+c.contains('a registry inside the project is refused', msg(r), 'untrusted-project');
+c.equal('the self-trust attempt ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
 // --- symlinked .claude/tmp is refused (GC must not delete through it) ----
 const victim = tempDir('sdlc-victim-');
 fs.writeFileSync(path.join(victim, 'precious.paths'), 'do not delete\n');
