@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-13 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+14 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-4.0.0-green.svg)]()
@@ -107,7 +107,7 @@ MERGE READY
 
 ---
 
-## The 13 Agents
+## The 14 Agents
 
 | Agent | Role |
 |-------|------|
@@ -116,6 +116,7 @@ MERGE READY
 | `architect` | Architecture review, module boundaries, `[STRUCTURAL]` fix authorizations |
 | `qa-planner` | Test cases in `docs/qa/` before any code |
 | `planner` | Breaks features into 5-9 executable slices with verification commands |
+| `plan-critic` | Adversarially critiques the plan before implementation — hedging, wave assignment, file-path verification |
 | `security-auditor` | Vulnerability audit, auth boundaries |
 | `test-writer` | TDD — tests before implementation |
 | `e2e-runner` | End-to-end tests from use-case scenarios |
@@ -292,7 +293,7 @@ Agents are tiered by task complexity to reduce cost:
 
 | Tier | Agents | Rationale |
 |------|--------|-----------|
-| `opus` | `architect`, `planner`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
+| `opus` | `architect`, `planner`, `plan-critic`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
 | `sonnet` | all other 10 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
 
 To change a tier: edit the `model:` field in the agent's frontmatter and re-run `bash install.sh --local --yes`.

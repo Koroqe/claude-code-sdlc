@@ -120,7 +120,7 @@ WHAT GETS INSTALLED (~/.claude/):
   .sdlc-receipt    Record of exactly what this install placed
 
 WHAT DOES NOT COME FROM HERE:
-  agents/          13 specialized agents — ship in the plugin
+  agents/          14 specialized agents — ship in the plugin
   skills/          5 pipeline skills    — ship in the plugin
 
   Install the plugin from a Claude Code session:
