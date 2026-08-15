@@ -24,8 +24,11 @@
  * replaced, and this harness's defining property is that its pipeline runs
  * unattended.
  *
- * No hook in this feature blocks at all: exit code 2 appears nowhere under
- * hooks/, and CI asserts that.
+ * Some hooks DO refuse — the guards added in PRD Section 8. They refuse by
+ * returning `{ deny: { reason } }`, which this file alone turns into a
+ * decision. Exit code 2 is never used anywhere in the harness: one signalling
+ * mechanism, so "refused on purpose" and "broke by accident" can never be
+ * confused. CI asserts no exit(2) exists under hooks/.
  *
  * ---------------------------------------------------------------------------
  * WHAT THE TIMEOUT BELOW CAN AND CANNOT DO — do not mistake one for the other.
@@ -70,6 +73,36 @@ var HOOKS = {
   'stop:typecheck-format': {
     handler: 'stop-typecheck-format.js',
     timeoutMs: 120000,
+    profiles: ['standard', 'strict']
+  },
+  'pre:bash:git-guard': {
+    handler: 'pre-bash-git-guard.js',
+    timeoutMs: 10000,
+    profiles: ['standard', 'strict']
+  },
+  'pre:write:shrink-guard': {
+    handler: 'pre-write-shrink-guard.js',
+    timeoutMs: 5000,
+    profiles: ['standard', 'strict']
+  },
+  'pre:edit:read-guard': {
+    handler: 'pre-edit-read-guard.js',
+    timeoutMs: 5000,
+    profiles: ['standard', 'strict']
+  },
+  'pre:edit:config-protection': {
+    handler: 'pre-edit-config-protection.js',
+    timeoutMs: 5000,
+    profiles: ['standard', 'strict']
+  },
+  'pre:agent:isolation-guard': {
+    handler: 'pre-agent-isolation-guard.js',
+    timeoutMs: 5000,
+    profiles: ['standard', 'strict']
+  },
+  'stop:changelog-guard': {
+    handler: 'stop-changelog-guard.js',
+    timeoutMs: 15000,
     profiles: ['standard', 'strict']
   }
 };
@@ -117,6 +150,41 @@ function sanitizeMessage(text) {
     }
   }
   return out;
+}
+
+var MAX_REASON = 2000;
+
+/**
+ * Validate a handler's deny and return its sanitized reason, or '' if the
+ * deny is not well-formed. Strict on purpose:
+ *
+ *   - `reason` must already BE a string. No coercion: String({}) yields
+ *     "[object Object]", which is non-empty, so a coercing check would happily
+ *     serialize garbage as an authoritative refusal reason.
+ *   - It is read exactly once, so a getter cannot return something benign to
+ *     the validator and something else to the emitter.
+ *   - Sanitization happens before the emptiness test, so a reason made only of
+ *     control characters is dropped rather than emitted blank.
+ *   - The reason is capped: a handler bug should not push megabytes into the
+ *     model's context.
+ */
+function validatedDenyReason(result) {
+  var deny = result.deny;
+  if (!deny || typeof deny !== 'object') { return ''; }
+  if (Object.prototype.toString.call(deny) !== '[object Object]') { return ''; }
+
+  var raw = deny.reason;
+  if (typeof raw !== 'string') { return ''; }
+
+  // Trim before the emptiness test: sanitizeMessage turns newlines and tabs
+  // into spaces, so a reason made only of whitespace would otherwise survive
+  // as a blank but non-empty refusal.
+  var clean = sanitizeMessage(raw).replace(/^\s+|\s+$/g, '');
+  if (!clean) { return ''; }
+  if (clean.length > MAX_REASON) {
+    clean = clean.slice(0, MAX_REASON) + ' [truncated]';
+  }
+  return clean;
 }
 
 function emitNote(hookId, message) {
@@ -287,9 +355,54 @@ function main() {
       if (result.systemMessage) {
         payload.systemMessage = sanitizeMessage(result.systemMessage);
       }
+
+      /* THE DENY CHANNEL — the single construction site in this file.
+       *
+       * A guard signals refusal by returning { deny: { reason } }. Only this
+       * function turns that into a decision, and it does so event-aware:
+       * PreToolUse can refuse a tool call, Stop can force a corrective turn,
+       * and every other event — PostToolUse included — cannot refuse anything,
+       * so the deny is dropped.
+       *
+       * That last part is load-bearing. One handler (the read-guard) is
+       * registered under both PostToolUse and PreToolUse; dropping denies for
+       * the wrong event makes its recorder half structurally incapable of
+       * refusing, rather than merely careful not to.
+       *
+       * Everything that can go wrong elsewhere — an exception, a timeout, a
+       * missing handler — routes through emitNote(), which builds a closed
+       * object from two strings and never sees a `result`. Those paths are
+       * type-incapable of carrying a decision, which is why the fail-open
+       * contract survives the arrival of blocking.
+       *
+       * Known residual: if Claude Code ever renames these event strings, the
+       * comparisons below stop matching and every guard silently allows while
+       * still appearing installed. Fixtures craft their own stdin and cannot
+       * catch that; only an end-to-end run against the real harness can. */
+      var denyReason = validatedDenyReason(result);
+      var event = typeof input.hook_event_name === 'string' ? input.hook_event_name : '';
+
+      if (denyReason && event === 'PreToolUse') {
+        payload.hookSpecificOutput = {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: denyReason
+        };
+        emit(payload);
+        return;
+      }
+      if (denyReason && event === 'Stop') {
+        // Never `continue: false` — that ends the session. A blocked Stop must
+        // force a corrective turn, not wedge the run.
+        payload.decision = 'block';
+        payload.reason = denyReason;
+        emit(payload);
+        return;
+      }
+
       if (result.additionalContext) {
         payload.hookSpecificOutput = {
-          hookEventName: result.hookEventName || '',
+          hookEventName: event,
           additionalContext: String(result.additionalContext)
         };
       }

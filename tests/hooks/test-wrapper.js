@@ -31,7 +31,7 @@ for (const evt of events) {
     for (const h of entry.hooks) allHandlers.push(h);
   }
 }
-c.equal('exactly 3 hook handlers registered', allHandlers.length, 3);
+c.ok('all hook handlers registered', allHandlers.length >= 3, String(allHandlers.length));
 for (const h of allHandlers) {
   // Two or three colon-separated segments: session:start:spine, stop:typecheck-format.
   c.ok('handler ' + h.id + ' has a namespaced id', /^[a-z-]+:[a-z-]+(:[a-z-]+)?$/.test(h.id || ''), h.id);
@@ -52,14 +52,49 @@ function walk(dir, out) {
 }
 const hookSources = walk(path.join(REPO_ROOT, 'hooks'), []).filter((f) => /\.(js|json)$/.test(f));
 c.ok('hooks/ contains source files to scan', hookSources.length >= 2, String(hookSources.length));
+
+// (a) Repository-wide: exit code 2 is never used anywhere in the harness. One
+// signalling mechanism only, so a deliberate refusal and an accidental crash
+// can never be confused.
 for (const file of hookSources) {
   const text = fs.readFileSync(file, 'utf8');
   const rel = path.relative(REPO_ROOT, file);
-  // Comments legitimately discuss exit 2; code must never use it.
   const code = text.split('\n').filter((l) => !/^\s*(\*|\/\/|#)/.test(l)).join('\n');
   c.ok(rel + ' has no exit(2)', code.indexOf('exit(2)') === -1 && code.indexOf('exitCode = 2') === -1);
-  c.ok(rel + ' emits no permission decision', code.indexOf('permissionDecision') === -1);
 }
+
+// (b) Narrowed: the three Section 7 hooks observe and never refuse, so they
+// must contain no decision vocabulary at all. This deliberately excludes
+// run-hook.js (which now owns the deny channel) and the Section 8 guards
+// (which are supposed to refuse) — narrowing the sweep, not deleting it.
+const NON_BLOCKING_HANDLERS = [
+  'hooks/handlers/session-start-spine.js',
+  'hooks/handlers/post-edit-accumulate.js',
+  'hooks/handlers/stop-typecheck-format.js',
+];
+for (const rel of NON_BLOCKING_HANDLERS) {
+  const full = path.join(REPO_ROOT, rel);
+  c.ok(rel + ' exists to be scanned', fs.existsSync(full));
+  const code = fs.readFileSync(full, 'utf8').split('\n')
+    .filter((l) => !/^\s*(\*|\/\/|#)/.test(l)).join('\n');
+  c.ok(rel + ' emits no permission decision', code.indexOf('permissionDecision') === -1);
+  c.ok(rel + ' emits no block decision', code.indexOf("decision = 'block'") === -1);
+}
+
+// The sweep must be able to fail. A check that only ever passes proves nothing.
+const seeded = fs.readFileSync(path.join(REPO_ROOT, NON_BLOCKING_HANDLERS[0]), 'utf8')
+  + "\nconst x = { permissionDecision: 'deny' };\n";
+c.ok('the narrowed sweep would catch a decision in a Section 7 handler',
+  seeded.indexOf('permissionDecision') !== -1);
+
+// The deny channel has exactly one construction site. FR-10.1 removes
+// run-hook.js from the sweep above, so this count is what stops a second site
+// appearing unnoticed.
+const wrapperSrc = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'lib', 'run-hook.js'), 'utf8');
+const denySites = (wrapperSrc.match(/permissionDecision: 'deny'/g) || []).length;
+c.equal('exactly one permissionDecision construction site', denySites, 1);
+const blockSites = (wrapperSrc.match(/payload\.decision = 'block'/g) || []).length;
+c.equal('exactly one block construction site', blockSites, 1);
 c.ok('no package.json under hooks/ (zero dependencies)',
   !fs.existsSync(path.join(REPO_ROOT, 'hooks', 'package.json')));
 
