@@ -49,11 +49,34 @@ After the plan is created by the Tech Lead:
 
 Read `.claude/scratchpad.md` to identify the current wave and its pending slices. Process waves in order (Wave 1 → Wave 2 → ... → Wave N).
 
+**Tracer gate (checked before dispatching Wave 1, and enforced at every subsequent wave transition — applies identically to the single-slice direct path and the multi-slice parallel path below):**
+
+Check whether the plan contains a slice marked `**Tracer:** yes`.
+
+- **If it does:** no slice other than the tracer may be dispatched until the tracer slice's `Verify:` condition has been run and has passed. The wave-advance condition is explicit: Wave N+1 dispatches only after every Wave N slice's `Verify:` has been run and has passed — this holds for both dispatch paths below. A slice merely being committed, or an implementation attempt merely having been made, is NOT sufficient to advance the wave; only a passing `Verify:` result is. This is deliberate: "committed" or "attempted" is not sufficient — that gap is exactly how a broken tracer could slip through the single-slice direct path (which has no parallel-subagent result-collection step to catch it).
+- **Tracer failure halts the phase:** if the tracer slice's `Verify:` condition still fails after the existing 3-retry budget (`error-recovery.md`) is exhausted, halt Phase 2 before dispatching any expansion-slice work — single or parallel — and escalate through the existing Rule 3 / Rule 4 error-recovery path. Do NOT proceed to Slice 2 (or any later slice) with the tracer left broken.
+- **If the plan carries no `**Tracer:** yes` marker anywhere** (a legacy, pre-F3 plan), print this line verbatim before proceeding to any slice:
+
+  `tracer gate inactive — no **Tracer:** yes marker found; treating as pre-F3 plan.`
+
+  Then proceed exactly as before this feature shipped — a plan with no tracer marker executes in its existing slice order with no tracer-gate applied. This notice makes the fallback visible rather than silent; it MUST always accompany the fallback, never be omitted, even though the run itself is unaffected.
+
 **Single-slice wave (or no `Wave:` fields in plan):**
 Follow the `/implement-slice` workflow directly — identical to current sequential behavior. Invoke `/implement-slice` WITH the `no-changelog` suppression flag so that even this direct, no-wave-context path does NOT write a CHANGELOG.md entry — the single feature changelog entry is owned by merge-ready (see Phase 3).
 
 **Multi-slice wave (2+ pending slices in same wave):**
-Spawn parallel subagents — one Agent tool call per slice in a single message:
+
+**Dispatch-time write-surface disjointness check — run this immediately before issuing any `Agent` tool call for a wave with 2+ pending slices:**
+- Re-derive that wave's slices' `Files:` lists fresh from the plan file — re-read the plan file now; do NOT reuse `Files:` lists recalled from memory or from an earlier read in this session, since the plan may have been replanned or hand-edited since then.
+- Check pairwise disjointness across those lists, always case-insensitively — do not attempt to detect whether the underlying filesystem is case-sensitive. A false conflict merely triggers the replan recovery path below, which is safe; a missed conflict corrupts a wave, which is not. Treat any `Files:` entry ending in a trailing slash as owning that entire directory subtree, so a path-prefix relationship (e.g. `src/handlers/` vs. `src/handlers/widgets.ts`) counts as a conflict too, not only an exact string match.
+- **A single-slice wave requires no check** — there is nothing to conflict with. This step applies only when the wave has 2 or more pending slices; skip it entirely for single-slice waves.
+
+**On conflict — refusal and recovery:**
+- If any file path appears in 2 or more of the about-to-be-dispatched slices' `Files:` lists, refuse to dispatch this wave: issue ZERO `Agent` tool calls for it, and report the specific conflicting file path together with the slice numbers that both declare it.
+- Recover immediately — this must never dead-end an unattended run. Treat it as a Rule 3 auto-resolve first: re-invoke `planner`, flagging the conflicting slice pair and the shared path, so it can rewave the offending slice into a later wave or split file ownership so the lists no longer overlap. Re-derive the (now-revised) wave's `Files:` lists fresh from the plan and re-check disjointness before dispatching.
+- Only escalate to Rule 4 if `planner` cannot resolve the conflict automatically after the Rule 3 attempt.
+
+Once the wave's slices are confirmed disjoint (or the wave has only 1 slice), spawn parallel subagents — one Agent tool call per slice in a single message:
 
 ```
 For each pending slice in the current wave, spawn an Agent with this prompt:

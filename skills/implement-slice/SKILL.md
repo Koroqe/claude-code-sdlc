@@ -26,6 +26,12 @@ Implement only the next smallest slice from the plan using TDD.
 4. Confirm these documentation files exist:
    - `docs/qa/<feature>_test_cases.md` — if not, delegate to `qa-planner` first
    - `docs/use-cases/<feature>_use_cases.md` — if not, delegate to `ba-analyst` first
+5. **Tracer gate:** read the plan file and check whether any slice is marked `**Tracer:** yes`.
+   - **If a `**Tracer:** yes` slice exists** and this invocation targets a different (non-tracer) slice, AND the tracer slice's `Verify:` condition has not yet been run and passed: REFUSE. Do not proceed to Step 1 (Identify the Slice) or any TDD work. State plainly that the tracer slice must be implemented and its `Verify:` condition passed first, name the tracer slice, and instruct the caller to run `/implement-slice` against the tracer slice before retrying this one. This check exists because standalone invocation of this skill bypasses `/develop-feature`'s wave sequencing entirely — wave ordering alone cannot gate a direct, out-of-band `/implement-slice` call.
+   - **If this invocation targets the tracer slice itself:** proceed normally — the tracer is exempt from its own gate.
+   - **Exemption (backward compatibility):** if the plan carries no `**Tracer:** yes` marker anywhere, this check does not apply. Print this line verbatim, then continue with the remaining pre-flight checks and TDD flow as normal — the exemption is never silent:
+
+     `tracer gate inactive — no **Tracer:** yes marker found; treating as pre-F3 plan.`
 
 ## TDD Implementation Flow
 
