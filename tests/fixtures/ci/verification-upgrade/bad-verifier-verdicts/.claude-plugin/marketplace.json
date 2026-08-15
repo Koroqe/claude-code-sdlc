@@ -1,0 +1,21 @@
+{
+  "name": "claude-code-sdlc",
+  "owner": {
+    "name": "Aleksei Korobeinikov",
+    "url": "https://github.com/Koroqe"
+  },
+  "metadata": {
+    "description": "The Claude Code SDLC harness — an autonomous, documentation-first software development pipeline for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "claude-code-sdlc",
+      "source": "./",
+      "description": "Turn Claude Code into an autonomous software development team — 14 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
+      "version": "4.0.0",
+      "license": "MIT",
+      "category": "workflow",
+      "tags": ["sdlc", "agents", "tdd", "documentation", "quality-gates", "autonomous"]
+    }
+  ]
+}
