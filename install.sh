@@ -51,6 +51,8 @@ CLONED_TEMP=false
 DO_UNINSTALL=false
 DRY_RUN=false
 RESTORE_DIR=""
+TRUST_PROJECT=""
+DO_TRUST=false
 
 # Populated by load_manifest()
 MANIFEST_OWNS=()
@@ -100,6 +102,10 @@ OPTIONS:
   --dry-run          Print what would change and exit without touching anything
   --uninstall        Remove the files this harness installed
   --restore <dir>    Restore ~/.claude from one of this installer's backups
+  --trust-project [path]
+                     Allow the hooks to run this project's CLAUDE.md-declared
+                     typecheck/format commands (defaults to the current
+                     directory). Untrusted projects only ever get a report.
   --help             Show this help message
 
   --dry-run combines with --uninstall and --restore to preview them.
@@ -420,6 +426,56 @@ prune_empty_dirs() {
     [ -L "$CLAUDE_DIR/$dir" ] && continue
     rmdir -- "$CLAUDE_DIR/$dir" 2>/dev/null || true
   done
+}
+
+# ----------------------------------------------------------------------------
+# Trusted-project registry
+#
+# The stop:typecheck-format hook runs a command declared by the project's own
+# CLAUDE.md. That execution is spawned by the hook engine, so the permission
+# system never sees it — which means a freshly cloned hostile repository could
+# otherwise run a command of its choosing the moment a response finishes.
+#
+# So the hook only executes in projects listed here, and this file lives
+# OUTSIDE any repository. A marker inside a project would be worthless: a
+# hostile repo would simply commit one, and committed consent is not consent.
+#
+# Only a deliberate adopter action writes this file — this installer, never a
+# hook, an agent, or a session.
+# ----------------------------------------------------------------------------
+trust_project() {
+  local target resolved registry
+
+  target="${1:-$(pwd)}"
+  resolved="$(cd -- "$target" 2>/dev/null && pwd -P)" || {
+    say_untrusted "Not a readable directory: " "$target"
+    exit 1
+  }
+
+  resolve_claude_dir
+  registry="$CLAUDE_DIR/sdlc-trusted-projects"
+
+  if [ -f "$registry" ] && grep -qxF -- "$resolved" "$registry" 2>/dev/null; then
+    log_ok "Already trusted: $resolved"
+    return 0
+  fi
+
+  if [ ! -f "$registry" ]; then
+    {
+      printf '%s\n' '# Projects whose CLAUDE.md-declared typecheck and format commands the'
+      printf '%s\n' '# claude-code-sdlc hooks may execute. One absolute path per line.'
+      printf '%s\n' '#'
+      printf '%s\n' '# Add a project with: bash install.sh --trust-project [path]'
+      printf '%s\n' '# Remove one by deleting its line.'
+      printf '%s\n' '#'
+      printf '%s\n' '# Only add projects whose code you would run anyway. A listed project can'
+      printf '%s\n' '# execute whatever its CLAUDE.md declares.'
+    } > "$registry"
+  fi
+
+  printf '%s\n' "$resolved" >> "$registry"
+  log_ok "Trusted: $resolved"
+  log_info "Its declared typecheck/format commands may now run automatically at the end of a response."
 }
 
 # ----------------------------------------------------------------------------
@@ -1025,6 +1081,18 @@ main() {
       --local) LOCAL_MODE=true; shift ;;
       --uninstall) DO_UNINSTALL=true; shift ;;
       --dry-run) DRY_RUN=true; shift ;;
+      --trust-project)
+        DO_TRUST=true
+        # Optional argument: an option-looking next token means "use cwd".
+        if [ $# -ge 2 ] && [ -n "${2:-}" ]; then
+          case "$2" in
+            -*) shift ;;
+            *) TRUST_PROJECT="$2"; shift 2 ;;
+          esac
+        else
+          shift
+        fi
+        ;;
       --restore)
         # A missing argument must not silently swallow the next flag as a path.
         if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
@@ -1058,6 +1126,11 @@ main() {
   if [ "$DO_UNINSTALL" = true ] && [ "$INIT_PROJECT" = true ]; then
     log_error "--uninstall and --init-project cannot be combined."
     exit 1
+  fi
+
+  if [ "$DO_TRUST" = true ]; then
+    trust_project "$TRUST_PROJECT"
+    return 0
   fi
 
   if [ -n "$RESTORE_DIR" ]; then
