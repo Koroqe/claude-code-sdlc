@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-15
 
+### Blocking Guards — 21:00 UTC
+**Summary:** The toolkit now stops the mistakes it used to only warn about — working on the wrong branch, quietly deleting most of a document, or switching a check off instead of fixing what it reported.
+**Details:** Six new safeguards refuse an action outright instead of merely advising against it, and each says what to do instead so unattended work keeps moving. They cover committing to the main branch or with an unwanted signature, replacing a long document with a far shorter one, editing a file not read in the current session, relaxing a quality setting to make a failure disappear, several helpers writing the same shared file at once, and changelog entries in the wrong shape. Each can be overridden.
+**Technical details:** Adds six blocking checks to the plugin's hook runtime at the tool-permission and end-of-response lifecycle points. Each refusal carries a concrete remedy and a recovery-tier tag, so the existing deviation rules classify it and an unattended run self-resolves rather than stalling; each also has an individual override and a global kill switch, and any malfunction allows rather than blocks. A regression suite replays a full development slice through all six, asserting zero false refusals. Behavioural only for adopting projects — no screens, endpoints, schema, or deployment changes.
+
 ### Hook Infrastructure — 01:35 UTC
 **Summary:** The toolkit can now notice things for itself: it remembers where you left off, batches its checks instead of repeating them, and never runs a project's own commands unless you have said that project is trusted.
 **Details:** Resuming work now picks up at the right point, because the current feature, branch and step are read from the project's notes at session start. Formatting and type checks run once at the end of a response instead of after every edit. Commands defined by a project only run in projects you have explicitly trusted; elsewhere the toolkit reports what it would have run. All of it steps aside rather than interrupting: if any part fails, work simply continues.
