@@ -1,79 +1,62 @@
-## Feature: Hook Infrastructure and Non-Blocking Hooks (v4.0 roadmap F2a)
-## Branch: feat/hook-infrastructure
+## Feature: Blocking Guards (v4.0 roadmap F2b)
+## Branch: feat/blocking-guards
 ## Status: quality-gates
 
 ## Plan
 
-Docs: `docs/PRD.md` §7 · `docs/use-cases/hook-infrastructure_use_cases.md` (UC-1..UC-10) ·
-`docs/qa/hook-infrastructure_test_cases.md` (~135 TCs, 17 sections) · Architecture: **PASS with constraints**
-Roadmap: `/Users/aleksei/.claude/plans/alright-there-s-a-lot-merry-minsky.md` (F2a of F1-F5; F1 SHIPPED)
+Docs: `docs/PRD.md` §8 · `docs/use-cases/blocking-guards_use_cases.md` ·
+`docs/qa/blocking-guards_test_cases.md` · Spike: `docs/spikes/blocking-guards_subagent-indicator_spike.md`
+Roadmap: `/Users/aleksei/.claude/plans/alright-there-s-a-lot-merry-minsky.md` (F2b of F1-F5)
 
 ### Wave 1 [complete]
-- [x] Slice 1: `hooks/hooks.json` + `hooks/lib/run-hook.js` (ES5 floor) + plugin.json `hooks` + harness — f7f2da8
-- [x] Slice 2: `.gitignore` + `templates/.gitignore` + install.sh scaffold step — 385e744
-- [x] Slice 3: `templates/settings.json` allow/deny per security ruling — 9700746
+- [x] Slice 1: subagent-indicator spike + stdin fixtures — 0d44efb
+- [x] Slice 2: wrapper deny channel + register six guards — 0a0458e
 
 ### Wave 2 [complete]
-- [x] Slice 4: Runtime controls verified (kill switch, disable list, profiles) — 035763f
+- [x] Slice 3: `pre:bash:git-guard` + `hooks/lib/shell-parse.js` — b882430
+- [x] Slice 4: `pre:write:shrink-guard` — 567be55
 
 ### Wave 3 [complete]
-- [x] Slice 5: `session:start:spine` + `hooks/lib/sanitize.js` — b593feb
-- [x] Slice 6: `post:edit:accumulate` + `hooks/lib/accumulator.js` — ef826f0
+- [x] Slice 5: `pre:edit:read-guard` + `hooks/lib/read-tracker.js` — ae8a22d, 1b8dccd
+- [x] Slice 6: `pre:edit:config-protection` — 7bd95be
 
 ### Wave 4 [complete]
-- [x] Slice 7: `stop:typecheck-format` + trust registry + `install.sh --trust-project` — 3e28bb7
+- [x] Slice 7: `pre:agent:isolation-guard` — 58a208d
+- [x] Slice 8: `stop:changelog-guard` — df38708
 
 ### Wave 5 [complete]
-- [x] Slice 8: validator wrapper-routing check + 3 fixtures + 3 CI jobs — 2799d57
-- [x] Slice 9: latency measurement + README hooks section — d18ff72
-
-## Security ruling applied (FR-6.14 resolved)
-
-Execution of a project-declared command is gated on THREE conditions, all local
-reads, none interactive:
-1. `realpath(cwd)` exactly matches a line in `~/.claude/sdlc-trusted-projects`
-   (out-of-repo; a project-local marker would be committable by a hostile repo)
-2. Command matches an ASCII shape regex; argv[0] has no path separators
-3. `SDLC_EXEC_PROJECT_COMMANDS` is not `0`
-Any failure → report the command, execute nothing, exit 0. Registry written
-only by `install.sh --trust-project`, never by a hook or agent.
-
-## Measured
-
-Hook cost: 21.4 ms/call, of which ~1.5 ms is hook logic (rest is Node startup).
-Budget was 150 ms/call. 262 checks across 6 test files.
+- [x] Slice 9: cross-guard sweeps + autonomy regression — cc71ee9, 40d3229
+- [x] Slice 10: review auto-fix round (2 CRITICAL, 1 HIGH, 4 MAJOR) — 5d4af0f
 
 ## Key design (binding — do not re-litigate)
 
-- **Three Node zones, each with its own failure posture.** CI validators fail-closed; `install.sh`
-  uses NO Node (existing CI grep enforces); hooks fail-open. `hooks/lib/` and `scripts/ci/lib/`
-  MUST NOT import from each other — CI reads `hooks/hooks.json` as data only.
-- **Fail-open contract.** Any hook that throws, times out, or cannot spawn Node exits 0 with a
-  one-line `systemMessage`. **No hook in F2a may exit 2 or block.** Blocking is F2b.
-- **Fail-open is for mechanism failure ONLY.** It is tolerable when the invariant has a named
-  merge-ready backstop. The fail-closed layer for irreversible actions is `permissions.deny`,
-  enforced by Claude Code itself — never a PreToolUse hook. F2b must name each guard's backstop.
-- **Syntax floor.** `run-hook.js` and anything it requires before the version gate must parse under
-  the oldest plausible Node, or the version check is unreachable and fail-open is unfulfillable.
-- **Injected-context rule.** `additionalContext` carries only runtime-read machine state plus
-  framing labels — never session-invariant instruction text (that belongs in the memory layer).
-  Binds F5's instinct injection through the same hook.
-- **Accumulator.** `.claude/tmp/<sanitized-session-id>.paths`, project-local, gitignored,
-  append-only, Stop clears its own, opportunistic GC, paths resolved from stdin `cwd`.
-  `session_id` sanitized to `[A-Za-z0-9_-]` — arrives on stdin, never trusted for path building.
-- **Profile system KEPT** (planner's explicit decision against the architect's shed-candidate flag):
-  `minimal` = spine only (observe, never execute project-declared commands); the two
-  command-adjacent hooks are `standard`/`strict`. Non-vacuous before F2b.
+- **Deny is constructed in exactly one place.** A handler returns `{ deny: { reason } }`; only
+  `run-hook.js` serialises it, event-aware (`PreToolUse` → `permissionDecision: "deny"`,
+  `Stop` → `decision: "block"`, every other event → dropped). Handlers never emit protocol JSON.
+- **Exit code 2 is banned harness-wide.** One signalling mechanism, so fail-open stays provable.
+- **Fail-open means ALLOW for a guard.** A guard that cannot determine the facts must not refuse.
+  `read-tracker.wasRead` is three-way: `'no'` (a state fact) denies, `'unknown'` (mechanism
+  failure) allows.
+- **Every refusal carries a `[deviation: rule-N — remedy]` token** so the existing recovery tiers
+  classify it and an unattended run self-resolves. Reasons are self-sufficient — never "see
+  error-recovery.md", which the model cannot open mid-deny.
+- **Every guard has an escape sentinel, a `SDLC_DISABLED_HOOKS` entry, and a named merge-ready
+  backstop.** Cross-guard test asserts all three for all six, so a new guard cannot skip them.
+- **Git subprocesses are hardened against repo config.** `core.fsmonitor` in a cloned repo's
+  `.git/config` is code execution; every spawn passes `-c core.fsmonitor=` plus
+  `GIT_CONFIG_GLOBAL/SYSTEM=/dev/null`, `shell: false`, timeout, `maxBuffer`.
+- **Config-protection excludes `docs/**`, `*.md`, `tests/fixtures/**`** — this repo's own fixtures
+  contain `@ts-nocheck` literally, so without the exclusion the guard blocks the pipeline writing
+  the very tests that prove it works.
+- **Isolation guard: ACCEPTED RESIDUAL.** Absence of `agent_id` = orchestrator = allow. Correct
+  today; the rot detector is a test asserting the captured subagent fixture still carries the
+  field, not a warning on every orchestrator write (which would be pure noise).
 
-## Security pre-reviews required BEFORE implementing
+## Verified at merge-ready
 
-- **Slice 3** — every scaffolded project inherits the permission policy; one broad allow weakens all.
-- **Slice 5** — injects project-owned file content into model context on every session start, in any
-  repo the adopter opens. Prompt-injection surface by construction.
-- **Slice 7** — executes commands declared by the *project's* CLAUDE.md, spawned by the hook engine
-  and therefore NOT mediated by the permission system. Sharpest surface in the feature. FR-6.14's
-  trust-signal mechanism is deliberately open pending this ruling; it MUST be non-interactive
-  (an unattended run can never wait on a prompt).
+769 checks across 16 hook test files · 6 CI validators · 13 falsify/anti-vacuity inversions ·
+ES5 parse floor (Node 14) · installer shell syntax + no-node/jq + no-hook-runtime greps.
+Autonomy regression: a full slice replayed through all six guards, zero false refusals.
 
 ## Blockers
 
@@ -81,5 +64,16 @@ Budget was 150 ms/call. 262 checks across 6 test files.
 
 ## Completed
 
-- F1 (Plugin Repackaging, PRD §6) SHIPPED — merged to main 6e0c55e, pushed, GitHub CI green
-  (both jobs, 25 steps: 6 validators + 6 falsify + 5 anti-vacuity + control + shell job).
+- F1 (Plugin Repackaging, PRD §6) SHIPPED — merged 6e0c55e, pushed, CI green
+- F2a (Hook Infrastructure, PRD §7) SHIPPED — merged cbe586d, pushed, CI green (4 jobs)
+  - Three Node zones: CI validators fail-closed · `install.sh` uses no Node/jq · hooks fail-open
+  - Trust registry `~/.claude/sdlc-trusted-projects` read via `os.userInfo().homedir`, out-of-repo
+  - Measured hook cost 21.4 ms/call against a 150 ms budget
+
+## Next
+
+- F3 — Verification & review upgrade (`PRESENT_BEHAVIOR_UNVERIFIED`, machine-readable `gaps:`,
+  `plan-critic` extracted to a versioned agent, >80% confidence filter, tracer-first planner,
+  write-surface lane matrix)
+- F4 — Adaptive tier routing + model routing
+- F5 — Self-improvement loop (requires PRD §4 revision)
