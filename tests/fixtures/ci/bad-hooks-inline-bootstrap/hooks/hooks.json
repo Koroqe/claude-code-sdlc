@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "id": "bad:inline", "type": "command", "command": "node -e \"console.log(1)\"" } ] }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "id": "bad:foreign", "type": "command", "command": "node ./some/other/script.js" } ] }
+    ]
+  }
+}
