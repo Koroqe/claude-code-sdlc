@@ -155,6 +155,58 @@ c.contains('the inline bypass is announced', r.json && r.json.systemMessage, 'by
 r = bash('git commit -m "docs(core): mention SDLC_ALLOW_GIT_GUARD=1 in the readme"', mainRepo);
 c.ok('a quoted sentinel does not grant the escape', denied(r), reason(r));
 
+// --- REGRESSION: a quoted env-var prefix must not hide the command --------
+// `GIT_SSH_COMMAND="ssh -i key" git commit` is an ordinary, non-adversarial
+// shape. Marking the whole token quoted because its VALUE was quoted meant the
+// assignment was never stripped, git was never found, and every check was
+// bypassed silently — worse than the documented escape, which at least leaves
+// a note.
+for (const prefix of [
+  'GIT_SSH_COMMAND="ssh -i /tmp/key"',
+  'GIT_AUTHOR_DATE="2020-01-01"',
+  "GIT_EDITOR='vim -n'",
+]) {
+  const res = bash(prefix + ' git commit -m "feat(core): x"', mainRepo);
+  c.ok('quoted env prefix still sees the commit: ' + prefix, denied(res), reason(res));
+}
+// And a genuinely quoted string that merely looks like an assignment must NOT
+// be treated as one.
+r = bash('git commit -m "chore(core): document GIT_SSH_COMMAND=x usage"', featRepo);
+c.ok('a quoted assignment-looking string is just text', !denied(r), reason(r));
+
+// --- REGRESSION: git accepts unambiguous long-option abbreviations --------
+for (const spelling of ['--no-verify', '--no-verif', '--no-veri', '--no-ver', '--no-v']) {
+  const res = bash('git commit ' + spelling + ' -m "feat(core): x"', featRepo);
+  c.ok('hook-skipping abbreviation is caught: ' + spelling, denied(res), reason(res));
+}
+
+// --- REGRESSION: bundled -am carries an inspectable message ---------------
+r = bash('git commit -am "feat(core): bundled flags"', featRepo);
+c.ok('a bundled -am message is inspected, not refused as uninspectable',
+  !denied(r), reason(r));
+r = bash('git commit -am "nonsense message"', featRepo);
+c.ok('and its shape is still checked', denied(r));
+
+// --- REGRESSION: an innocent bundle is not mistaken for --no-verify -------
+r = bash('git commit -uno -m "feat(core): x"', featRepo);
+c.ok('an innocent flag bundle is not read as --no-verify', !denied(r), reason(r));
+
+// --- REGRESSION: env/command wrappers with their own flags ---------------
+for (const spelling of ['env -i git push', 'env -u FOO git push', 'command -p git push']) {
+  const res = bash(spelling, featRepo);
+  c.ok('wrapper flags do not hide the command: ' + spelling, denied(res), reason(res));
+}
+
+// --- REGRESSION: git global options taking a separate argument -----------
+for (const spelling of ['git --git-dir .git push', 'git --work-tree . push']) {
+  const res = bash(spelling, featRepo);
+  c.ok('separate-arg global option does not hide the subcommand: ' + spelling, denied(res));
+}
+
+// --- REGRESSION: a line continuation must not hide a segment -------------
+r = bash('git \\\n push origin main', featRepo);
+c.ok('a line-continued push is still seen', denied(r), reason(r));
+
 // --- fail-open: for a guard, a malfunction must ALLOW ---------------------
 r = bash('git commit -m "feat(core): x"', '/nonexistent/path/for/sure');
 c.ok('an unresolvable cwd does not deny on the branch check', !denied(r), reason(r));

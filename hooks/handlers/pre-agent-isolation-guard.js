@@ -19,10 +19,20 @@
  * The indicator is harness-authored: a subagent's prompt cannot alter hook
  * stdin, and repository content cannot either — they can only make tool calls,
  * which the harness annotates. So the field is as trustworthy as `tool_name`
- * is. It is not, however, documented, which is why absence is treated loudly
- * rather than as "orchestrator, carry on": if a future release stops sending
- * it, silence would mean every subagent write sails through while the guard
- * still looks installed.
+ * is.
+ *
+ * ACCEPTED RESIDUAL, stated plainly because it is easy to miss: absence of the
+ * field is treated as "orchestrator, allow". That is correct today — the
+ * orchestrator's payload genuinely has no `agent_id`. But the field is
+ * undocumented, so if a future release stopped sending it, every subagent
+ * write would be allowed while this guard still looked installed. Warning on
+ * every absence is not the answer: absence is the common case, and a warning
+ * on every orchestrator write would be pure noise that trains people to ignore
+ * it. The detector is instead a test — tests/hooks/test-guard-isolation.js
+ * asserts the captured subagent fixture still carries the field, and the spike
+ * record says to re-capture it when Claude Code updates. A present-but-empty
+ * field is the one shape that does warn, since that is malformed rather than
+ * normal.
  *
  * It also only sees Edit and Write. A subagent appending to the scratchpad via
  * Bash bypasses it completely, by construction. This guard must never be
@@ -41,7 +51,11 @@ const PROTECTED = ['.claude/scratchpad.md', 'CHANGELOG.md'];
 function protectedRelative(root, target) {
   const absolute = path.resolve(root, String(target || ''));
   const relative = path.relative(root, absolute).split(path.sep).join('/');
-  return PROTECTED.indexOf(relative) !== -1 ? relative : '';
+  // macOS and Windows default to case-insensitive filesystems, so `changelog.md`
+  // reaches the same file as `CHANGELOG.md` and must match the same rule.
+  const lower = relative.toLowerCase();
+  const hit = PROTECTED.find((p) => p.toLowerCase() === lower);
+  return hit ? relative : '';
 }
 
 module.exports = function isolationGuard(input) {

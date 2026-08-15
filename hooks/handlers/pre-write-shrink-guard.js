@@ -21,6 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const sanitize = require('../lib/sanitize.js');
 
 const SHRINK_RATIO = 0.4;
 const FLOOR_LINES = 40;
@@ -28,11 +29,14 @@ const ESCAPE = 'SDLC_ALLOW_SHRINK';
 
 /** Curated artifacts: long-lived, hand-built, expensive to reconstruct. */
 function isCurated(relative) {
-  if (relative === '.claude/scratchpad.md') return true;
-  if (relative === 'docs/PRD.md') return true;
-  if (relative === 'CHANGELOG.md') return true;
-  if (/^docs\/use-cases\/[^/]+$/.test(relative)) return true;
-  if (/^docs\/qa\/[^/]+$/.test(relative)) return true;
+  // Lower-cased: macOS and Windows filesystems are case-insensitive by
+  // default, so `changelog.md` is the same file as `CHANGELOG.md`.
+  const r = relative.split(path.sep).join('/').toLowerCase();
+  if (r === '.claude/scratchpad.md') return true;
+  if (r === 'docs/prd.md') return true;
+  if (r === 'changelog.md') return true;
+  if (/^docs\/use-cases\/[^/]+$/.test(r)) return true;
+  if (/^docs\/qa\/[^/]+$/.test(r)) return true;
   return false;
 }
 
@@ -83,7 +87,7 @@ module.exports = function shrinkGuard(input) {
   return {
     deny: {
       reason:
-        'Refusing to shrink ' + relative + ' from ' + oldLines + ' to ' + newLines +
+        'Refusing to shrink ' + sanitize.quoteForDisplay(relative, 120) + ' from ' + oldLines + ' to ' + newLines +
         ' lines (below the ' + threshold + '-line floor). A whole-file Write ' +
         'replaces everything, so any section outside what you are currently ' +
         'looking at would be lost. Use Edit to change the part you mean, or ' +

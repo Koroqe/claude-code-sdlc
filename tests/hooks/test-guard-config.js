@@ -118,6 +118,27 @@ const bare = project('bare', { 'src/x.ts': 'export const x = 1;\n' });
 r = write(bare, 'src/x.ts', 'export const x = 2;\n');
 c.ok('a config-less project is untouched', !denied(r));
 
+// --- REGRESSION: array-form rule severities are the standard ESLint shape --
+// `"no-console": ["error", {...}]` is how any rule taking options is written,
+// so matching only the bare-string form missed most real downgrades.
+const arrayForm = project('array-form', {
+  '.eslintrc.json': JSON.stringify({ rules: { 'no-console': ['error', { allow: ['warn'] }] } }, null, 2),
+});
+r = write(arrayForm, '.eslintrc.json', JSON.stringify({ rules: { 'no-console': 'off' } }, null, 2));
+c.ok('downgrading an array-form rule is refused', denied(r), reason(r));
+c.contains('reason names the rule', reason(r), 'no-console');
+
+// --- REGRESSION: renaming an extends path is not a removal ---------------
+// Comparing raw string length reported a removal whenever a path merely got
+// shorter, refusing a benign refactor.
+const renameExtends = project('rename-extends', {
+  '.eslintrc.json': JSON.stringify({ extends: ['./config/shared/tsconfig.base.strict.json'] }, null, 2),
+});
+r = write(renameExtends, '.eslintrc.json', JSON.stringify({ extends: ['./base.json'] }, null, 2));
+c.ok('renaming an extends entry to a shorter path is allowed', !denied(r), reason(r));
+r = write(renameExtends, '.eslintrc.json', JSON.stringify({ extends: [] }, null, 2));
+c.ok('but actually removing the entry is refused', denied(r));
+
 // --- escape and kill switch ----------------------------------------------
 r = write(root, 'tsconfig.json', JSON.stringify({ compilerOptions: { strict: false } }, null, 2), { SDLC_ALLOW_CONFIG_EDIT: '1' });
 c.ok('the escape allows the weakening', !denied(r));

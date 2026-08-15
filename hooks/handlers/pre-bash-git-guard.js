@@ -99,6 +99,9 @@ function commitMessages(args) {
       out.push(a.slice('--message='.length));
     } else if (a.startsWith('-m') && a.length > 2) {
       out.push(a.slice(2));
+    } else if (/^-[a-zA-Z]*m$/.test(a) && a.length > 2) {
+      // A bundled flag ending in m, e.g. `git commit -am "msg"`.
+      if (args[i + 1] !== undefined) { out.push(args[i + 1]); i += 1; }
     }
   }
   return out;
@@ -130,8 +133,9 @@ module.exports = function gitGuard(input) {
     // Skip git's own global options to find the real subcommand.
     const args = resolved.args.slice();
     let i = 0;
+    const TWO_TOKEN_OPTS = ['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'];
     while (i < args.length && args[i].startsWith('-')) {
-      if (args[i] === '-C' || args[i] === '-c') i += 2; else i += 1;
+      if (TWO_TOKEN_OPTS.indexOf(args[i]) !== -1) i += 2; else i += 1;
     }
     const subcommand = args[i];
     const rest = args.slice(i + 1);
@@ -157,8 +161,11 @@ module.exports = function gitGuard(input) {
         if (r) return r;
       }
 
-      if (rest.indexOf('--no-verify') !== -1 ||
-          rest.some((a) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(a) && a !== '-m')) {
+      // git accepts any unambiguous abbreviation of a long option, so an exact
+      // string match is not enough: `--no-verif` genuinely skips the hooks.
+      // `--no-v...` is unambiguous for `git commit`.
+      const skipsHooks = rest.some((a) => /^--no-v/.test(a)) || rest.indexOf('-n') !== -1;
+      if (skipsHooks) {
         const r = refuse(
           'Refusing `git commit --no-verify`: it skips the checks that keep an ' +
           'unattended run honest. Fix what the hook reports instead. ' +

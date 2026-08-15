@@ -91,7 +91,10 @@ function findWeakening(before, after) {
   }
 
   // A lint rule going quiet.
-  const ruleRe = /"([@a-zA-Z0-9/_-]+)"\s*:\s*("error"|"warn"|2|1)/g;
+  // The value may be a bare severity or an array whose first element is one —
+  // `"no-console": ["error", {...}]` is the standard form for any rule taking
+  // options, and matching only the bare form missed most real downgrades.
+  const ruleRe = /"([@a-zA-Z0-9/_-]+)"\s*:\s*(?:\[\s*)?("error"|"warn"|2|1)/g;
   let m;
   while ((m = ruleRe.exec(before)) !== null) {
     const rule = m[1];
@@ -108,8 +111,13 @@ function findWeakening(before, after) {
   const extendsRe = /"extends"\s*:\s*(\[[^\]]*\]|"[^"]*")/;
   const beforeExtends = extendsRe.exec(before);
   const afterExtends = extendsRe.exec(after);
-  if (beforeExtends && afterExtends && beforeExtends[1].length > afterExtends[1].length) {
-    return 'an `extends` entry was removed';
+  if (beforeExtends && afterExtends) {
+    // Count entries, not characters. Comparing raw length reported a removal
+    // whenever a path was merely renamed to something shorter.
+    const count = (v) => (v.trim().startsWith('[') ? (v.match(/"/g) || []).length / 2 : 1);
+    if (count(beforeExtends[1]) > count(afterExtends[1])) {
+      return 'an `extends` entry was removed';
+    }
   }
   if (beforeExtends && !afterExtends) return 'the `extends` block was removed';
 

@@ -46,6 +46,10 @@ function splitSegments(command) {
     }
 
     if (ch === '\\' && i + 1 < text.length) {
+      // A backslash before a newline is a line continuation: both characters
+      // vanish. Keeping them would hide `git \<newline> push` from the
+      // subcommand scan, and would corrupt a wrapped commit message.
+      if (text[i + 1] === '\n') { i += 1; continue; }
       current += ch + text[i + 1];
       i += 1;
       continue;
@@ -76,11 +80,19 @@ function tokenize(segment) {
   let quoted = false;
   let started = false;
   let quote = '';
+  // Whether a quote appeared BEFORE the first `=`. `VAR="a b"` is a real
+  // assignment; `"VAR=a b"` is a quoted string that merely looks like one.
+  // Keying off the token's overall quoted flag conflates the two, and that
+  // conflation silently hid `GIT_SSH_COMMAND="..." git commit` from the guard.
+  let keyQuoted = false;
+  let sawEquals = false;
 
   function push() {
-    if (started) tokens.push({ text: current, quoted });
+    if (started) tokens.push({ text: current, quoted, keyQuoted });
     current = '';
     quoted = false;
+    keyQuoted = false;
+    sawEquals = false;
     started = false;
   }
 
@@ -102,6 +114,14 @@ function tokenize(segment) {
     if (ch === '"' || ch === "'") {
       quote = ch;
       quoted = true;
+      if (!sawEquals) keyQuoted = true;
+      started = true;
+      continue;
+    }
+
+    if (ch === '=' && !sawEquals) {
+      sawEquals = true;
+      current += ch;
       started = true;
       continue;
     }
@@ -112,6 +132,7 @@ function tokenize(segment) {
     }
 
     if (ch === '\\' && i + 1 < text.length) {
+      if (text[i + 1] === '\n') { i += 1; continue; }   // line continuation
       current += text[i + 1];
       i += 1;
       started = true;
@@ -142,7 +163,7 @@ function resolveCommand(segment) {
 
   while (i < tokens.length) {
     const t = tokens[i];
-    if (!t.quoted && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t.text)) {
+    if (!t.keyQuoted && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t.text)) {
       assignments.push(t.text);
       i += 1;
       continue;
@@ -151,6 +172,13 @@ function resolveCommand(segment) {
     const base = bare.split('/').pop();
     if (!t.quoted && (base === 'env' || base === 'command')) {
       i += 1;
+      // Skip that wrapper's own flags (`env -i`, `command -p`), and the
+      // argument of `env -u NAME`. Without this the flag becomes the resolved
+      // command name and the real binary is never seen.
+      while (i < tokens.length && !tokens[i].quoted && tokens[i].text.charAt(0) === '-') {
+        if (tokens[i].text === '-u') i += 1;
+        i += 1;
+      }
       continue;
     }
     break;
