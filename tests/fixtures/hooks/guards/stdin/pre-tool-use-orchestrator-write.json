@@ -1,0 +1,17 @@
+{
+  "session_id": "spike-session",
+  "transcript_path": "/tmp/redacted/transcript.jsonl",
+  "cwd": "/tmp/proj",
+  "prompt_id": "5ff2a91b-680c-48b1-9ccf-b77f9205abf3",
+  "permission_mode": "bypassPermissions",
+  "effort": {
+    "level": "xhigh"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/tmp/proj/.claude/scratchpad.md",
+    "content": "x"
+  },
+  "tool_use_id": "toolu_01GcBCPD4beC1NdMbhRWfi5X"
+}
