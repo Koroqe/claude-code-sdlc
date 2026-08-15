@@ -120,9 +120,20 @@ const ttDir = path.join(REPO_ROOT, 'tests', 'fixtures', 'hooks', 'tostring');
 fs.mkdirSync(ttDir, { recursive: true });
 fs.copyFileSync(path.join(FIXTURE_HANDLERS, 'throwing-tostring.js'),
   path.join(ttDir, 'session-start-spine.js'));
+const ttStart = Date.now();
 r = runHook('session:start:spine', SESSION_INPUT, { SDLC_HOOK_HANDLERS_DIR: ttDir });
+const ttElapsed = Date.now() - ttStart;
 c.equal('a throwing toString on the async path still exits 0', r.code, 0);
 c.ok('and it does not crash with a stack trace', r.stderr.indexOf('boom-from-tostring') === -1, r.stderr.slice(0, 200));
+// Exit-0-and-no-stack-trace is NOT enough on its own: a self-recursing guard
+// satisfied both by accident while swallowing the payload and sometimes
+// hanging for the full timeout. Assert the observable outcome instead.
+c.ok('it emits a well-formed envelope', r.json !== null && r.json.continue === true,
+  JSON.stringify(r.stdout).slice(0, 200));
+c.ok('it does not report a stack overflow', 
+  String((r.json && r.json.systemMessage) || '').indexOf('call stack') === -1,
+  (r.json && r.json.systemMessage) || '');
+c.ok('it returns promptly rather than running to the timeout', ttElapsed < 3000, ttElapsed + 'ms');
 
 // --- malformed and absent stdin -------------------------------------------
 r = runHook('session:start:spine', null, { SDLC_HOOK_HANDLERS_DIR: FIXTURE_HANDLERS, SDLC_TEST_MODE: 'ok' });
