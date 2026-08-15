@@ -48,14 +48,47 @@ Check that every file listed in the plan's `Files:` fields exists on disk.
 
 ## Level 2 — No Stubs or Placeholders
 
-Scan all new/modified production code files for incomplete implementation markers.
+Scan all new/modified production code files for incomplete implementation markers. Every marker is
+either BLOCKER or WARNING tier — there is no longer a single flat "any marker = FAIL" rule. Getting
+a marker's tier wrong is a real defect: it either lets an absent implementation through as advisory,
+or blocks a merge over deferred cleanup.
 
-- Search for: `TODO`, `FIXME`, `XXX`, `HACK`, `placeholder`, `stub`, `not implemented`, `throw new Error('Not implemented')`, `pass  # TODO`, `raise NotImplementedError`
+- Search for: `TBD`, `TODO`, `FIXME`, `XXX`, `HACK`, `placeholder`/`PLACEHOLDER`, `stub`, `not implemented`, `throw new Error('Not implemented')`, `pass  # TODO`, `raise NotImplementedError`
 - **Exclude** from scan: test files (`*.test.*`, `*.spec.*`, `__tests__/`, `tests/`), markdown files, config files, comments that are genuinely informational (e.g., `// TODO: consider caching in future` in a shipped feature is a finding; `// TODO` in a test helper is not)
-- Report each finding with file path and line number
+- Report each finding with file path and line number, tagged BLOCKER or WARNING per the tiering below
 
-**PASS** when: no stub/placeholder markers found in production code
-**FAIL** when: any markers found — list each with `file:line` and the matching text
+### Severity tiers
+
+- **BLOCKER, unless a same-line issue reference downgrades it to WARNING:** `TBD`, `FIXME`, `XXX`
+- **WARNING, unconditional — never downgraded, never escalated:** `TODO`, `HACK`, `placeholder`/`PLACEHOLDER`
+- **BLOCKER, unconditional — no issue reference downgrades these:** `stub`, `not implemented`, `throw new Error('Not implemented')`, `raise NotImplementedError`, `pass  # TODO`
+
+### Issue reference (the `TBD`/`FIXME`/`XXX` downgrade condition)
+
+An **issue reference** is a token on the **same line** as the marker, matching one of:
+
+- a bare `#<digits>` (e.g. `#123`);
+- a project-key token `<UPPERCASE>-<digits>` (e.g. `JIRA-456`, `GH-789`);
+- an issue/PR URL (`.../issues/<digits>` or `.../pull/<digits>`).
+
+The reference must be on the marker's own line. A reference elsewhere in the file — even a few
+lines away, even referring to the same piece of work — does not count. `TBD` on line 10 with `#42`
+sitting unrelated on line 50 is still BLOCKER; only a token on line 10 itself can downgrade it. This
+is the most likely misreading of this rule, so check the line number, not just the file.
+
+### The `pass  # TODO` exception (FR-4.4)
+
+The bare token `TODO` is WARNING tier. But the specific compound pattern `pass  # TODO` — a Python
+function body that is only `pass` plus a trailing `# TODO` comment — stays BLOCKER even though it
+contains that WARNING-tier token, because it denotes an empty implementation relying on the comment
+as its only content, not a deferred-cleanup note on otherwise-complete code. **Check for this
+compound pattern before applying the bare-`TODO` WARNING rule** — a bare-token scan that fires first
+would misclassify it as WARNING and let an unimplemented function pass.
+
+**PASS** when: no BLOCKER-tier marker is found. A file containing only WARNING-tier markers still
+**PASSES** — list each WARNING as a non-blocking finding and mirror it into the report's `gaps`
+array (see below) at `level: 2`. A WARNING never by itself produces the `FAILED` verdict.
+**FAIL** when: any BLOCKER-tier marker is found — list each with `file:line` and the matching text
 
 ## Level 3 — Wiring
 
