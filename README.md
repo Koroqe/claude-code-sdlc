@@ -207,6 +207,62 @@ Creates:
 
 ---
 
+## Hooks
+
+The plugin registers three hooks. None of them can block: every one exits 0
+whatever happens, so a malfunctioning hook can never halt an unattended run.
+
+| Hook | Fires | Does |
+|------|-------|------|
+| `session:start:spine` | Session start | Injects the current feature, branch, wave and slice from the scratchpad, so a resumed or compacted session re-enters the loop at the right point instead of asking. Reports memory-layer version drift. |
+| `post:edit:accumulate` | After each Edit/Write | Records the edited path. |
+| `stop:typecheck-format` | End of a response | Runs the project's declared format and typecheck commands **once** over everything edited, instead of once per edit. |
+
+Cost is about 21 ms per tool call, of which ~1.5 ms is the hook itself — the
+rest is Node process startup. See
+[docs/implementation-records/hook-infrastructure_latency.md](docs/implementation-records/hook-infrastructure_latency.md).
+
+### Running project commands is opt-in, per project
+
+`stop:typecheck-format` executes a command declared in your project's
+`CLAUDE.md`. That execution is spawned by the hook engine, so the permission
+system never sees it — which means cloning a repository and letting one
+response finish would otherwise be enough to run a command of its choosing.
+
+So it only runs in projects you have explicitly registered:
+
+```bash
+bash install.sh --trust-project          # trust the current directory
+bash install.sh --trust-project /path    # or a specific one
+```
+
+The registry lives at `~/.claude/sdlc-trusted-projects`, deliberately outside
+any repository — a marker file inside a project would be worthless, since a
+hostile repo would simply commit one. In an unregistered project the hook
+reports what it *would* have run and executes nothing. It never prompts, in
+either direction.
+
+### Controls
+
+```bash
+SDLC_HOOKS_ENABLED=0                       # disable every hook
+SDLC_DISABLED_HOOKS=session:start:spine    # disable specific ids, comma-separated
+SDLC_HOOK_PROFILE=minimal                  # minimal | standard | strict
+SDLC_SESSION_CONTEXT_MAX_CHARS=4000        # cap on injected session context
+SDLC_EXEC_PROJECT_COMMANDS=0               # never run project-declared commands
+```
+
+`minimal` keeps only the session spine — it observes state and never executes a
+project-declared command. An unrecognised profile falls back to `standard`
+rather than failing, so a typo cannot silently change what is enforced.
+
+**Never copy `hooks/hooks.json` into `settings.json`.** Plugin hooks load
+automatically; duplicating them there makes every hook fire twice.
+
+To check whether hooks are registered, run `claude plugin validate .` — and in
+a project with a scratchpad, a session start that injects no state is the
+symptom of a plugin that isn't installed.
+
 ## Customization
 
 Agents and skills are packaged as a Claude Code plugin (`agents/*.md`, `skills/*/SKILL.md` in this repo) and come **only** from there. `install.sh` installs the memory layer and nothing else: `~/.claude/claude.md` and `~/.claude/rules/*.md`.
