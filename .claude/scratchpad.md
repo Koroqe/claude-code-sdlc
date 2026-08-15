@@ -1,6 +1,6 @@
 ## Feature: Verification & Review Upgrade (v4.0 roadmap F3)
 ## Branch: feat/verification-review-upgrade
-## Status: implementing wave 1 slice 1/11
+## Status: implementing wave 3 slice 7/11
 
 ## Docs
 
@@ -46,8 +46,8 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
 
 ## Plan (11 slices, 5 waves) — 11 is a declared exception to 5–9, see plan rev. 2 §3
 
-### Wave 1
-- [ ] Slice 1 — **Tracer: yes** — four-verdict verifier + machine-readable report, consumed by Gate 6
+### Wave 1 [complete]
+- [x] Slice 1 — **Tracer: yes** — four-verdict verifier + machine-readable report — 91c0e9a
   - Files: `agents/verifier.md`, `skills/merge-ready/SKILL.md`,
     `tests/fixtures/agents/verifier/present-unverified/` [new]
   - Changes: FR-1.1/1.2 (incl. **L4-`SKIPPED`→UNCERTAIN** pin), FR-1.3–1.5, FR-2.1–2.7,
@@ -59,22 +59,22 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
   - Done when: AC-14, AC-15, AC-1 (mechanical), AC-21 (textual); tracer run passed
   - Pre-review: **security** (first-ever verifier write grant)
 
-### Wave 2 (5 slices, pairwise disjoint)
-- [ ] Slice 2 — Level 2 anti-pattern severity split + verifier fixture corpus
+### Wave 2 [complete]
+- [x] Slice 2 — Level 2 anti-pattern severity split + verifier fixture corpus — c7e22c8
   - Files: `agents/verifier.md`, `tests/fixtures/agents/verifier/{exercised,failed-missing-file,no-plan,dynamic-import,l4-skipped,failed-plus-uncertain,markers,composite}/` [new]
   - Changes: FR-4.1 marker→tier table, FR-4.2 same-line issue ref, FR-4.3 new PASS/FAIL,
     FR-4.4 `pass  # TODO` checked **before** bare-`TODO`, FR-4.5
   - Verify: greps for `TBD`, `pass  # TODO`, BLOCKER/WARNING, "issue reference", "same line";
     all 8 fixture dirs exist; `validate-agents.js`
   - Done when: TC-4.19 in full; AC-11, AC-12 fixture inputs committed · Pre-review: none
-- [ ] Slice 3 — Gate 6 malformed-report handling, `--gaps` loop, persisted attempt counter
+- [x] Slice 3 — Gate 6 malformed-report handling, `--gaps` loop, attempt counter — 27a89fc
   - Files: `skills/merge-ready/SKILL.md`
   - Changes: FR-3.3 exact Status string, NFR-3 no-`verdict:`→UNCERTAIN, FR-10.1–10.3
     (planner returns / orchestrator appends, AC-2's three conditions verbatim), FR-10.5 counter
   - Verify: greps for the literal malformed string, `Gate 6 attempts:`, `verifies_with`,
     `append-only`, `byte-identical`, `UNCERTAIN`
   - Done when: TC-2.1/2.3/2.5; owns AC-2, AC-3, AC-20 · Pre-review: **security**
-- [ ] Slice 4 — `agents/plan-critic.md` extraction + pre-migration capture + fixtures
+- [x] Slice 4 — `agents/plan-critic.md` extraction + pre-migration capture — 8f72dd0
   - Files: `agents/plan-critic.md` [new], `tests/fixtures/plan-critic/{pre-migration-prompt,defective-plan}.md` [new], `tests/fixtures/agents/plan-critic/{golden-plan,no-tracer-marker,wave1-non-tracer,union-mismatch}.md` [new]
   - Changes: **capture `src/claude.md` 102–166 verbatim FIRST**; agent with `tools:["Read","Glob","Grep"]`,
     `model: opus`; all checks carried forward (FR-5.2), CRITICAL/MAJOR/MINOR→BLOCKER/WARNING/INFO
@@ -83,7 +83,7 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
   - Verify: `diff <(sed -n '102,166p' src/claude.md) <capture>`; no `"Write"`/`"Edit"`;
     both AC-7 arms (validate-agents 0 with 14; non-zero on a malformed scratch copy)
   - Done when: AC-7, AC-8; owns AC-4, AC-18 · Pre-review: none
-- [ ] Slice 5 — reviewer confidence filter, consolidation, diff-scoping, silent-failure hunting
+- [x] Slice 5 — reviewer confidence filter + silent-failure hunting — bc992cd
   - Files: `agents/code-reviewer.md`, `agents/security-auditor.md`,
     `tests/fixtures/agents/code-reviewer/{low-confidence-naming,ambiguous-sql-critical,five-null-checks,adjacent-medium,adjacent-critical,boundary-80,silent-failures}/` [new],
     `tests/fixtures/agents/security-auditor/{low-confidence-hardening,plausible-auth-bypass}/` [new]
@@ -93,7 +93,7 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
   - Verify: greps for CRITICAL/LOW/`Silent Failures`/`80%`/consolidat/financial; 9 fixture dirs
   - Done when: TC-7.7; owns AC-9, AC-10 · Pre-review: **security** (edits the security gate's own
     suppression rules)
-- [ ] Slice 6 — orchestration gates: tracer gate, visible fallback notice, dispatch disjointness
+- [x] Slice 6 — orchestration gates: tracer gate + dispatch disjointness — a685621
   - Files: `skills/develop-feature/SKILL.md`, `skills/implement-slice/SKILL.md`
   - Changes: FR-8.3/8.4/8.6 (exact notice `tracer gate inactive — no **Tracer:** yes marker found;
     treating as pre-F3 plan.`), FR-9.2–9.6 (re-derive fresh, case-insensitive incl. prefix
@@ -103,7 +103,7 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
     `**Tracer:** yes` in implement-slice; `validate-skills.js`
   - Done when: TC-9.5/9.7/10.6; owns AC-5, AC-6, AC-16, AC-19 · Pre-review: architect
 
-### Wave 3 (3 slices, disjoint)
+### Wave 3 [in progress]
 - [ ] Slice 7 — planner: tracer-first, `Files (union)` column, returns-replan-slices contract
   - Files: `agents/planner.md`, `tests/fixtures/agents/planner/gaps-input/{gaps,gaps-unautomatable,flagged-conflict}.json` [new]
   - Changes: FR-8.1/8.2/8.5, FR-9.1 (`Files (union)` = **literal union**), FR-10.2 return contract,
