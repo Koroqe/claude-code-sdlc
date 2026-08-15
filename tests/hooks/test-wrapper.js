@@ -38,8 +38,10 @@ for (const h of allHandlers) {
   c.contains('handler ' + h.id + ' routes through run-hook.js', h.command, 'hooks/lib/run-hook.js');
   c.ok('handler ' + h.id + ' has no inline bootstrap', h.command.indexOf('node -e') === -1, h.command);
 }
-c.ok('PostToolUse matches Edit|Write',
-  config.hooks.PostToolUse[0].matcher === 'Edit|Write', config.hooks.PostToolUse[0].matcher);
+const postMatchers = config.hooks.PostToolUse.map((e) => e.matcher);
+c.ok('PostToolUse matches Edit|Write', postMatchers.indexOf('Edit|Write') !== -1, postMatchers.join(','));
+c.ok('PostToolUse also matches Read (the read-guard recorder)',
+  postMatchers.indexOf('Read') !== -1, postMatchers.join(','));
 
 // --- no blocking anywhere under hooks/ ------------------------------------
 function walk(dir, out) {
