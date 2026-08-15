@@ -1,0 +1,14 @@
+diff --git a/internal-admin.js b/internal-admin.js
+index 0000001..0000002 100644
+--- a/internal-admin.js
++++ b/internal-admin.js
+@@ -3,4 +3,8 @@
+ // Internal admin listener. Bound to 127.0.0.1 only in ./bootstrap.js (not
+ // modified by this diff) -- unreachable from outside this host.
+ const router = require('./internal-router');
+
++router.get('/internal/health', (req, res) => {
++  return res.json({ status: 'ok' });
++});
++
+ module.exports = { router };

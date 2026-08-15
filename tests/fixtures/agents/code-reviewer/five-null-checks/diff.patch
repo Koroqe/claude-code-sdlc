@@ -1,0 +1,80 @@
+diff --git a/src/orderService.js b/src/orderService.js
+index 0000001..0000002 100644
+--- a/src/orderService.js
++++ b/src/orderService.js
+@@ -4,4 +4,10 @@ function getOrder(id) {
+   return db.orders.find((o) => o.id === id) || null;
+ }
+
+-module.exports = { getOrder };
++function updateOrder(id, options) {
++  const order = getOrder(id);
++  order.lastEditedBy = options.userId;
++  return db.orders.save(order);
++}
++
++module.exports = { getOrder, updateOrder };
+diff --git a/src/invoiceService.js b/src/invoiceService.js
+index 0000001..0000002 100644
+--- a/src/invoiceService.js
++++ b/src/invoiceService.js
+@@ -4,4 +4,10 @@ function getInvoice(id) {
+   return db.invoices.find((i) => i.id === id) || null;
+ }
+
+-module.exports = { getInvoice };
++function updateInvoice(id, options) {
++  const invoice = getInvoice(id);
++  invoice.lastEditedBy = options.userId;
++  return db.invoices.save(invoice);
++}
++
++module.exports = { getInvoice, updateInvoice };
+diff --git a/src/shipmentService.js b/src/shipmentService.js
+index 0000001..0000002 100644
+--- a/src/shipmentService.js
++++ b/src/shipmentService.js
+@@ -4,4 +4,10 @@ function getShipment(id) {
+   return db.shipments.find((s) => s.id === id) || null;
+ }
+
+-module.exports = { getShipment };
++function updateShipment(id, options) {
++  const shipment = getShipment(id);
++  shipment.lastEditedBy = options.userId;
++  return db.shipments.save(shipment);
++}
++
++module.exports = { getShipment, updateShipment };
+diff --git a/src/refundService.js b/src/refundService.js
+index 0000001..0000002 100644
+--- a/src/refundService.js
++++ b/src/refundService.js
+@@ -4,4 +4,10 @@ function getRefund(id) {
+   return db.refunds.find((r) => r.id === id) || null;
+ }
+
+-module.exports = { getRefund };
++function updateRefund(id, options) {
++  const refund = getRefund(id);
++  refund.lastEditedBy = options.userId;
++  return db.refunds.save(refund);
++}
++
++module.exports = { getRefund, updateRefund };
+diff --git a/src/notificationService.js b/src/notificationService.js
+index 0000001..0000002 100644
+--- a/src/notificationService.js
++++ b/src/notificationService.js
+@@ -4,4 +4,10 @@ function getNotification(id) {
+   return db.notifications.find((n) => n.id === id) || null;
+ }
+
+-module.exports = { getNotification };
++function updateNotification(id, options) {
++  const notification = getNotification(id);
++  notification.lastEditedBy = options.userId;
++  return db.notifications.save(notification);
++}
++
++module.exports = { getNotification, updateNotification };

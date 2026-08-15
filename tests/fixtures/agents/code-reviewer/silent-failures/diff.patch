@@ -1,0 +1,124 @@
+diff --git a/case-a-critical-empty-catch-mutation.js b/case-a-critical-empty-catch-mutation.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-a-critical-empty-catch-mutation.js
+@@ -0,0 +1,14 @@
++'use strict';
++
++const db = require('./db');
++
++// Shape (a): empty catch block. Data-mutation path (widget update) -> CRITICAL.
++async function updateWidget(req, res) {
++  const { id } = req.params;
++  const payload = req.body;
++  try {
++    await db.widgets.update(id, payload);
++  } catch {}
++  return res.status(204).end();
++}
++
++module.exports = { updateWidget };
+diff --git a/case-a-high-empty-catch-readonly.js b/case-a-high-empty-catch-readonly.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-a-high-empty-catch-readonly.js
+@@ -0,0 +1,13 @@
++'use strict';
++
++const analytics = require('./analytics');
++
++// Shape (a): empty catch block. Read-only, non-mutating path (best-effort
++// analytics ping, no data-integrity consequence) -> HIGH, not CRITICAL.
++async function pingPageView(page) {
++  try {
++    await analytics.track('page_view', { page });
++  } catch (e) {}
++  return true;
++}
++
++module.exports = { pingPageView };
+diff --git a/case-b-catch-coerced-default.js b/case-b-catch-coerced-default.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-b-catch-coerced-default.js
+@@ -0,0 +1,11 @@
++'use strict';
++
++const recommendations = require('./recommendations-client');
++
++// Shape (b): .catch() coerces the rejection into a benign default, with no
++// logging, rethrow, or user-facing signal. Read-only suggestion fetch, no
++// data mutation and no financial impact -> HIGH.
++function getRelatedProducts(productId) {
++  return recommendations.fetchFor(productId).catch(() => []);
++}
++
++module.exports = { getRelatedProducts };
+diff --git a/case-c-logger-only-catch.js b/case-c-logger-only-catch.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-c-logger-only-catch.js
+@@ -0,0 +1,15 @@
++'use strict';
++
++const db = require('./db');
++const logger = require('./logger');
++
++// Shape (c): caught error whose only action is a logger call, with no
++// rethrow, no propagation, no caller-visible signal. Data-mutation path
++// (order status write) -> CRITICAL.
++async function markOrderShipped(orderId) {
++  try {
++    await db.orders.update(orderId, { status: 'shipped' });
++  } catch (e) {
++    logger.error(e);
++  }
++}
++
++module.exports = { markOrderShipped };
+diff --git a/case-d-no-catch-at-all.js b/case-d-no-catch-at-all.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-d-no-catch-at-all.js
+@@ -0,0 +1,10 @@
++'use strict';
++
++const settingsClient = require('./settings-client');
++
++// Shape (d): a promise chain with no .catch()/try-catch at all around an
++// operation that can reject. Read-only settings fetch, no mutation -> HIGH.
++async function getCachedSettings(userId) {
++  const settings = await settingsClient.fetch(userId);
++  return settings;
++}
++
++module.exports = { getCachedSettings };
+diff --git a/case-financial-critical.js b/case-financial-critical.js
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/case-financial-critical.js
+@@ -0,0 +1,17 @@
++'use strict';
++
++const ledger = require('./ledger-client');
++
++// Shape (a): empty catch block. No data mutation anywhere in this function --
++// it only reads and computes -- but the result feeds a downstream charge
++// decision, so the "financial" half of FR-7.2's disjunction applies on its
++// own -> CRITICAL, independent of the mutation half.
++async function computeOutstandingBalance(accountId) {
++  let balance = 0;
++  try {
++    const entries = await ledger.fetchEntries(accountId);
++    balance = entries.reduce((sum, e) => sum + e.amount, 0);
++  } catch {}
++  return balance;
++}
++
++module.exports = { computeOutstandingBalance };

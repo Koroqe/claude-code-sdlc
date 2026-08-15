@@ -1,0 +1,14 @@
+diff --git a/admin.js b/admin.js
+index 0000001..0000002 100644
+--- a/admin.js
++++ b/admin.js
+@@ -10,6 +10,9 @@ function deleteAllUsers(req, res) {
+
+ function getOrderSummary(req, res) {
+   const orderId = req.params.orderId;
++  if (!orderId) {
++    return res.status(400).json({ error: 'orderId is required' });
++  }
+   const order = db.orders.find((o) => o.id === orderId);
+   return res.json({ order });
+ }
