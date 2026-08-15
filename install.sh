@@ -943,6 +943,18 @@ EOF
   touch docs/use-cases/.gitkeep
   log_ok "docs/use-cases/"
 
+  # Ignore coverage for the hooks' transient state directory. Idempotent: adds
+  # the line only when absent, and never overwrites an existing .gitignore.
+  if [ ! -f ".gitignore" ]; then
+    cp -- "$SCRIPT_DIR/templates/.gitignore" ".gitignore"
+    log_ok ".gitignore"
+  elif ! grep -q '\.claude/tmp' ".gitignore"; then
+    printf '\n# Transient state written by the claude-code-sdlc hooks.\n.claude/tmp/\n' >> ".gitignore"
+    log_ok ".gitignore (appended .claude/tmp/)"
+  else
+    log_ok ".gitignore (already ignores .claude/tmp/)"
+  fi
+
   echo ""
   log_ok "Project template scaffolded"
   echo ""
