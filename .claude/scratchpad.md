@@ -1,6 +1,6 @@
 ## Feature: Verification & Review Upgrade (v4.0 roadmap F3)
 ## Branch: feat/verification-review-upgrade
-## Status: implementing wave 3 slice 7/11
+## Status: quality-gates
 
 ## Docs
 
@@ -103,8 +103,8 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
     `**Tracer:** yes` in implement-slice; `validate-skills.js`
   - Done when: TC-9.5/9.7/10.6; owns AC-5, AC-6, AC-16, AC-19 · Pre-review: architect
 
-### Wave 3 [in progress]
-- [ ] Slice 7 — planner: tracer-first, `Files (union)` column, returns-replan-slices contract
+### Wave 3 [complete]
+- [x] Slice 7 — planner: tracer-first, `Files (union)`, replan contract — 7a2140c
   - Files: `agents/planner.md`, `tests/fixtures/agents/planner/gaps-input/{gaps,gaps-unautomatable,flagged-conflict}.json` [new]
   - Changes: FR-8.1/8.2/8.5, FR-9.1 (`Files (union)` = **literal union**), FR-10.2 return contract,
     FR-9.6 flagged-conflict rewave contract. `tools:` unchanged.
@@ -112,7 +112,7 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
     `verifies_with`; 3 fixtures
   - Done when: TC-9.1, AC-22; co-owns AC-2 · Pre-review: **security** (consumer half of `--gaps`,
     reviewed with Slice 3's diff) + architect
-- [ ] Slice 8 — wire `plan-critic` into both triggers: `src/claude.md` stub + bootstrap Step 5
+- [x] Slice 8 — wire `plan-critic` into both triggers — 15d318c
   - Files: `src/claude.md`, `skills/bootstrap-feature/SKILL.md`
   - Changes: delete inlined 65-line blockquote (captured in Slice 4); FR-5.5 loop (max 3 →
     Rule 4), FR-5.6 fail-visible fallback when `plan-critic` unresolvable, FR-5.8 Agency Roles row
@@ -120,7 +120,7 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
   - Verify: inlined prompt absent; Agency Roles row present; `awk` proves invocation precedes
     Step 6 Git Setup; `validate-skills.js`
   - Done when: AC-13, TC-6.16, TC-6.13; owns AC-23 · Pre-review: **security**
-- [ ] Slice 9 — agent-count consistency sweep (FR-5.11)
+- [x] Slice 9 — agent-count consistency sweep — 2029ddd
   - Files: `README.md`, `install.sh`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`
   - Changes: 13→14 in all five live locations + `plan-critic` row with model tier.
     **README line 280 and `manifests/owned-files.txt` stay at 13.**
@@ -129,8 +129,8 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
     `bash -n install.sh`; `validate-version-consistency.js`
   - Done when: AC-17 in full · Pre-review: none
 
-### Wave 4
-- [ ] Slice 10 — CI validator for the 24 STATIC TCs + 5 seeded-bad fixtures (FR-11.1–11.4)
+### Wave 4 [complete]
+- [x] Slice 10 — CI validator (22/24 STATIC asserted) + 5 seeded-bad fixtures — 8ffc39c
   - Files: `scripts/ci/validate-verification-upgrade.js` [new],
     `tests/fixtures/ci/verification-upgrade/bad-{plan-critic-write,verifier-tools,verifier-verdicts,merge-ready-note,agent-count}/` [new]
   - Changes: zero-dep Node on `scripts/ci/lib/validate-core.js`; asserts all 24 STATIC TCs; agent
@@ -139,8 +139,8 @@ wave has a literal disjoint `Files (union)`; Waves 4–5 are single-slice (exemp
   - Verify: exits 0 real tree; non-zero on each of 5 fixtures; non-zero on `$(mktemp -d)`
   - Done when: AC-24 · Pre-review: none
 
-### Wave 5
-- [ ] Slice 11 — CI workflow wiring (FR-11.5)
+### Wave 5 [complete]
+- [x] Slice 11 — CI workflow wiring: 1 pass + 5 falsify + 1 anti-vacuity — 73b03ef
   - Files: `.github/workflows/ci.yml`
   - Changes: 1 pass step + **5** falsify steps + 1 anti-vacuity step, matching existing conventions
   - Verify: grep count of `verification-upgrade/bad-` == 5; all 7 validators + `run-tests.js` pass
@@ -165,6 +165,18 @@ AC-5,6,16,19→S6 · AC-22→S7 · AC-13,23→S8 · AC-17→S9 · AC-24→S10+S1
 - Slice 4's path generalization is an intentional, non-weakening FR-5.2 deviation — note beside AC-4
 - FR-6.1's >80% threshold is permanently non-mechanical (PRD concedes this)
 - `plan-critic` model `opus` is a planner judgment call — revisit at F4
+
+## Verified at end of implementation
+
+28 validator steps simulated from `ci.yml` — all pass. 16 hook test files pass. 14 agents.
+Tracer run executed for real: `verifier` produced `PRESENT_BEHAVIOR_UNVERIFIED` with a four-field
+`gaps` entry and `generated_at` byte-equal to the supplied timestamp; Gate 6 read it as
+`NOT MERGE READY`. The run also exposed a defect in criterion (c) — a parameter-clean chain was
+counted as exercised even with no entrant — which was fixed before commit.
+
+Security pre-review on Slice 1 returned FAIL (1 HIGH, 2 MEDIUM, 2 LOW), all fixed: untrusted-content
+boundary, slug path-traversal guard, YAML scalar quoting, Gate 6 report-freshness check, and the
+no-Bash `git diff` inconsistency.
 
 ## Blockers
 
