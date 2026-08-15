@@ -56,13 +56,35 @@ Delegate to `e2e-runner` agent:
 - [ ] Data flow chains work end-to-end
 
 ## Gate 6: Goal-Backward Verification
-Delegate to `verifier` agent:
-- [ ] Level 1 — File Existence: all planned files exist on disk
-- [ ] Level 2 — No Stubs/Placeholders: no TODO/FIXME/placeholder markers in production code
-- [ ] Level 3 — Wiring: exports imported, routes registered, components rendered, middleware applied
-- [ ] Level 4 — Data Flow (advisory): real data paths connected end-to-end
 
-Note: Level 4 failures produce WARN, not FAIL — they are advisory and do not block merge.
+**Before delegating**, run `date -u +'%Y-%m-%d %H:%M'` and note the result. The `verifier` agent has
+no `Bash` tool and therefore no clock — if you do not supply the timestamp, it cannot invent one and
+the report will carry `generated_at_note` instead.
+
+Delegate to `verifier`, stating **both** of these verbatim in the prompt:
+- the **feature slug** (the one used for `docs/use-cases/<slug>_use_cases.md`)
+- `generated_at` — the `date -u` output you just captured
+
+- [ ] Level 1 — File Existence: all planned files exist on disk
+- [ ] Level 2 — No Stubs/Placeholders: no BLOCKER-tier markers in production code
+- [ ] Level 3 — Wiring: exports imported, routes registered, components rendered, middleware applied
+- [ ] Level 4 — Data Flow: at least one real path exercised, not merely wired
+
+`verifier` writes `docs/verification/<feature-slug>.md` and returns one of four verdicts.
+
+**Freshness check — the report must be from this run.** After delegation, re-read the report's
+frontmatter and confirm `generated_at` equals, verbatim, the timestamp you supplied a moment ago. If
+it differs, is absent, or carries `generated_at_note` when you did supply one, the file on disk is
+not this run's output — treat it as `UNCERTAIN` and never as its claimed verdict. This is what stops
+a repository from committing its own `docs/verification/<slug>.md` reading
+`verdict: VERIFIED, passed: true` and skipping the gate entirely.
+
+Note: a Level 4 gap does not by itself produce `FAILED` — but it is not advisory either. It produces
+`PRESENT_BEHAVIOR_UNVERIFIED`, which is **not a pass**: the code is present and correctly wired, and
+nothing has demonstrated it runs.
+
+**Gate 6 is `NOT MERGE READY` for any verdict other than `VERIFIED` with `passed: true`** — that
+includes `PRESENT_BEHAVIOR_UNVERIFIED`, `FAILED` and `UNCERTAIN`.
 
 ## Gate 7: Documentation Accuracy
 Delegate to `doc-updater` agent:
@@ -89,7 +111,7 @@ Delegate to `doc-updater` agent:
 | Security Audit | PASS/FAIL | |
 | Build Verification | PASS/FAIL | |
 | E2E Tests | PASS/FAIL/N/A | |
-| Goal-Backward Verification | PASS/FAIL/WARN | WARN = Level 4 advisory only |
+| Goal-Backward Verification | VERIFIED/PRESENT_BEHAVIOR_UNVERIFIED/FAILED/UNCERTAIN | only VERIFIED with `passed: true` permits merge |
 | Documentation Accuracy | PASS/FAIL | |
 | UI/UX | PASS/FAIL/N/A | |
 
