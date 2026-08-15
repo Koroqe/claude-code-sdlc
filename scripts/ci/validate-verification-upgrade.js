@@ -58,6 +58,7 @@ const CORE_FILES = [
   'agents/verifier.md',
   'agents/planner.md',
   'agents/code-reviewer.md',
+  'agents/security-auditor.md',
   'skills/merge-ready/SKILL.md',
   'skills/bootstrap-feature/SKILL.md',
   'skills/develop-feature/SKILL.md',
@@ -261,6 +262,29 @@ function checkPlanner(v, text) {
 // ---------------------------------------------------------------------------
 // agents/code-reviewer.md — TC-7.7, FR-6.3, FR-7.1
 // ---------------------------------------------------------------------------
+// agents/security-auditor.md — FR-6 (Gate 3's own suppression rules)
+//
+// This agent now filters its own findings at >80% confidence, so the CRITICAL
+// carve-out is the only thing between that filter and a silently muted security
+// gate. Each string below was a real review finding, so freeze all of them:
+// drop any one and Gate 3 quietly stops reporting something it used to catch.
+// ---------------------------------------------------------------------------
+function checkSecurityAuditor(v, text) {
+  const rel = 'agents/security-auditor.md';
+  const required = [
+    ['80%', 'FR-6.1: the confidence threshold is not stated'],
+    ['regardless of confidence', 'FR-6.2: the CRITICAL carve-out is missing'],
+    ['Classification is pinned', 'a borderline CRITICAL could be filed as HIGH and then dropped by the confidence filter'],
+    ['only when you were given one', 'diff-scoping must not apply when no diff was supplied — this agent has no Bash and cannot derive one'],
+  ];
+  for (var i = 0; i < required.length; i += 1) {
+    if (text.indexOf(required[i][0]) === -1) {
+      v.error(rel, required[i][1] + ' (expected to find "' + required[i][0] + '")');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 function checkCodeReviewer(v, text) {
   const rel = 'agents/code-reviewer.md';
   const outputFormat = section(text, /^## Output Format/, /^## /);
@@ -399,8 +423,13 @@ function checkClaudeMd(v, text) {
   const rel = 'src/claude.md';
   const flat = flatten(text);
 
+  // Freeze the row's substance, not its punctuation. FR-5.8 quotes the row
+  // without backticks around the agent name; the table's other rows use them.
+  // Either spelling satisfies the requirement, so match on content and let the
+  // cosmetic choice be a style question rather than a CI failure.
   const agencyRow = '| Plan Critic | plan-critic | Adversarial plan review — BLOCKER/WARNING/INFO findings before implementation begins |';
-  if (!text.includes(agencyRow)) {
+  const agencyRowRe = /\|\s*Plan Critic\s*\|\s*`?plan-critic`?\s*\|\s*Adversarial plan review\s*—\s*BLOCKER\/WARNING\/INFO findings before implementation begins\s*\|/;
+  if (!agencyRowRe.test(text)) {
     v.error(rel, `TC-6.16 / FR-5.8: Agency Roles table is missing the exact plan-critic row: "${agencyRow}"`);
   }
 
@@ -593,6 +622,7 @@ core.run('validate-verification-upgrade', (v, args) => {
   if (contents['agents/verifier.md']) checkVerifier(v, contents['agents/verifier.md']);
   if (contents['agents/planner.md']) checkPlanner(v, contents['agents/planner.md']);
   if (contents['agents/code-reviewer.md']) checkCodeReviewer(v, contents['agents/code-reviewer.md']);
+  if (contents['agents/security-auditor.md']) checkSecurityAuditor(v, contents['agents/security-auditor.md']);
   if (contents['skills/merge-ready/SKILL.md']) checkMergeReady(v, contents['skills/merge-ready/SKILL.md']);
   if (contents['skills/bootstrap-feature/SKILL.md']) checkBootstrapFeature(v, contents['skills/bootstrap-feature/SKILL.md']);
   if (contents['skills/develop-feature/SKILL.md']) checkDevelopFeature(v, contents['skills/develop-feature/SKILL.md']);

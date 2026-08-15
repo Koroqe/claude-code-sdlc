@@ -23,7 +23,7 @@ This workflow mirrors a professional software development team:
 | Verification Engineer | `verifier` | Goal-backward integration verification (wiring, data flow, stub detection) |
 | Tech Writer | `doc-updater` | Documentation accuracy + `CHANGELOG.md` maintenance |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
-| Plan Critic | plan-critic | Adversarial plan review — BLOCKER/WARNING/INFO findings before implementation begins |
+| Plan Critic | `plan-critic` | Adversarial plan review — BLOCKER/WARNING/INFO findings before implementation begins |
 
 ### What Every Plan MUST Include
 
@@ -104,9 +104,9 @@ Invoke the `plan-critic` agent via the `Agent` tool with the plan file path — 
 
 **Critique-and-fix loop (max 3 loops, then escalate):**
 1. Invoke `plan-critic` against the plan file (loop 1).
-2. If it returns any BLOCKER finding, fix the plan file for every BLOCKER and WARNING finding (see Step 2), then re-invoke `plan-critic` against the revised plan (loop 2).
-3. Repeat once more if needed (loop 3).
-4. If zero BLOCKER findings remain after any loop, proceed immediately — remaining WARNING findings are acceptable and are recorded in Review Notes; do NOT run a further loop.
+2. **Fix the plan file for every BLOCKER and every WARNING finding (see Step 2). This fix pass always runs whenever there is at least one BLOCKER or WARNING finding — it is NOT conditional on a BLOCKER being present.** WARNING is where Scope Reduction Detection lands: hedging like "v1", "basic version", "stubbed out" is WARNING-tier, and it is exactly the finding class that must be fixed rather than noted, since its whole effect is to quietly deliver less than the PRD promised.
+3. **Re-invoke only if a BLOCKER was found** in the loop just completed — the loop repeats on BLOCKERs, but the fixing covers WARNINGs too. Repeat up to loop 3.
+4. If zero BLOCKER findings remain after any loop, proceed — having already applied the step-2 fixes. Any WARNING that was deliberately not fixed is recorded in Review Notes with its justification; do NOT run a further loop.
 5. If a BLOCKER finding still remains after loop 3, escalate per Rule 4 (`error-recovery.md`): stop, present the remaining BLOCKER findings verbatim, state the decision needed, and present the options. Do NOT proceed with an unresolved BLOCKER, and do NOT call ExitPlanMode.
 
 `plan-critic` returns findings in this structure:
