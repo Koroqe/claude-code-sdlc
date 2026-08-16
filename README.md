@@ -296,7 +296,46 @@ Agents are tiered by task complexity to reduce cost:
 | `opus` | `architect`, `planner`, `plan-critic`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
 | `sonnet` | all other 10 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
 
-To change a tier: edit the `model:` field in the agent's frontmatter and re-run `bash install.sh --local --yes`.
+This static split is what shipped as the `quality` profile below. It is no longer meant to be changed by hand-editing frontmatter — see **Model Profiles** for the supported way.
+
+### Model Profiles
+
+`agents/*.md`'s `model:` field is a rewrite target, not a hand-edit target: `install.sh --local --profile <name>` atomically rewrites the `model:` frontmatter line of all 14 agent files at once, to one of four profiles.
+
+| Role | `quality` | `balanced` | `budget` | `inherit` |
+|---|---|---|---|---|
+| `architect` | opus | opus | sonnet | inherit |
+| `plan-critic` | opus | sonnet | sonnet | inherit |
+| `planner` | opus | opus | sonnet | inherit |
+| `security-auditor` | opus | opus | opus | inherit |
+| `ba-analyst` | sonnet | sonnet | sonnet | inherit |
+| `build-runner` | sonnet | haiku | haiku | inherit |
+| `code-reviewer` | sonnet | sonnet | sonnet | inherit |
+| `doc-updater` | sonnet | haiku | haiku | inherit |
+| `e2e-runner` | sonnet | sonnet | sonnet | inherit |
+| `prd-writer` | sonnet | haiku | haiku | inherit |
+| `qa-planner` | sonnet | sonnet | sonnet | inherit |
+| `refactor-cleaner` | sonnet | sonnet | haiku | inherit |
+| `test-writer` | sonnet | sonnet | haiku | inherit |
+| `verifier` | sonnet | sonnet | sonnet | inherit |
+
+`quality` is the shipped baseline — identical, role for role, to the Model Tiers table above. `security-auditor` stays `opus` under every profile: no downstream gate catches a missed vulnerability the way `plan-critic`'s adversarial review and Gate 6's replan loop now catch a bad `architect`/`planner` call, so it never gets the same discount.
+
+```bash
+bash install.sh --local --profile quality    # explicit shipped baseline
+bash install.sh --local --profile balanced   # a middle ground
+bash install.sh --local --profile budget     # cheapest roles that already have a backstop
+bash install.sh --local --profile inherit    # every agent inherits the host's default model
+bash install.sh --local --profile budget --dry-run   # preview only — changes nothing
+```
+
+`--profile` requires `--local` — it rewrites the plugin-source checkout `/plugin marketplace add <path>` points at, and a non-`--local` run's source is a temporary clone deleted before the process exits, so the rewrite would be silently discarded there. It cannot be combined with `--uninstall`, `--restore`, `--init-project`, or `--trust-project`.
+
+The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 14 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 13-of-14 rewritten.
+
+**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 14 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (landing separately) treats its absence as `quality`.
+
+**Does a running session pick this up?** Undetermined. Whether an already-open Claude Code session re-reads `agents/*.md` live, or instead snapshots agent definitions at plugin load, could not be confirmed in the environment this was built in — there was no marketplace-installed copy of this plugin to test against, and restarting a session to observe reload behavior directly wasn't something that build task could do. Until someone settles it: treat a new session, or a `/plugin` reinstall, as required after `--profile` runs for the new values to take effect. See `install.sh`'s own header comment for the full finding and what would settle it.
 
 ---
 
