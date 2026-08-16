@@ -58,62 +58,78 @@ jobs:
       - name: Validate verification upgrade
         run: node scripts/ci/validate-verification-upgrade.js
 
+      # Confirms the 52 FIXTURE-class test cases in
+      # verification-review-upgrade_test_cases.md still have the committed
+      # inputs they need. This does NOT execute any FIXTURE case — no API
+      # access exists in CI to invoke an agent headlessly. It only catches
+      # fixture rot: a fixture directory renamed, emptied, or deleted while
+      # the QA document and manifest still claim it exists.
+      - name: Validate fixture manifest
+        run: node scripts/ci/validate-fixture-manifest.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
       # was written to catch.
       - name: Falsify — agents validator catches a bad agent
-        run: '! node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1'
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1 --expect-failure "frontmatter fence"
 
       - name: Falsify — skills validator catches a bad skill
-        run: '! node scripts/ci/validate-skills.js --root tests/fixtures/ci/bad-skill --min 1'
+        run: node scripts/ci/validate-skills.js --root tests/fixtures/ci/bad-skill --min 1 --expect-failure "argument-hint"
 
       - name: Falsify — hooks validator catches a bad hooks.json
-        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks'
+        run: node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks --expect-failure "unknown hook event"
 
       - name: Falsify — hooks validator rejects an inline node -e bootstrap
-        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-inline-bootstrap'
+        run: node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-inline-bootstrap --expect-failure "bad:inline"
 
       - name: Falsify — hooks validator rejects a hook bypassing the wrapper
-        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-foreign-script'
+        run: node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-foreign-script --expect-failure "bad:foreign"
 
       - name: Falsify — hooks validator rejects a hook with no id
-        run: '! node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-missing-id'
+        run: node scripts/ci/validate-hooks.js --root tests/fixtures/ci/bad-hooks-missing-id --expect-failure "namespaced ids are required"
 
       - name: Falsify — personal-path validator catches a leaked home path
-        run: '! node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/bad-personal-path --min 1'
+        run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/bad-personal-path --min 1 --expect-failure "must not ship"
 
       - name: Falsify — unicode validator catches invisible and homoglyph characters
-        run: '! node scripts/ci/validate-unicode-safety.js --root tests/fixtures/ci/bad-unicode --min 0'
+        run: node scripts/ci/validate-unicode-safety.js --root tests/fixtures/ci/bad-unicode --min 0 --expect-failure "zero-width character"
 
       - name: Falsify — version validator catches disagreeing versions
-        run: '! node scripts/ci/validate-version-consistency.js --root tests/fixtures/ci/bad-version'
+        run: node scripts/ci/validate-version-consistency.js --root tests/fixtures/ci/bad-version --expect-failure "version strings disagree"
 
       # One seeded-bad fixture per assertion family. Each fixture is a complete
       # passing mirror of every file the validator opens, except for its single
       # defect — so a red run proves that specific assertion fired, rather than
       # proving only that some file was missing.
       - name: Falsify — verification-upgrade validator catches a writable plan-critic
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-plan-critic-write'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-plan-critic-write --expect-failure "TC-6.2"
 
       - name: Falsify — verification-upgrade validator catches a verifier retaining Bash
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-tools'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-tools --expect-failure "TC-5.3"
 
       - name: Falsify — verification-upgrade validator catches the old three-verdict line
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-verdicts'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-verdicts --expect-failure "FR-1.1"
 
       - name: Falsify — verification-upgrade validator catches the old Level 4 advisory note
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-merge-ready-note'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-merge-ready-note --expect-failure "FR-1.5"
 
       - name: Falsify — verification-upgrade validator catches a disagreeing agent count
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-agent-count'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-agent-count --expect-failure "TC-6.6"
 
       # The confidence filter only spares findings already labelled CRITICAL, so
       # removing the classification pin lets a borderline auth bypass be filed
       # HIGH and then dropped — the security gate going quiet with nothing
       # appearing to fail.
       - name: Falsify — verification-upgrade validator catches a softened classification pin
-        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-security-auditor-filter'
+        run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-security-auditor-filter --expect-failure "Classification is pinned"
+
+      # A rotted fixture (renamed/emptied/deleted) must fail loudly — it is
+      # the one failure mode this validator exists to catch, per the QA
+      # document's own count summary ("52 FIXTURE ... committed under
+      # tests/fixtures/").
+      - name: Falsify — fixture-manifest validator catches a rotted fixture path
+        run: node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-missing-fixture --expect-failure "fixture path does not exist"
 
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
@@ -122,22 +138,25 @@ jobs:
       # --- Anti-vacuity: a validator matching zero files must FAIL -------
       # This is the check that stops "exits 0" from meaning "found nothing".
       - name: Anti-vacuity — agents validator fails on an empty tree
-        run: '! node scripts/ci/validate-agents.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-agents.js --root "$(mktemp -d)" --expect-failure "matches too few files"
 
       - name: Anti-vacuity — skills validator fails on an empty tree
-        run: '! node scripts/ci/validate-skills.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-skills.js --root "$(mktemp -d)" --expect-failure "matches too few files"
 
       - name: Anti-vacuity — personal-path validator fails on an empty tree
-        run: '! node scripts/ci/validate-personal-paths.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-personal-paths.js --root "$(mktemp -d)" --expect-failure "matches too few files"
 
       - name: Anti-vacuity — unicode validator fails on an empty tree
-        run: '! node scripts/ci/validate-unicode-safety.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-unicode-safety.js --root "$(mktemp -d)" --expect-failure "matches too few files"
 
       - name: Anti-vacuity — version validator fails on an empty tree
-        run: '! node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)" --expect-failure "matches too few files"
 
       - name: Anti-vacuity — verification-upgrade validator fails on an empty tree
-        run: '! node scripts/ci/validate-verification-upgrade.js --root "$(mktemp -d)"'
+        run: node scripts/ci/validate-verification-upgrade.js --root "$(mktemp -d)" --expect-failure "matches too few files"
+
+      - name: Anti-vacuity — fixture-manifest validator fails on an empty tree
+        run: node scripts/ci/validate-fixture-manifest.js --root "$(mktemp -d)" --expect-failure "matches too few"
 
   hook-tests:
     name: Hook contract tests

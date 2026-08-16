@@ -1,0 +1,11 @@
+{
+  "_purpose": "Seeded-bad mirror of tests/fixtures/manifest.json for scripts/ci/validate-fixture-manifest.js's falsify step. One entry, whose fixture path deliberately does not exist relative to this seeded root.",
+  "cases": [
+    {
+      "id": "TC-1.1",
+      "agent": "verifier",
+      "fixture": "tests/fixtures/agents/verifier/present-unverified/",
+      "expect": "verdict PRESENT_BEHAVIOR_UNVERIFIED for a fully wired but never-exercised route"
+    }
+  ]
+}
