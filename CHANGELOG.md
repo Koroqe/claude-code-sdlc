@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-16
 
+### Self-Test Hardening — 10:39 UTC
+**Summary:** The toolkit's own safety checks can no longer quietly stop working — a test that stops testing anything now fails loudly instead of passing.
+**Details:** The automated checks that are supposed to prove the safety nets still work could previously pass for the wrong reason: they only required a check to fail, not to fail for the reason it was written to catch. Each one now names its own reason, so a test that quietly stops testing anything turns red instead of green. Separately, the catalogue of prepared test inputs is now cross-checked against the test plan, so an input that is renamed or deleted is reported rather than silently forgotten.
+**Technical details:** Adds an expected-failure mode to the shared validation library so every falsifiability check asserts the specific assertion that fired, replacing a plain exit-code inversion that a rotted or de-seeded fixture could satisfy. All twenty-one such checks were converted, and the hardening was demonstrated against both rot modes. Adds a manifest linking every agent-executed test case to its committed input, with a validator that catches missing entries, rotted paths, unknown agents and stale references; one case with no committed input is recorded as such rather than omitted. The manifest verifies inputs exist and stay wired — it does not execute them, which still needs a live agent. No user-facing, data or deployment changes.
+
 ### Verification and Review Upgrade — 00:36 UTC
 **Summary:** The toolkit can now tell the difference between "we built it" and "we saw it work", and says so plainly instead of quietly counting the first as the second.
 **Details:** The checker now reports four outcomes instead of three, so "the code is connected" is no longer recorded as "the feature works" — unfinished work is named as unfinished. Its report is machine-readable, so a shortfall feeds back into planning without anyone reading a document. Plans are now adversarially reviewed before work starts, which previously happened only when a person was steering. Reviews stay quiet on speculation but never on anything critical.
