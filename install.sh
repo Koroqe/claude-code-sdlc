@@ -844,12 +844,25 @@ frontmatter_model_of() {
 # claiming a profile that was not fully applied.
 write_profile_receipt() {
   local tmp
-  tmp="$(mktemp "$SCRIPT_DIR/.sdlc-model-profile.XXXXXX")"
+  tmp="$(mktemp "$SCRIPT_DIR/.sdlc-model-profile.XXXXXX")" || {
+    log_error "Failed to create temp file for the profile receipt in $SCRIPT_DIR — no receipt was written."
+    cleanup_profile_tempfiles
+    exit 1
+  }
   printf '%s\n' "$PROFILE" > "$tmp"
   mv -- "$tmp" "$SCRIPT_DIR/.sdlc-model-profile"
 }
 
 do_profile() {
+  # Runs for the whole preflight/commit lifecycle below. Guarantees that an
+  # unhandled exit (SIGINT, or `set -e` firing on a bare `mktemp` failure)
+  # still removes any hidden `.<role>.md.XXXXXX` files already staged under
+  # agents/, not just the failure paths that call cleanup_profile_tempfiles()
+  # explicitly. Cleared once Phase 2 has committed everything, so a
+  # successful run does not re-run cleanup over files it legitimately
+  # renamed into place.
+  trap cleanup_profile_tempfiles EXIT
+
   get_source_dir
 
   local role file src target current tmp
@@ -869,6 +882,7 @@ do_profile() {
         exit 1
       }
       current="$(frontmatter_model_of "$src")"
+      current="$(printf '%s' "$current" | tr -d '[:cntrl:]')"
       printf '  %-18s current=%-8s target=%s\n' "$role" "${current:-<none>}" "$target"
     done
     echo ""
@@ -894,7 +908,11 @@ do_profile() {
       exit 1
     }
 
-    tmp="$(mktemp "$SCRIPT_DIR/agents/.${file}.XXXXXX")"
+    tmp="$(mktemp "$SCRIPT_DIR/agents/.${file}.XXXXXX")" || {
+      log_error "Failed to create temp file for agents/$file — no files were modified."
+      cleanup_profile_tempfiles
+      exit 1
+    }
 
     # Bounded substitution: the frontmatter-fence counter means only a
     # `model: ` line strictly between the first and second `---` is ever
@@ -934,6 +952,12 @@ do_profile() {
     mv -- "${PROFILE_TEMPFILES[$i]}" "${mv_targets[$i]}"
   done
   PROFILE_TEMPFILES=()
+
+  # Phase 2 fully committed — nothing legitimately staged remains, so clear
+  # the trap before it can fire cleanup over files this run intentionally
+  # kept (there are none, but a later failure in write_profile_receipt must
+  # not be misread as a Phase 1/2 leak).
+  trap - EXIT
 
   write_profile_receipt
 

@@ -23,9 +23,12 @@ because other files and CI checks reference gates by number, and none of them ma
 
 Read `.claude/scratchpad.md`'s `## Tier:` field:
 
+- **Fail-closed rule:** any `## Tier:` value other than the literal `quick` runs all 9 gates unmodified —
+  `full`, the field absent, `fast`, a typo, merge-conflict garbage, or anything else that is not an exact
+  `quick` match. This is the rule itself, not a fallback for the cases spelled out below.
 - **`full`, or the field absent:** run all 9 gates unmodified, exactly as documented below. Absent-means-
-  full is the backward-compatibility default — a pre-F4 scratchpad with no `## Tier:` field at all gets
-  the full, unreduced gate sequence, never a silently reduced one.
+  full is the backward-compatibility instance of the fail-closed rule above — a pre-F4 scratchpad with
+  no `## Tier:` field at all gets the full, unreduced gate sequence, never a silently reduced one.
 - **`quick`:** run Gate 0 (Git Hygiene), Gate 2 (Code Review), Gate 3 (Security Audit), and Gate 4 (Build
   Verification). Report Gate 1, Gate 5, Gate 6, Gate 7, and Gate 8 as `SKIPPED (tier: quick)` in the
   output table. **Never silently omit a row** — a missing row reads as an oversight; an explicit
@@ -34,6 +37,14 @@ Read `.claude/scratchpad.md`'s `## Tier:` field:
   depends on any PRD/use-case/QA artifact — and Gate 4 is deterministic. Skipping any of the three would
   make `quick` a synonym for "unreviewed"; keeping them is what stops that. This sentence is the
   justification for the `quick` tier existing at all, not an incidental detail.
+
+**Residual risk — `## Tier:` is repo-controlled state.** `.claude/scratchpad.md` is a tracked file, so a
+hostile repository could pre-commit `## Tier: quick` to downgrade a *standalone* `/merge-ready` run before
+`bootstrap-feature` ever gets a chance to set the field itself. This is mitigated, not eliminated: the
+skipped gates are always rendered as explicit `SKIPPED (tier: quick)` rows in the output table (see "Never
+silently omit a row" above), Gate 2 (Code Review) and Gate 3 (Security Audit) still run against the diff
+regardless of tier, and `bootstrap-feature` re-owns and resets the `## Tier:` field on every
+pipeline-driven init. Recorded here as a known residual so it stays visible, not because it is resolved.
 
 **Gate 2/3 quick-tier delegation carve-out.** For a `quick`-tier run, the Gate 2 and Gate 3 delegation
 prompts to `code-reviewer`/`security-auditor` MUST state, verbatim, **before the review request**:
