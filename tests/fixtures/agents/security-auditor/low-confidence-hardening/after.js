@@ -1,0 +1,11 @@
+'use strict';
+
+// Internal admin listener. Bound to 127.0.0.1 only in ./bootstrap.js (not
+// modified by this diff) -- unreachable from outside this host.
+const router = require('./internal-router');
+
+router.get('/internal/health', (req, res) => {
+  return res.json({ status: 'ok' });
+});
+
+module.exports = { router };

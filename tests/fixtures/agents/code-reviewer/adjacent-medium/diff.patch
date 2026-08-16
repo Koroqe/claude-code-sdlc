@@ -1,0 +1,14 @@
+diff --git a/receipt.js b/receipt.js
+index 0000001..0000002 100644
+--- a/receipt.js
++++ b/receipt.js
+@@ -13,6 +13,7 @@ function formatLegacyReceipt(total) {
+   return totalStr.slice(0, totalStr.indexOf('.') + 3);
+ }
+
+-function formatOrderSummary(orderId, total) {
+-  return `${formatHeader(orderId)}: ${formatLegacyReceipt(total)}`;
++function formatOrderSummary(orderId, total, currency) {
++  const symbol = currency === 'EUR' ? '€' : '$';
++  return `${formatHeader(orderId)}: ${symbol}${formatLegacyReceipt(total)}`;
+ }

@@ -1,0 +1,21 @@
+diff --git a/users.js b/users.js
+index 0000001..0000002 100644
+--- a/users.js
++++ b/users.js
+@@ -1,9 +1,15 @@
+ 'use strict';
+
+ const db = require('./db');
++const { buildQuery } = require('./query-builder');
+
+ function findUserById(id) {
+   return db.raw('SELECT * FROM users WHERE id = ?', [id]);
+ }
+
+-module.exports = { findUserById };
++function findUsersByStatus(status) {
++  const query = buildQuery(`SELECT * FROM users WHERE status = '${status}'`);
++  return db.raw(query);
++}
++
++module.exports = { findUserById, findUsersByStatus };

@@ -1,0 +1,8 @@
+{
+  "_fixture_purpose": "TC-10.4 (UC-10-A2, planner-only slice of TC-10.3) — a flagged conflicting slice pair plus the shared path, as produced by /develop-feature Phase 2's dispatch-time disjointness refusal. Feed this to `planner` and confirm it returns a revised wave assignment with no remaining Files: overlap between sliceA and sliceB — either moving one slice to a later wave, or splitting file ownership so the shared path has exactly one owner.",
+  "conflict": {
+    "sliceA": 3,
+    "sliceB": 4,
+    "path": "src/handlers/widgets.ts"
+  }
+}

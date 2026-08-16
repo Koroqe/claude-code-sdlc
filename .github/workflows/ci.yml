@@ -51,6 +51,13 @@ jobs:
       - name: Validate version consistency
         run: node scripts/ci/validate-version-consistency.js
 
+      # Freezes the load-bearing literal strings of the verification upgrade:
+      # the four verdicts, the deny-by-default write scope, the exact
+      # malformed-report status, the tracer notice, and the agent count. These
+      # are strings the PRD mandates verbatim — rewording one SHOULD fail CI.
+      - name: Validate verification upgrade
+        run: node scripts/ci/validate-verification-upgrade.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -82,6 +89,32 @@ jobs:
       - name: Falsify — version validator catches disagreeing versions
         run: '! node scripts/ci/validate-version-consistency.js --root tests/fixtures/ci/bad-version'
 
+      # One seeded-bad fixture per assertion family. Each fixture is a complete
+      # passing mirror of every file the validator opens, except for its single
+      # defect — so a red run proves that specific assertion fired, rather than
+      # proving only that some file was missing.
+      - name: Falsify — verification-upgrade validator catches a writable plan-critic
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-plan-critic-write'
+
+      - name: Falsify — verification-upgrade validator catches a verifier retaining Bash
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-tools'
+
+      - name: Falsify — verification-upgrade validator catches the old three-verdict line
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-verifier-verdicts'
+
+      - name: Falsify — verification-upgrade validator catches the old Level 4 advisory note
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-merge-ready-note'
+
+      - name: Falsify — verification-upgrade validator catches a disagreeing agent count
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-agent-count'
+
+      # The confidence filter only spares findings already labelled CRITICAL, so
+      # removing the classification pin lets a borderline auth bypass be filed
+      # HIGH and then dropped — the security gate going quiet with nothing
+      # appearing to fail.
+      - name: Falsify — verification-upgrade validator catches a softened classification pin
+        run: '! node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-security-auditor-filter'
+
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
         run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/good-personal-path --min 1
@@ -102,6 +135,9 @@ jobs:
 
       - name: Anti-vacuity — version validator fails on an empty tree
         run: '! node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)"'
+
+      - name: Anti-vacuity — verification-upgrade validator fails on an empty tree
+        run: '! node scripts/ci/validate-verification-upgrade.js --root "$(mktemp -d)"'
 
   hook-tests:
     name: Hook contract tests

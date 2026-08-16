@@ -1,0 +1,11 @@
+{
+  "_fixture_purpose": "TC-3.5 (UC-3-EC1, FR-3.2) — a gap whose verifies_with names an action planner genuinely cannot express as an automated, testable slice. Feed this array to `planner` and confirm the returned output either omits a slice for this entry entirely, or explicitly flags it as requiring human verification (naming location and finding) — never a fabricated automated test pretending to close it.",
+  "gaps": [
+    {
+      "level": 4,
+      "finding": "no automated check confirms the generated invoice PDF matches finance's approved template",
+      "location": "src/services/invoicePdf.ts:120",
+      "verifies_with": "manually confirm the printed invoice matches the finance team's template"
+    }
+  ]
+}
