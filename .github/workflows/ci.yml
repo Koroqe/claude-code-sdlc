@@ -58,6 +58,15 @@ jobs:
       - name: Validate verification upgrade
         run: node scripts/ci/validate-verification-upgrade.js
 
+      # Drift check (PRD Section 10, FR-10): every agents/*.md `model:` value
+      # must match the profile `.sdlc-model-profile` claims (absent -> the
+      # shipped `quality` baseline), and install.sh's model_for_role() case
+      # arms must byte-compare against scripts/ci/lib/model-profiles.js.
+      # --assert-baseline additionally fails if a receipt is present at all
+      # — it must never be committed; it is a local, install-time artifact.
+      - name: Validate model profile drift
+        run: node scripts/ci/validate-model-profile.js --assert-baseline
+
       # Confirms the 52 FIXTURE-class test cases in
       # verification-review-upgrade_test_cases.md still have the committed
       # inputs they need. This does NOT execute any FIXTURE case — no API
@@ -73,6 +82,16 @@ jobs:
       # was written to catch.
       - name: Falsify — agents validator catches a bad agent
         run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1 --expect-failure "frontmatter fence"
+
+      # PRD Section 10, FR-11: `effort:` became a required frontmatter field
+      # in the same commit that added it to all 14 agents. These two fixtures
+      # prove the two ways an `effort:` value can be wrong — an unrecognized
+      # level, and the field omitted entirely — each fail for its own reason.
+      - name: Falsify — agents validator catches an unrecognized effort level
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-effort --min 1 --expect-failure "is not a known level"
+
+      - name: Falsify — agents validator catches a missing effort field
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-effort-missing --min 1 --expect-failure "missing or empty required frontmatter field \`effort\`"
 
       - name: Falsify — skills validator catches a bad skill
         run: node scripts/ci/validate-skills.js --root tests/fixtures/ci/bad-skill --min 1 --expect-failure "argument-hint"
@@ -130,6 +149,40 @@ jobs:
       # tests/fixtures/").
       - name: Falsify — fixture-manifest validator catches a rotted fixture path
         run: node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-missing-fixture --expect-failure "fixture path does not exist"
+
+      # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
+      # model-profile drift validator, each a passing mirror except one
+      # deliberate defect. Every fixture must fail for its own named reason
+      # — a generic mismatch count would let a rotted fixture keep CI green.
+      - name: Falsify — model-profile validator catches a stale file under a committed profile
+        run: "node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/stale-file --min 1 --expect-failure \"agents/build-runner.md: model 'sonnet', expected 'haiku'\""
+
+      - name: Falsify — model-profile validator catches a hand-edited alias with no receipt present
+        run: "node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/no-receipt-fable --min 1 --expect-failure \"agents/architect.md: model 'fable', expected 'opus'\""
+
+      # Distinct from the failure above: `fable` remains a recognized alias
+      # under validate-agents.js's own, looser purpose (FR-10.2) — this is
+      # what UC-11 documents as the pass/fail contrast between the two checks.
+      - name: Control — agents validator still passes the same fixture (fable is a recognized alias)
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/model-profile/no-receipt-fable --min 1
+
+      - name: Falsify — model-profile validator catches install.sh/CI table disagreement
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/install-table-mismatch --min 1 --expect-failure "balanced:plan-critic"
+
+      - name: Control — model-profile validator passes the inherit profile and its wildcard arm
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/inherit-wildcard --min 1
+
+      - name: Falsify — model-profile validator rejects a malformed receipt value
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/bad-receipt --min 1 --expect-failure "unrecognized profile 'fable'"
+
+      # This fixture is internally consistent (receipt and tree agree), so it
+      # passes plainly — proving --assert-baseline is what fails it, not the
+      # ordinary per-file drift check (PRD Section 10, FR-9).
+      - name: Control — model-profile validator passes an internally consistent committed receipt without the flag
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/committed-receipt --min 1
+
+      - name: Falsify — model-profile validator rejects the same committed receipt under --assert-baseline
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/committed-receipt --min 1 --assert-baseline --expect-failure "must never be committed"
 
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
