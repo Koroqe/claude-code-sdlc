@@ -6,4 +6,4 @@
 # recording which model profile was last applied to agents/*.md. Committing
 # it would let a contributor's rewritten tree pass the CI drift check that
 # exists to catch exactly that mismatch.
-.sdlc-model-profile
+/.sdlc-model-profile
