@@ -1,6 +1,6 @@
 ## Feature: Adaptive Tier Routing and Model Routing (v4.0 roadmap F4)
 ## Branch: feat/adaptive-tier-routing
-## Status: quality-gates
+## Status: complete
 ## Tier: full
 
 ## Docs
@@ -346,6 +346,26 @@ CI-automatable in F4 depends on it.
 - **Defect found and fixed:** `.gitignore`'s `.sdlc-model-profile` had no path anchor, so it silently
   ignored that filename at any depth — including fixture roots that need it as content. Caught by
   re-verifying from a clean `git clone` rather than local disk state. Now anchored to `/`.
+
+## Merge-ready gate results
+
+Gate 0 PASS · Gate 1 PASS · Gate 2 code review **PASS** (1 MAJOR + 2 MINOR fixed) ·
+Gate 3 security **PASS** (1 MEDIUM + 3 LOW fixed) · Gate 4 PASS (54 CI steps, 16 hook test files) ·
+Gate 5 N/A · **Gate 6 `PRESENT_BEHAVIOR_UNVERIFIED`** (14 gaps) · Gate 7 PASS · Gate 8 N/A
+
+**Gate 6's decisive finding:** the branch had never been pushed, so no CI run existed for any F4
+commit — criterion (c)'s named-entrant rule correctly refused to credit validators nothing had
+entered. It also corrected a false premise in its own delegation prompt. Pushing closed that gap
+(run 31961651378, 54 asset steps, all four jobs green); the verdict stands because the substantive
+gaps remain: no committed repeatable check for `install.sh --profile` end-to-end, the statusline
+executed by nothing committed with an unverified stdin contract, both spikes open, and the routing
+behaviour itself only observable in a live multi-turn run.
+
+**Defects caught at merge-ready and fixed:** both triage copies claimed a CI parity check that did
+not exist (now built — `validate-triage-parity.js`); the model-table drift check silently skipped
+unparseable case arms, so a reformatted arm could diverge while CI stayed green (proven real, then
+closed bidirectionally); unguarded `mktemp` under `set -e` could bypass temp cleanup; `## Tier:` had
+no branch for an unrecognized value (now fails closed to all 9 gates).
 
 ## Blockers
 
