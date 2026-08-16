@@ -337,7 +337,7 @@ bash install.sh --local --profile budget --dry-run   # preview only — changes 
 
 The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 14 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 13-of-14 rewritten.
 
-**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 14 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (landing separately) treats its absence as `quality`.
+**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 14 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
 
 **Does a running session pick this up?** Undetermined. Whether an already-open Claude Code session re-reads `agents/*.md` live, or instead snapshots agent definitions at plugin load, could not be confirmed in the environment this was built in — there was no marketplace-installed copy of this plugin to test against, and restarting a session to observe reload behavior directly wasn't something that build task could do. Until someone settles it: treat a new session, or a `/plugin` reinstall, as required after `--profile` runs for the new values to take effect. See `install.sh`'s own header comment for the full finding and what would settle it.
 

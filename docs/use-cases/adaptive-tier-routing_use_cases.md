@@ -216,6 +216,7 @@ None beyond UC-1's classification variants, already covered.
 ### Edge Cases
 - **UC-5-EC1: a `quick`-tier run that in fact touched only 1 file — never silently re-labeled `fast` after the fact** — the run still reports Gates 1/5/6/7/8 as `SKIPPED (tier: quick)`, regardless of how simple the actual change turned out to be (FR-2.6, AC-5) — verifiable by inspecting `.claude/scratchpad.md`'s `## Tier:` value, unchanged from the value set at classification (or the one escalation FR-2.1 permits).
 - **UC-5-EC2: the tracer-gate notice wording is tier-aware, not the legacy fallback (FR-4.5, AC-27)** — a `quick`-tier plan's single slice, carrying no `**Tracer:** yes` marker, causes `/implement-slice` to print `tier: quick, single-slice plan is exempt from the tracer requirement by design`. The pre-existing "tracer gate inactive — no `**Tracer:** yes` marker found; treating as pre-F3 plan." wording is reserved exclusively for a plan where `## Tier:` is absent or reads `full` — printing the pre-F3 wording against a `## Tier: quick` plan would misdescribe a deliberate, post-F4 design choice as an accident of an old plan format, which is the specific confusion FR-4.5 exists to prevent.
+- **UC-5-EC3: the Tier Check preamble is fail-closed, not merely two-branched (FR-4.7)** — `/merge-ready`'s Tier Check preamble treats ANY `## Tier:` value other than the literal string `quick` as running all 9 gates unmodified — not only the `full`/absent cases already documented above. A typo (`## Tier: quik`), merge-conflict garbage left in the field, or any other non-`quick` string all resolve to the full, unreduced gate sequence; this is the rule itself, not a fallback that happens to cover those two named cases. **Residual risk, recorded rather than resolved:** `.claude/scratchpad.md` is a tracked file, so a hostile repository could pre-commit the literal `## Tier: quick` to attempt downgrading a *standalone* `/merge-ready` run before `/bootstrap-feature` ever gets a chance to re-own and reset the field itself (FR-2.8). This is mitigated, not eliminated: skipped gates always render as explicit `SKIPPED (tier: quick)` rows — never a silently blank cell — and Gate 2 (Code Review)/Gate 3 (Security Audit) still run against the diff regardless of tier.
 
 ### Data Requirements
 - **Input**: a plain feature/fix description (no PRD/use-cases/QA); the literal `no-changelog` token passed to `/implement-slice`
@@ -413,7 +414,7 @@ None at this UC's level — refusal paths are UC-12.
 None — a validator failure IS the intended, correct behavior here; this UC documents the pass/fail contrast, not a validator malfunction.
 
 ### Edge Cases
-- **UC-11-EC1: `install.sh`/CI table agreement (FR-10.3, FR-10.4(c))** — a hand-edit to `install.sh`'s own case-arm table (e.g. changing the `balanced:plan-critic` arm's `echo` value) that diverges from `scripts/ci/lib/model-profiles.js`'s table — even with every `agents/*.md` file itself correctly matching its declared profile — is caught by a distinct check within the same validator: it parses `install.sh`'s text (never executes it) and asserts the extracted `(profile, role, model)` triples exactly match the JS table, treating a matched `inherit:*)` wildcard as satisfying all 14 `inherit` rows. This fails by name too, not merely by a generic mismatch count.
+- **UC-11-EC1: `install.sh`/CI table agreement — bidirectional (FR-10.3, FR-10.4(c))** — a hand-edit to `install.sh`'s own case-arm table (e.g. changing the `balanced:plan-critic` arm's `echo` value) that diverges from `scripts/ci/lib/model-profiles.js`'s table — even with every `agents/*.md` file itself correctly matching its declared profile — is caught by a distinct check within the same validator: it parses `install.sh`'s text (never executes it) and asserts the extracted `(profile, role, model)` triples exactly match the JS table, treating a matched `inherit:*)` wildcard as satisfying all 14 `inherit` rows. This fails by name too, not merely by a generic mismatch count. **The comparison is bidirectional, not merely a per-parsed-arm check:** a case arm deleted outright, or rewritten into a shape the parser cannot match (e.g. a quoted `echo` value), produces no parse result at all — a check that only iterated successfully-parsed arms would silently skip it, identical in effect to the arm never having been reviewed. The validator therefore also asserts the full expected `<profile>:<role>` matrix was actually extracted (naming any missing pair by key), and separately reports, by name, any line inside `model_for_role()`'s body that is neither a recognized case arm, the wildcard, nor known function scaffolding — since `bash` would still execute such a line even though a parse-only check would miss it.
 - **UC-11-EC2: anti-vacuity** — `node scripts/ci/validate-model-profile.js` run against an empty or absent `agents/` tree fails via `requireMinimum`, mirroring every existing validator's anti-vacuity floor (FR-10.4) — it does not silently report success for a tree it never actually scanned. Together with UC-11's primary flow (fixture b), UC-11-A1 (fixture a), and UC-11-EC1 (fixture c), this satisfies AC-10's requirement that the validator "exits 0 against the real repository tree with no `.sdlc-model-profile` present, and exits non-zero against each of FR-10.4's three seeded-bad fixtures, each failing for the specific reason its fixture encodes."
 
 ### Data Requirements
@@ -636,6 +637,38 @@ None beyond the two scenarios above — this UC's whole content IS the error/deg
 
 ---
 
+## UC-19: Triage-Parity CI Check — Divergence Caught By Name
+
+**Actor**: CI (`node scripts/ci/validate-triage-parity.js`, invoked by `.github/workflows/ci.yml`'s `validate-assets` job)
+**Preconditions**: `skills/develop-feature/SKILL.md` and `src/claude.md` both exist, each containing a Steps 1-7 triage classification block (FR-1.1–FR-1.8's restatement)
+**Trigger**: `.github/workflows/ci.yml`'s `validate-assets` job runs `node scripts/ci/validate-triage-parity.js` — an existing, automatic CI trigger (push/PR), never a manually-run script. This closes a false-safety-net gap discovered mid-review: both files claim, in identical prose, "A CI check greps both copies for parity" over Steps 1-7 — a claim that was false until this validator existed.
+
+### Primary Flow (Seeded One-Step Divergence — Step 4 Named By Number)
+1. A fixture pair of files, otherwise identical mirrors of the real Steps 1-7 block, diverges at exactly one point: `src/claude.md`'s Step 4 states a file-count bound of "1 and 5" where `skills/develop-feature/SKILL.md`'s Step 4 states "1 and 3" (`tests/fixtures/ci/triage-parity/bad-step4-drift/`).
+2. The validator extracts each file's Steps 1-7 block (from the first line matching `**Step 1 —` to the first `**Tier branch —` line following it, treating fenced code blocks as opaque).
+3. The two extracted blocks are not byte-identical, so the validator splits each into per-`**Step N —` chunks and compares them individually.
+4. Step 4's chunks differ; the validator reports, by name, `Step 4 differs between skills/develop-feature/SKILL.md and src/claude.md`, plus a short context snippet at the first differing character — never merely "files differ."
+5. `node scripts/ci/validate-triage-parity.js` exits non-zero.
+
+**Postconditions (AC-32)**: exit code non-zero; the output names Step 4 specifically as the differing step, with a locating context snippet.
+
+### Alternative Flows
+- **UC-19-A1: real, unmodified repository tree — passes** — at HEAD, `skills/develop-feature/SKILL.md`'s and `src/claude.md`'s Steps 1-7 blocks are byte-identical; the validator's extraction and comparison find no divergence; `node scripts/ci/validate-triage-parity.js` exits 0. This is the positive baseline UC-19's primary flow's seeded fixture is contrasted against — proving the check does not fire a false positive against the tree it protects.
+
+### Error Flows
+None — a validator failure IS the intended, correct behavior on a seeded fixture (mirrors UC-11's own framing for the model-profile drift validator).
+
+### Edge Cases
+- **UC-19-EC1: anti-vacuity** — `node scripts/ci/validate-triage-parity.js` run against an empty or absent tree (neither source file present) fails via `requireMinimum`, mirroring every existing validator's anti-vacuity floor — it does not silently report success for a tree it never actually scanned.
+- **UC-19-EC2: the Step 6 sensitive-path-defaults re-assertion is independent of the byte-diff** — even when both blocks are byte-identical (or a divergence lies entirely outside Step 6), the validator separately re-checks that both copies still enumerate all 9 of Step 6's fixed sensitive-path defaults (`auth`, `payment`, `billing`, `secret`, `migration`, `.github/workflows/`, `install.sh`, `.claude/settings.json`, `docs/PRD.md`). A default silently dropped from BOTH copies in the same edit would otherwise pass a parity-only diff — the two files would still agree with each other — while still being a security regression, since that list is what forces `full` routing under FR-1.3(c) regardless of what a project declares.
+
+### Data Requirements
+- **Input**: the two files' Steps 1-7 text content
+- **Output**: PASS (exit 0) or FAIL naming the specific differing step, or the specific missing sensitive-path default
+- **Side Effects**: none — a read-only CI check
+
+---
+
 ## Traceability
 
 Every UC (including its alternative/error/edge sub-flows) maps to at least one FR from PRD Section 10. This confirms FR-1 through FR-13 are each covered by at least one use case — no FR is left with only thin, invented coverage.
@@ -646,7 +679,7 @@ Every UC (including its alternative/error/edge sub-flows) maps to at least one F
 | UC-2 (+A1–A3, EC1, EC2) | Full-Tier Classification — New API Endpoint | FR-1.2, FR-1.3, FR-1.7, FR-1.8, FR-5.1 |
 | UC-3 (+A1, EC1) | Genuinely Ambiguous Classification — the Tie-Break Rule | FR-1.2, FR-1.5, FR-1.6, FR-1.8 |
 | UC-4 (+E1, EC1) | Fast-Tier Execution | FR-3.1, FR-3.2, FR-3.3, FR-3.4, FR-3.5 |
-| UC-5 (+A1, E1, EC1, EC2) | Quick-Tier Execution | FR-4.1, FR-4.2, FR-4.3, FR-4.4, FR-4.5, FR-4.6, FR-4.7, FR-4.8 |
+| UC-5 (+A1, E1, EC1, EC2, EC3) | Quick-Tier Execution | FR-4.1, FR-4.2, FR-4.3, FR-4.4, FR-4.5, FR-4.6, FR-4.7, FR-4.8 |
 | UC-6 (+A1, EC1) | Fast → Quick Escalation | FR-2.1, FR-2.3, FR-2.7 |
 | UC-7 (+A1, E1, EC1, EC2) | Quick → Full Escalation | FR-2.2, FR-2.4, FR-2.8 |
 | UC-8 (+A1, EC1, EC2) | Full Feature That Turns Out Simple — No Downgrade | FR-2.5, FR-2.6, NFR-3 |
@@ -660,12 +693,15 @@ Every UC (including its alternative/error/edge sub-flows) maps to at least one F
 | UC-16 (+A1, EC1, EC2) | Digest Index Write — Gate 7 | FR-12.1, FR-12.2, FR-12.6 |
 | UC-17 (+A1, A2, EC1) | Statusline — Full Field Rendering | FR-13.1, FR-13.2, FR-13.3, FR-13.4 |
 | UC-18 (+A1, EC1, EC2) | Statusline Absent/Malfunctioning — Visible Degradation | FR-13.5, FR-13.6, FR-13.7, FR-13.8 |
+| UC-19 (+A1, EC1, EC2) | Triage-Parity CI Check — Divergence Caught By Name | FR-1.9 |
 
-**FR coverage check**: FR-1 (UC-1, UC-2, UC-3), FR-2 (UC-6, UC-7, UC-8), FR-3 (UC-4), FR-4 (UC-5), FR-5 (UC-2, UC-8), FR-6 (UC-9), FR-7 (UC-10, UC-12, UC-13), FR-8 (UC-10), FR-9 (UC-13, UC-14), FR-10 (UC-11, UC-14), FR-11 (UC-10-A2), FR-12 (UC-15, UC-16), FR-13 (UC-17, UC-18) — every FR-1 through FR-13 has at least one covering use case, including the four sub-requirements this re-sync added: **FR-2.8** (`## Tier:` always affirmatively owned — UC-7 step 6, UC-7-EC2, UC-8-EC2), **FR-4.8** (rationale for keeping Gates 2/3/4 — UC-5's Rationale line), **FR-7.6** (the mandatory session-pickup spike — UC-10-A4), and **FR-13.8** (visible spawn failure with no Node runtime, distinct from the unconfigured case — UC-18-EC2).
+**FR coverage check**: FR-1 (UC-1, UC-2, UC-3; FR-1.9 additionally covered by UC-19), FR-2 (UC-6, UC-7, UC-8), FR-3 (UC-4), FR-4 (UC-5), FR-5 (UC-2, UC-8), FR-6 (UC-9), FR-7 (UC-10, UC-12, UC-13), FR-8 (UC-10), FR-9 (UC-13, UC-14), FR-10 (UC-11, UC-14), FR-11 (UC-10-A2), FR-12 (UC-15, UC-16), FR-13 (UC-17, UC-18) — every FR-1 through FR-13 has at least one covering use case, including the five sub-requirements this re-sync and its follow-up review round added: **FR-2.8** (`## Tier:` always affirmatively owned — UC-7 step 6, UC-7-EC2, UC-8-EC2), **FR-4.8** (rationale for keeping Gates 2/3/4 — UC-5's Rationale line), **FR-7.6** (the mandatory session-pickup spike — UC-10-A4), **FR-13.8** (visible spawn failure with no Node runtime, distinct from the unconfigured case — UC-18-EC2), and **FR-1.9** (the triage-parity CI check, added because both `skills/develop-feature/SKILL.md` and `src/claude.md` claimed a check existed that did not — UC-19).
 
 **Structural requirements with no independent runtime behavior beyond what the UCs above already exercise, noted here rather than given invented scenario coverage:** FR-6.4 (skill count 5→7) and NFR-5 (asset budget: agents remain 14, skills 5→7, hooks remain 9 ids/10 registrations) are file-count facts verified directly against the repository tree (`ls agents/*.md | wc -l`, `ls skills/*/SKILL.md | wc -l`, `ls hooks/handlers/*.js | wc -l`, per AC-21) — a `planner`/`code-reviewer` invocation happening at all under the new skills requires the skill files to exist and be counted correctly, which UC-9's primary flow already exercises structurally. FR-13.7 (statusline consumes zero hook-budget slots) is likewise a structural fact about `hooks/hooks.json` registration counts, not a behavior UC-17/UC-18 could exercise differently. FR-10.5 (CI wiring — the `validate-assets` job invoking the new validator plus its `--expect-failure` steps) is the mechanism BY WHICH UC-11's scenarios run in CI, not a separate behavior of its own.
 
 **NFR coverage note:** NFR-1 (autonomy contract) is addressed once, globally, in the Autonomy Audit paragraph above rather than per-UC, per this document's own stated methodology. NFR-2 (no new mandatory pipeline stage) is UC-9's central point — `/sdlc-fast`/`/sdlc-quick` are named the sole exception. NFR-3 (backward compatibility) is UC-8-EC2 and UC-13. NFR-4 (Node zones) is exercised by UC-10-EC1 (install.sh stays no-node/no-jq), UC-11 (the CI zone), and UC-17/UC-18 (the statusline as the fourth, independent zone). NFR-6 (`effort:` fixed, not profile-dependent) is UC-10-A2.
 
 **Architect re-review disposition (this re-sync's own accounting):** the prior version of this document contradicted the revised PRD at exactly the points the architect's FAIL identified — Critical Findings 1–3 (the quick→full tier-rewrite race, `/sdlc-fast`'s self-blocking tool grant, and quick tier's PRD/use-case/QA-absence dead-end) plus the Major findings (AC-7's arithmetic, the unsafe rewrite idiom, FR-2.2(b)'s missing mid-quick-run triggers, FR-1.7's replace-vs-union semantics) are now reflected in UC-1 through UC-18 above, not merely in this table. The two rulings the architect recorded as positive and not re-litigated — FR-1.3/FR-1.4's classification signals being genuinely mechanical (UC-1/UC-2/UC-3), and FR-13.6's statusline no-reverse-dependency prohibition (UC-18) — required no change and are unchanged from the prior version.
+
+**Merge-ready Gate 7 documentation-accuracy pass (post-implementation reconciliation):** three further points surfaced during implementation and review, after the architect re-sync above, and are now reflected here: UC-5-EC3 records `/merge-ready`'s Tier Check preamble as fail-closed (any `## Tier:` value other than the literal `quick` runs all 9 gates, not only `full`/absent) plus its recorded residual risk; UC-11-EC1 records the install.sh/CI model-table check becoming bidirectional (a deleted or unparseably-rewritten case arm is now caught, not only a value mismatch on an arm that still parses); and UC-19 documents `scripts/ci/validate-triage-parity.js`, added because both triage copies claimed a CI parity check existed when none did.
 

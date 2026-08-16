@@ -17,3 +17,4 @@ relevant rows when fewer than 2 exist) and proceed without inventing relevance t
 
 | Section | Title | Summary (≤300 characters) | Docs |
 |---|---|---|---|
+| 10 | Adaptive Tier Routing and Model Routing | Adds automatic fast/quick/full triage so trivial fixes cost one response while real features still get full documentation, plus install-time model-tier profiles (quality/balanced/budget/inherit) with a CI check that catches drifted or hand-edited agent models. | [PRD §10](PRD.md#10-adaptive-tier-routing-and-model-routing) · [use cases](use-cases/adaptive-tier-routing_use_cases.md) · [QA](qa/adaptive-tier-routing_test_cases.md) |

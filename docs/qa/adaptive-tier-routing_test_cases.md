@@ -6,7 +6,7 @@
 
 ## 1. Testing Approach and Test-Kind Classification
 
-**System context:** this feature has two halves with genuinely different testability. The **triage/escalation/execution half** (FR-1 through FR-6) lives entirely in the orchestrating model's own behavior — restated classification signals in `skills/develop-feature/SKILL.md` and `src/claude.md`, tier-branching prose in `skills/bootstrap-feature/SKILL.md`, `skills/implement-slice/SKILL.md`, `skills/merge-ready/SKILL.md`, and a Quick-Tier Contract mode added to `agents/planner.md`. Observing it requires either invoking one named subagent against a crafted input (FIXTURE) or driving the top-level orchestrating session through a real request-response turn (BEHAVIORAL) — there is no scripted stand-in for either in this repository today, exactly as `verification-review-upgrade_test_cases.md` found for its own agent/skill-prompt subject matter. The **model-routing half** (FR-7 through FR-11, FR-13) is different in kind: `install.sh --profile` is a real, syntax-checkable shell script producing real file diffs; `scripts/ci/validate-model-profile.js` is real, zero-dependency Node following this repo's existing `core.run`/`Validator`/`--expect-failure` pattern (verified present at HEAD in `scripts/ci/lib/validate-core.js`); `templates/statusline.js` is a real Node script that reads stdin JSON and a scratchpad file and prints one line to stdout. All three can be exercised by spawning a real process against a fixture or scratch checkout — zero LLM/agent invocations required. This is why F4's STATIC share is materially higher than a prompt-only feature's: the artifacts under test are not all prose.
+**System context:** this feature has two halves with genuinely different testability. The **triage/escalation/execution half** (FR-1 through FR-6) lives almost entirely in the orchestrating model's own behavior — restated classification signals in `skills/develop-feature/SKILL.md` and `src/claude.md`, tier-branching prose in `skills/bootstrap-feature/SKILL.md`, `skills/implement-slice/SKILL.md`, `skills/merge-ready/SKILL.md`, and a Quick-Tier Contract mode added to `agents/planner.md`. Observing it requires either invoking one named subagent against a crafted input (FIXTURE) or driving the top-level orchestrating session through a real request-response turn (BEHAVIORAL) — there is no scripted stand-in for either in this repository today, exactly as `verification-review-upgrade_test_cases.md` found for its own agent/skill-prompt subject matter. **One exception within this half:** FR-1.9's `scripts/ci/validate-triage-parity.js` is a real, zero-dependency Node script keeping the two restated-signal copies in sync — STATIC, like the model-routing half below, not FIXTURE/BEHAVIORAL like the rest of FR-1 through FR-6. The **model-routing half** (FR-7 through FR-11, FR-13) is different in kind: `install.sh --profile` is a real, syntax-checkable shell script producing real file diffs; `scripts/ci/validate-model-profile.js` is real, zero-dependency Node following this repo's existing `core.run`/`Validator`/`--expect-failure` pattern (verified present at HEAD in `scripts/ci/lib/validate-core.js`); `templates/statusline.js` is a real Node script that reads stdin JSON and a scratchpad file and prints one line to stdout. All three, plus FR-1.9's validator, can be exercised by spawning a real process against a fixture or scratch checkout — zero LLM/agent invocations required. This is why F4's STATIC share is materially higher than a prompt-only feature's: the artifacts under test are not all prose.
 
 Every test case below is classified into exactly one of three kinds, stated as its own column:
 
@@ -67,7 +67,7 @@ Restated from the PRD/use-case documents only for this document's own readabilit
 | TC-1.2 | UC-1-A1 | BEHAVIORAL | Single hardcoded literal, no logic change → `fast` | Request: "bump the retry timeout constant from 3000 to 5000 in `src/config.ts`" | Submit; capture pre-Edit response text | `tier: fast` stated with FR-1.4(b)'s literal-only-change reason. Not automatable in CI today |
 | TC-1.3 | UC-1-A2 | BEHAVIORAL | Dependency-version bump requiring no source change → `fast` | Request: "bump `lodash` from 4.17.20 to 4.17.21 in `package.json`" | Submit; capture pre-Edit response text | `tier: fast` stated with FR-1.4(b)'s dependency-bump reason. Not automatable in CI today |
 | TC-1.4 | UC-1-EC1 | BEHAVIORAL | A 1-file request with a logic change riding along does NOT qualify `fast` | Request: "fix the typo in the discount calculation, and while you're in there also correct the off-by-one in the loop" | Submit; capture pre-Edit response text | Response does NOT state `tier: fast` — FR-1.4(b)'s "no accompanying logic change" clause fails despite the 1-file count; the request is instead evaluated against FR-1.5/FR-1.6 (cross-reference TC-3.3 for the sibling judgment-clause case). Not automatable in CI today |
-| TC-1.5 | FR-1.1 (structural, dual-definition parity) | STATIC | `skills/develop-feature/SKILL.md`'s Phase 0 and `src/claude.md`'s Triage restatement state identical classification signals | Both files exist | Grep both files for the FR-1.3(a)–(d), FR-1.4(a)–(b), FR-1.5, and FR-1.6 signal text | Both files state matching signal text for all four requirements — a hand-drift between the two copies (an accepted, named risk per 10.10 Risk 1's sibling framing, not mechanized by this feature) is at least caught by a direct diff at test-authoring/review time |
+| TC-1.5 | FR-1.1 (structural, dual-definition parity) | STATIC | `skills/develop-feature/SKILL.md`'s Phase 0 and `src/claude.md`'s Triage restatement state identical classification signals | Both files exist | Grep both files for the FR-1.3(a)–(d), FR-1.4(a)–(b), FR-1.5, and FR-1.6 signal text | Both files state matching signal text for all four requirements — this is a manual/direct-diff spot check at test-authoring/review time; the byte-for-byte, name-the-differing-step version of this same check is now mechanized in CI by `scripts/ci/validate-triage-parity.js` (FR-1.9, UC-19) |
 
 ---
 
@@ -125,6 +125,7 @@ Restated from the PRD/use-case documents only for this document's own readabilit
 | TC-5.13 | AC-24 | BEHAVIORAL | Exactly one `CHANGELOG.md` entry for a quick-tier feature, never two | A completed quick-tier run | Inspect the transcript for the `/implement-slice` invocation's arguments; inspect `CHANGELOG.md` after `/merge-ready` Finalization | The `/implement-slice` invocation was made with the literal `no-changelog` token; exactly one `CHANGELOG.md` entry exists for the feature, and it is the one `/merge-ready`'s Finalization step wrote (not an earlier, differently-named standalone entry). Not automatable in CI today |
 | TC-5.14 | AC-24 (defect-proof) | BEHAVIORAL | Omitting the `no-changelog` token produces two changelog entries under different names, uncaught by the name-keyed idempotency guard | A quick-tier run where `/implement-slice` is (deliberately, for this test) invoked WITHOUT the `no-changelog` token | Run to completion; inspect `CHANGELOG.md` | Two entries exist: one written by `/implement-slice` Step 6 under its own standalone-fix name, one written by `/merge-ready` Finalization under the feature's own name — proving the exactly-once rule is violated precisely because the two names differ and the idempotency guard (keyed on name) cannot catch it. This is the specific defect FR-4.3's mandatory-token language exists to prevent. Not automatable in CI today |
 | TC-5.15 | FR-4.8 | STATIC | `skills/merge-ready/SKILL.md` states the rationale for why Gates 2, 3, 4 survive the reduction | `skills/merge-ready/SKILL.md` exists | Read the Tier Check preamble section | Text states Gate 2/Gate 3 review the diff itself (not a documentation artifact) and Gate 4 is deterministic, and that skipping them would make `quick` a synonym for "unreviewed" |
+| TC-5.16 | UC-5-EC3, FR-4.7 | STATIC | The Tier Check preamble is fail-closed — any `## Tier:` value other than the literal `quick` runs all 9 gates, not only `full`/absent — and the repo-controlled-state residual risk is recorded | `skills/merge-ready/SKILL.md` exists | Read the Tier Check preamble section | States the fail-closed rule explicitly (a value other than the literal string `quick` — e.g. a typo or merge-conflict garbage — runs all 9 gates unmodified, identically to `full`/absent); separately records the residual risk that `.claude/scratchpad.md` is repo-controlled, tracked state a hostile repository could pre-commit `## Tier: quick` into, mitigated by always-rendered `SKIPPED` rows and Gate 2/Gate 3 still reviewing the diff regardless of tier |
 
 ---
 
@@ -213,6 +214,7 @@ Restated from the PRD/use-case documents only for this document's own readabilit
 | TC-11.4 | UC-11-EC2 (negative/false-positive, required coverage item), FR-10.3 | STATIC | The `inherit:*)` wildcard arm in `install.sh` correctly satisfies all 14 `inherit` rows — an agent whose `model:` legitimately matches its profile is never flagged as drift | Implementation complete; a fixture where `.sdlc-model-profile` reads `inherit`, all 14 files correctly read `model: inherit`, and `install.sh`'s table contains the single `inherit:*) echo inherit ;;` wildcard (not 14 individual `inherit` arms) | `node scripts/ci/validate-model-profile.js` against this fixture | Exit code 0 — the wildcard match is accepted as satisfying all 14 rows; no false-positive "missing inherit arm" finding for any of the 14 roles |
 | TC-11.5 | UC-11-EC2, FR-10.4 (anti-vacuity) | STATIC | Validator fails on an empty/absent `agents/` tree, mirroring every existing validator's anti-vacuity floor | Implementation complete | `node scripts/ci/validate-model-profile.js --root "$(mktemp -d)" --expect-failure "matches too few files"` | Substring match succeeds — the exact anti-vacuity phrasing this repo's other validators already use (verified at HEAD in `.github/workflows/ci.yml`) |
 | TC-11.6 | AC-10 (positive baseline) | STATIC | The validator exits 0 against the real repository tree with no `.sdlc-model-profile` present | Implementation complete; the real, un-modified repository checkout (shipped `quality` baseline, no receipt ever written) | `node scripts/ci/validate-model-profile.js` against the repo root | Exit code 0 — valid only because FR-8.2's `quality`-equals-baseline guarantee holds |
+| TC-11.7 | UC-11-EC1 (extended), FR-10.3 | STATIC | The install.sh/CI table-agreement check is bidirectional: it also catches an arm deleted outright or rewritten into an unparseable shape, not only a value mismatch on an arm that still parses | `scripts/ci/validate-model-profile.js` exists | Read `checkInstallTable()`'s implementation | Beyond Direction 1 (TC-11.3's parsed-arm value comparison), the function separately (Direction 2) asserts every expected `<profile>:<role>` pair was actually extracted from `model_for_role()` — naming any missing pair by its `profile:role` key — and (Direction 3) reports, by name, any line inside the function body that is neither a recognized case arm, the `inherit:*)` wildcard, nor known function scaffolding as an unparseable line. **Honest coverage note:** Direction 1 alone is exercised by the committed `install-table-mismatch` fixture (TC-11.3); Directions 2 and 3 are implemented but have no dedicated seeded-bad fixture committed under `tests/fixtures/ci/model-profile/` as of this feature's shipped scope — recorded here rather than left undocumented, mirroring this document's own convention of stating a coverage gap plainly rather than implying a fixture exists that does not |
 
 ---
 
@@ -308,7 +310,20 @@ The architect noted FR-11.4 (`validate-agents.js` gaining `effort` as a required
 
 ---
 
-## 22. Negative / False-Positive Cases (Consolidated Index)
+## 22. UC-19: Triage-Parity CI Check — Divergence Caught By Name
+
+**Added after an architect re-sync and a security-relevant review finding:** both `skills/develop-feature/SKILL.md` and `src/claude.md` claim, in identical prose, "A CI check greps both copies for parity" over their Steps 1-7 classification block — a claim that was false until `scripts/ci/validate-triage-parity.js` (FR-1.9) existed. This section mirrors UC-11's structure for the model-profile drift validator.
+
+| TC ID | UC Scenario | Kind | Test Case | Preconditions | Steps | Expected Result |
+|---|---|---|---|---|---|---|
+| TC-19.1 | UC-19 Primary Flow, AC-32 | STATIC | A seeded one-step divergence (Step 4) is caught and named by number, not merely reported as "files differ" | Implementation complete; `tests/fixtures/ci/triage-parity/bad-step4-drift/`: mirror copies of the Steps 1-7 block, diverging only at Step 4's file-count bound | `node scripts/ci/validate-triage-parity.js --root tests/fixtures/ci/triage-parity/bad-step4-drift --min 1 --expect-failure "Step 4 differs between skills/develop-feature/SKILL.md and src/claude.md"` | Substring match succeeds — the failure names Step 4 specifically, with a context snippet at the first differing character, not a generic "files differ" |
+| TC-19.2 | UC-19-A1, AC-32 (positive baseline) | STATIC | The validator exits 0 against the real repository tree — the two copies are byte-identical at HEAD | Implementation complete; the real, un-modified repository checkout | `node scripts/ci/validate-triage-parity.js` against the repo root | Exit code 0 |
+| TC-19.3 | UC-19-EC1, AC-32 (anti-vacuity) | STATIC | Validator fails on an empty/absent tree, mirroring every existing validator's anti-vacuity floor | Implementation complete | `node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few"` | Substring match succeeds — the exact anti-vacuity phrasing this repo's other validators already use (verified at HEAD in `.github/workflows/ci.yml`) |
+| TC-19.4 | UC-19-EC2, FR-1.9 | STATIC | The Step 6 sensitive-path-defaults re-assertion fires independently of the byte-diff — a default silently dropped from BOTH copies would be its own named failure, not merely a parity pass | `scripts/ci/validate-triage-parity.js` exists | Read `checkSensitiveDefaults()`'s implementation and its call sites | The function checks each of Step 6's 9 fixed sensitive-path defaults against each file's own extracted block independently of the byte-comparison, so two copies that agree with EACH OTHER but have both dropped the same default still fail, naming the missing token. **Honest coverage note:** no seeded-bad fixture committed under `tests/fixtures/ci/triage-parity/` exercises this specific path (only the Step-4-divergence shape, TC-19.1, is fixture-backed) — recorded here as a source-verified, not fixture-verified, assertion |
+
+---
+
+## 23. Negative / False-Positive Cases (Consolidated Index)
 
 A guard, filter, or classification signal that fires when it should not is what stalls an unattended run — as important as the positive cases.
 
@@ -324,10 +339,11 @@ A guard, filter, or classification signal that fires when it should not is what 
 | 8 | An install with no `--profile` flag introduces zero drift on its own | TC-13.1 |
 | 9 | An empty plan/gates state renders as an omission, never a literal `0/0` | TC-17.3 |
 | 10 | A `full`-tier feature that turns out trivial is never silently downgraded mid-run | TC-8.1 |
+| 11 | The two triage-parity copies, byte-identical at HEAD, do not produce a false divergence finding | TC-19.2 |
 
 ---
 
-## 23. AC → TC Coverage Table
+## 24. AC → TC Coverage Table
 
 | AC | Test Case(s) |
 |---|---|
@@ -362,12 +378,13 @@ A guard, filter, or classification signal that fires when it should not is what 
 | AC-29 | TC-10.8 |
 | AC-30 | TC-10.5, TC-10.6 |
 | AC-31 | TC-2.6 |
+| AC-32 | TC-19.1, TC-19.2, TC-19.3 |
 
-Every AC-1 through AC-31 is named and covered by at least one test case; none is padded with a vacuous case.
+Every AC-1 through AC-32 is named and covered by at least one test case; none is padded with a vacuous case.
 
 ---
 
-## 24. UC → TC Coverage Table
+## 25. UC → TC Coverage Table
 
 | UC Scenario | Test Case(s) |
 |---|---|
@@ -392,6 +409,7 @@ Every AC-1 through AC-31 is named and covered by at least one test case; none is
 | UC-5-E1 | TC-5.7 |
 | UC-5-EC1 | TC-5.10 |
 | UC-5-EC2 | TC-5.11, TC-5.12 |
+| UC-5-EC3 | TC-5.16 |
 | UC-6 Primary Flow | TC-6.1 |
 | UC-6-A1 | TC-6.2 |
 | UC-6-EC1 | TC-6.3 |
@@ -417,7 +435,7 @@ Every AC-1 through AC-31 is named and covered by at least one test case; none is
 | UC-10-EC2 | TC-10.8 |
 | UC-11 Primary Flow | TC-11.1 |
 | UC-11-A1 | TC-11.2 |
-| UC-11-EC1 | TC-11.3 |
+| UC-11-EC1 | TC-11.3, TC-11.7 (bidirectional extension) |
 | UC-11-EC2 | TC-11.4, TC-11.5 |
 | UC-12 Primary Flow | TC-12.1 |
 | UC-12-EC1 | TC-12.2 |
@@ -442,18 +460,22 @@ Every AC-1 through AC-31 is named and covered by at least one test case; none is
 | UC-18-A1 (Scenario B) | TC-18.3 |
 | UC-18-EC1 | No dedicated TC — cross-referenced to TC-18.1's structural grep, which already proves the claim this edge case states |
 | UC-18-EC2 | TC-18.4, TC-18.5 |
+| UC-19 Primary Flow | TC-19.1 |
+| UC-19-A1 | TC-19.2 |
+| UC-19-EC1 | TC-19.3 |
+| UC-19-EC2 | TC-19.4 |
 
-Every UC-1 through UC-18 primary flow, and every documented `-A`/`-E`/`-EC` sub-flow, is covered by at least one named test case, or its absence is explicitly stated with reasoning (UC-7-E1, UC-16-EC1, UC-16-EC2, UC-18-EC1) rather than padded with an invented, redundant fixture.
+Every UC-1 through UC-19 primary flow, and every documented `-A`/`-E`/`-EC` sub-flow, is covered by at least one named test case, or its absence is explicitly stated with reasoning (UC-7-E1, UC-16-EC1, UC-16-EC2, UC-18-EC1) rather than padded with an invented, redundant fixture.
 
 ---
 
-## 25. Count Summary
+## 26. Count Summary
 
 | Kind | Count | Automatable in this repo's CI today |
 |---|---|---|
-| STATIC | 47 | Yes — 47/47, once this feature ships. Runnable via `bash -n install.sh`, `bash install.sh --local --profile <name>` against a scratch checkout, `node scripts/ci/validate-model-profile.js`/`validate-agents.js` with `--expect-failure "<substring>"`, `node templates/statusline.js` fed a fixture stdin, and plain grep/file-read checks — all zero-LLM, using this repository's existing validator infrastructure with no new harness required. Two STATIC-adjacent items (TC-10.6, TC-17.5) are excluded from this count and classified BEHAVIORAL below because they are one-time human-observed spikes, not scriptable checks |
+| STATIC | 53 | Yes — 53/53, once this feature ships. Runnable via `bash -n install.sh`, `bash install.sh --local --profile <name>` against a scratch checkout, `node scripts/ci/validate-model-profile.js`/`validate-agents.js`/`validate-triage-parity.js` with `--expect-failure "<substring>"`, `node templates/statusline.js` fed a fixture stdin, and plain grep/file-read checks — all zero-LLM, using this repository's existing validator infrastructure with no new harness required. Two STATIC-adjacent items (TC-10.6, TC-17.5) are excluded from this count and classified BEHAVIORAL below because they are one-time human-observed spikes, not scriptable checks |
 | FIXTURE | 10 | No — 0/10 today. Each requires a live, single-agent invocation (`planner`, `code-reviewer`, `security-auditor`, `test-writer`, or `doc-updater`) against a committed fixture; this repo has no LLM-invocation harness to script that. Fixtures are specified precisely enough that a human, or a future eval harness, can run them exactly as written |
 | BEHAVIORAL | 43 | No — 0/43 today. Each requires driving the top-level orchestrating session through a real multi-step turn (or, for TC-10.6/TC-17.5, a one-time human-observed spike investigation) and observing the aggregate outcome; there is no scripted driver for that in this repo. One case (TC-14.2) is additionally flagged as not deterministically scriptable even with future LLM-invocation tooling, since it depends on process-signal timing this repo's own scripts do not expose a hook for |
-| **Total** | **100** | **47/100 (47%) automatable in CI today, once implemented** |
+| **Total** | **106** | **53/106 (50%) automatable in CI today, once implemented** |
 
-This 47% figure is materially higher than a prompt-only feature's ceiling (compare `verification-review-upgrade_test_cases.md`'s 24.5%), and that difference is real, not rounding: F4's model-routing half ships actual executable artifacts — `install.sh`'s `--profile` rewrite, `scripts/ci/validate-model-profile.js`, and `templates/statusline.js` — that a shell/Node process can exercise with zero LLM involvement, exactly as this repository's existing validators already do for its other structural checks. The triage/escalation/quick-tier-execution half, by contrast, is genuinely agent-prompt-and-orchestrator-behavior subject matter with the same ceiling the sibling document already established, and this document does not pretend otherwise. Rounding any FIXTURE or BEHAVIORAL case up to "automated today," or disguising a one-time investigative spike (TC-10.6, TC-17.5) as a repeatable regression test, would be exactly the defect this harness's own QA discipline exists to prevent.
+This 50% figure is materially higher than a prompt-only feature's ceiling (compare `verification-review-upgrade_test_cases.md`'s 24.5%), and that difference is real, not rounding: F4's model-routing half ships actual executable artifacts — `install.sh`'s `--profile` rewrite, `scripts/ci/validate-model-profile.js`, `scripts/ci/validate-triage-parity.js`, and `templates/statusline.js` — that a shell/Node process can exercise with zero LLM involvement, exactly as this repository's existing validators already do for its other structural checks. The triage/escalation/quick-tier-execution half, by contrast, is genuinely agent-prompt-and-orchestrator-behavior subject matter with the same ceiling the sibling document already established, and this document does not pretend otherwise. Rounding any FIXTURE or BEHAVIORAL case up to "automated today," or disguising a one-time investigative spike (TC-10.6, TC-17.5) as a repeatable regression test, would be exactly the defect this harness's own QA discipline exists to prevent. The 6 test cases added during a post-implementation Gate 7 documentation-accuracy pass (TC-5.16, TC-11.7, TC-19.1 through TC-19.4) are counted here on the same basis as every other STATIC case — a grep/read/run-with-`--expect-failure` check requiring zero LLM involvement — not treated differently for having been added after the original QA draft.
