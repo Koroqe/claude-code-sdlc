@@ -250,3 +250,33 @@ are written and have their inputs committed, but none of the latter has an execu
 recorded result. The nearest-term actions that would move this to `VERIFIED` are the cheapest ones
 in `gaps`: push the branch so CI runs for the first time, and invoke `verifier` and `plan-critic`
 against their committed fixtures.
+
+## Amendments after generation
+
+This section is appended below the frontmatter after this report's generation; the frontmatter's
+`gaps`, `passed`, `verdict`, and `generated_at` fields are left byte-identical to the run that
+produced them, per Gate 6's freshness check.
+
+- **Gap closed — `agents/security-auditor.md` absent from `CORE_FILES`.** The `gaps` entry at
+  `location: agents/security-auditor.md:60-79` ("agents/security-auditor.md is absent from the CI
+  validator's CORE_FILES list...") no longer reflects the repository state.
+  `scripts/ci/validate-verification-upgrade.js`'s `CORE_FILES` list now includes
+  `agents/security-auditor.md`, with its own `checkSecurityAuditor` function asserting four frozen
+  strings (`80%`, `regardless of confidence`, `Classification is pinned`, `only when you were given
+  one`), and a dedicated falsify fixture,
+  `tests/fixtures/ci/verification-upgrade/bad-security-auditor-filter/`, wired into
+  `.github/workflows/ci.yml` as a sixth falsify step. Closed by this branch's post-report commits —
+  `6c1cc0c` ("close reviewer-gate bypass and unenforceable rules found at merge-ready") and/or
+  `84fc60f` ("freeze classification pin on both reviewers with a seeded fixture"); the exact commit
+  boundary between the `CORE_FILES` addition and the fixture addition was not independently
+  re-verified with `git show` in this documentation pass.
+- **`human_verification_required` item closed.** The item "A human must decide whether
+  `agents/security-auditor.md` should join the CI validator's `CORE_FILES` list, since it is
+  currently the only F3-modified agent with no feature-specific automated assertion." is resolved:
+  the decision was made (yes), and the change described above is done.
+- **Verdict unchanged.** `PRESENT_BEHAVIOR_UNVERIFIED` still stands. The substantive Level 4 gap
+  driving that verdict — 74 of the 98 documented test cases (52 FIXTURE + 22 BEHAVIORAL) have no
+  executor anywhere in the repository — is unaffected by the two closures above, which remove only
+  one specific STATIC-coverage gap. The remaining twelve `gaps` entries in the frontmatter (the
+  unexercised tracer run, the `--gaps` replan loop, the bootstrap critique loop, the CI push itself,
+  and the rest) are unaffected and remain open as documented above.

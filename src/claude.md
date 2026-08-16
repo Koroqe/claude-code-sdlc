@@ -59,6 +59,7 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
    - Software Architect reviews architecture (architect agent)
    - QA Lead writes test cases from use cases (qa-planner agent)
    - Tech Lead creates final implementation plan (planner agent)
+   - Plan Critic adversarially reviews the plan before Git Setup (plan-critic agent)
 
 2. **Loop `/implement-slice`** for each slice — TDD for each:
    - Tests first → implement → verify → commit → scratchpad
