@@ -280,3 +280,39 @@ produced them, per Gate 6's freshness check.
   one specific STATIC-coverage gap. The remaining twelve `gaps` entries in the frontmatter (the
   unexercised tracer run, the `--gaps` replan loop, the bootstrap critique loop, the CI push itself,
   and the rest) are unaffected and remain open as documented above.
+
+### plan-critic exercised against its fixtures (post-report)
+
+The gap "`agents/plan-critic.md` has never produced a finding" is now closed. The agent was run
+against all five committed fixtures:
+
+| Fixture | Expected BLOCKER | Fired |
+|---|---|---|
+| `agents/plan-critic/golden-plan.md` | none (negative control) | none — 0 BLOCKERs |
+| `agents/plan-critic/no-tracer-marker.md` | no slice marked `**Tracer:** yes` | yes |
+| `agents/plan-critic/wave1-non-tracer.md` | Wave 1 holds a non-tracer slice | yes |
+| `agents/plan-critic/union-mismatch.md` | `Files (union)` ≠ literal union | yes |
+| `plan-critic/defective-plan.md` | two slices in a wave share a file | yes |
+
+No BLOCKER cross-contaminated between fixtures, and each defective fixture's unrelated checks stayed
+silent — the union check did not fire on the shared-file fixture, and the shared-file check did not
+fire on the union fixture.
+
+**Extraction fidelity (AC-4):** every section of the captured 65-line pre-migration prompt maps onto
+the agent — Completeness 4/4, Slice Quality 5/5, File Path Verification 3/3, Architecture & Security
+5/5, Edge Cases 4/4, Scope Reduction 6/6 (all 14 hedging terms, all 3 carve-outs), Wave Assignment
+8/8. Nothing dropped, narrowed or made conditional beyond the declared 1:1 severity rename and the
+declared path generalization.
+
+**Two honest caveats recorded rather than smoothed over:**
+1. The golden plan yields 0 BLOCKERs but not 0 findings — it produces 2 WARNINGs and 2 INFOs, three
+   of which are constant across all five fixtures (the fixtures describe a hypothetical Express/React
+   app whose `src/...` paths cannot resolve inside this repository). Constant across the set, so the
+   differential still isolates the injected defect — but a future harness asserting "golden plan →
+   zero findings" would fail. The fixture claims zero BLOCKERs, and that held.
+2. The two tracer checks overlap by construction: a plan with no tracer anywhere *and* any `Wave:`
+   fields trips both. `no-tracer-marker.md` therefore yields 2 BLOCKERs, not 1. A harness asserting
+   on finding counts rather than on the presence of the expected BLOCKER must account for this.
+
+The overall verdict is unchanged. `PRESENT_BEHAVIOR_UNVERIFIED` still stands: the substantive gap —
+74 of 98 test cases have no executor — is untouched by this run.
