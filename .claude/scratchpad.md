@@ -1,6 +1,6 @@
 ## Feature: Adaptive Tier Routing and Model Routing (v4.0 roadmap F4)
 ## Branch: feat/adaptive-tier-routing
-## Status: implementing wave 1 slice 1/9
+## Status: implementing wave 2 slice 2/9
 ## Tier: full
 
 ## Docs
@@ -34,9 +34,9 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
 
 ## Plan (9 slices, 5 waves)
 
-### Wave 1
+### Wave 1 [complete]
 
-- [ ] **Slice 1: `install.sh --profile` — two-phase rewrite, receipt, dry-run, spike, receipt hygiene**
+- [x] **Slice 1 [DONE 63bd950]: `install.sh --profile` — two-phase rewrite, receipt, dry-run, spike, receipt hygiene**
   - **Wave:** 1
   - **Tracer:** yes
   - **Use cases:** UC-10 (+A1–A4, EC1, EC2), UC-12 (+EC1), UC-13 (+A1, EC1), UC-14 (write side, A1);
