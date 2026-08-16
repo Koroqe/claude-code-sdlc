@@ -1,7 +1,20 @@
 <!-- Fixture purpose: trips the "no tracer marker anywhere" BLOCKER check
      (FR-5.10(i)). Identical to golden-plan.md except the `**Tracer:** yes`
      marker has been removed from Slice 1 — no slice in this plan is marked
-     as the tracer. -->
+     as the tracer.
+
+     Known, accepted overlap (do not "fix" this away): because this plan
+     still has `Wave:` fields, the missing tracer marker necessarily also
+     trips the second BLOCKER check — "Wave 1 not tracer-only" — since Wave 1
+     cannot contain a tracer slice if no slice anywhere is marked as one.
+     That is the literal, intended reading of the Tracer Marker Validation
+     section in agents/plan-critic.md ("These two checks run on every plan
+     ... independent of whether the plan has Wave: fields"): a no-marker
+     waved plan legitimately fails both checks at once. This fixture is
+     therefore expected to yield exactly two BLOCKER findings, not one.
+     Every other path below resolves under tests/fixtures/plan-critic/project/
+     and the Deliverables Checklist carries the CHANGELOG.md entry item, so
+     no other finding should fire. -->
 
 # Plan — Widget Status Badge
 
@@ -18,27 +31,30 @@ the `widgets` table.
 
 ## Deliverables Checklist
 
-- [x] PRD section: `docs/PRD.md` — Widget Status Badge
-- [x] Use cases: `docs/use-cases/widget-status-badge_use_cases.md` — 3 scenarios
+- [x] PRD section: `tests/fixtures/plan-critic/project/docs/PRD.md` — Widget Status Badge
+- [x] Use cases: `tests/fixtures/plan-critic/project/docs/use-cases/widget-status-badge_use_cases.md` — 3 scenarios
 - [x] Architecture review: PASS
-- [x] QA test cases: `docs/qa/widget-status-badge_test_cases.md` — 6 cases
+- [x] QA test cases: `tests/fixtures/plan-critic/project/docs/qa/widget-status-badge_test_cases.md` — 6 cases
+- [ ] CHANGELOG.md entry (written at merge-ready / standalone fix)
 
 ## Implementation Plan
 
 ### Slice 1: Wire the status field end-to-end
 - **Wave:** 1
 - **Use cases:** UC-1.1
-- **Files:** `src/routes/widgets.js`, `src/app.js`
+- **Files:** `tests/fixtures/plan-critic/project/src/routes/widgets.js`, `tests/fixtures/plan-critic/project/src/app.js`
 - **Changes:** route handler adds `status` to the JSON it already returns for each widget; `app.js`
   confirms the route is registered (it already is — no new registration needed)
-- **Verify:** `GET /api/widgets` (authenticated) returns each widget with a non-null `status` field
-- **Done when:** `GET /api/widgets` response includes `status` for every widget in the fixture data
+- **Verify:** `GET /api/widgets` (authenticated) returns each widget with a non-null `status` field;
+  `GET /api/widgets` (no `Authorization` header) still returns `401`
+- **Done when:** `GET /api/widgets` response includes `status` for every widget in the fixture data,
+  and an unauthenticated request still returns `401`
 - **Pre-review:** none
 
 ### Slice 2: Data layer status column
 - **Wave:** 2
 - **Use cases:** UC-1.1
-- **Files:** `src/data/widgets.js`
+- **Files:** `tests/fixtures/plan-critic/project/src/data/widgets.js`
 - **Changes:** the existing widget query already selects `status`; add a unit test asserting the
   returned row objects include it
 - **Verify:** `npm test -- --grep "widget data layer returns status"`
@@ -48,7 +64,7 @@ the `widgets` table.
 ### Slice 3: Frontend badge component
 - **Wave:** 2
 - **Use cases:** UC-1.2
-- **Files:** `src/components/WidgetBadge.jsx` [new]
+- **Files:** `tests/fixtures/plan-critic/project/src/components/WidgetBadge.jsx` [new]
 - **Changes:** new presentational component that maps `status` to a badge color and label; rendered
   by the existing widget list component
 - **Verify:** `npm test -- --grep "WidgetBadge renders correct color per status"`
@@ -60,8 +76,8 @@ the `widgets` table.
 
 | Wave | Slices | Files (union) | Rationale |
 |------|--------|----------------|-----------|
-| 1    | 1      | `src/routes/widgets.js`, `src/app.js` | Independent — no dependencies |
-| 2    | 2, 3   | `src/data/widgets.js`, `src/components/WidgetBadge.jsx` | Independent — no shared files, both depend on Wave 1's wiring |
+| 1    | 1      | `tests/fixtures/plan-critic/project/src/routes/widgets.js`, `tests/fixtures/plan-critic/project/src/app.js` | Independent — no dependencies |
+| 2    | 2, 3   | `tests/fixtures/plan-critic/project/src/data/widgets.js`, `tests/fixtures/plan-critic/project/src/components/WidgetBadge.jsx` | Independent — no shared files, both depend on Wave 1's wiring |
 
 ## Acceptance Criteria
 
@@ -71,10 +87,10 @@ the `widgets` table.
 
 ## Files to Modify
 
-- `src/routes/widgets.js` — add `status` to the response
-- `src/app.js` — confirm route registration (no change expected)
-- `src/data/widgets.js` — add coverage for the existing `status` column
-- `src/components/WidgetBadge.jsx` [new] — badge presentation
+- `tests/fixtures/plan-critic/project/src/routes/widgets.js` — add `status` to the response
+- `tests/fixtures/plan-critic/project/src/app.js` — confirm route registration (no change expected)
+- `tests/fixtures/plan-critic/project/src/data/widgets.js` — add coverage for the existing `status` column
+- `tests/fixtures/plan-critic/project/src/components/WidgetBadge.jsx` [new] — badge presentation
 
 ## Risk Assessment
 
