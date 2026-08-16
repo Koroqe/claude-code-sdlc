@@ -23,7 +23,12 @@ Implement only the next smallest slice from the plan using TDD.
    - Do NOT write to `.claude/scratchpad.md` — the orchestrator handles scratchpad updates
    - Do NOT auto-continue to the next slice — return to the orchestrator after committing
    - Chain git commands: `git add <files> && git commit -m '...'` as a single Bash command to prevent staging conflicts with sibling subagents
-4. Confirm these documentation files exist:
+4. **Tier-aware documentation check:** confirm these documentation files exist — **skipped entirely
+   when `.claude/scratchpad.md` reads `## Tier: quick`**, since neither file is ever required for a
+   `quick`-tier change, by design (FR-4.4). This check runs unmodified — exactly as written below —
+   when `## Tier:` reads `full` or the field is absent: absence means `full` is the
+   backward-compatibility default for every scratchpad written before this tier field existed, so an
+   absent field is never read as license to skip this check.
    - `docs/qa/<feature>_test_cases.md` — if not, delegate to `qa-planner` first
    - `docs/use-cases/<feature>_use_cases.md` — if not, delegate to `ba-analyst` first
 5. **Tracer gate:** read the plan file and check whether any slice is marked `**Tracer:** yes`.
@@ -32,9 +37,13 @@ Implement only the next smallest slice from the plan using TDD.
    `.claude/scratchpad.md`, or a fresh run of the tracer's own `Verify:` command. If neither is
    available, or the record is ambiguous, REFUSE — an unverifiable tracer is an unpassed tracer.
    - **If this invocation targets the tracer slice itself:** proceed normally — the tracer is exempt from its own gate.
-   - **Exemption (backward compatibility):** if the plan carries no `**Tracer:** yes` marker anywhere, this check does not apply. Print this line verbatim, then continue with the remaining pre-flight checks and TDD flow as normal — the exemption is never silent:
+   - **Exemption (backward compatibility), tier-aware wording (FR-4.5, AC-27):** if the plan carries no `**Tracer:** yes` marker anywhere, this check does not apply. Print the tier-appropriate line verbatim, then continue with the remaining pre-flight checks and TDD flow as normal — the exemption is never silent:
+     - **When `.claude/scratchpad.md` reads `## Tier: quick`:** a marker-free plan here is `quick` tier's own single-slice plan, exempt from the tracer requirement by design — never a legacy plan. Print exactly:
 
-     `tracer gate inactive — no **Tracer:** yes marker found; treating as pre-F3 plan.`
+       `tracer gate inactive — tier: quick, single-slice plan is exempt from the tracer requirement by design.`
+     - **When `## Tier:` reads `full`, or the field is absent (the pre-F4 legacy case):** print the existing legacy wording, unchanged:
+
+       `tracer gate inactive — no **Tracer:** yes marker found; treating as pre-F3 plan.`
 
 ## TDD Implementation Flow
 
@@ -56,9 +65,19 @@ Read the current slice from the implementation plan. Two formats are supported:
 - Read existing files that will be modified
 
 ### 2. Write Tests First
+
+**Quick-tier carve-out (FR-4.4, AC-26):** when `.claude/scratchpad.md` reads `## Tier: quick`, state
+the following verbatim in the delegation prompt, before the request itself: "no
+`docs/qa/<feature>_test_cases.md` file exists for this change by design and MUST NOT be treated as a missing input."
+`test-writer` derives its tests from the slice's own `Verify:`/`Done when:` fields
+instead. This carve-out lives in the delegation prompt only — `agents/test-writer.md` itself is never
+modified by this instruction.
+
 Delegate to `test-writer` agent:
-- Reference documented test cases from `docs/qa/`
-- Reference use-case scenarios from `docs/use-cases/` for this slice
+- Reference documented test cases from `docs/qa/` (for a `quick`-tier run, this reference is replaced
+  by the carve-out above, since no such file exists by design)
+- Reference use-case scenarios from `docs/use-cases/` for this slice (for a `quick`-tier run, use the
+  slice's own `Use cases:` field if present, since no use-cases file exists by design)
 - Write tests for this slice's behavior using the project's test framework
 - Tests should FAIL initially (no implementation yet)
 
