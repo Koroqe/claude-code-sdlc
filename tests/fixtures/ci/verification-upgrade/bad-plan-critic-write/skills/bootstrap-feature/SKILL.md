@@ -84,9 +84,10 @@ After the `planner` agent produces the plan and before Step 6 (Git Setup), invok
 
 Run the same critique-and-fix loop `src/claude.md`'s plan-mode "Plan Critic Pass" section uses:
 1. Invoke `plan-critic` against the plan file (loop 1).
-2. If it returns any BLOCKER finding, fix the plan file for every BLOCKER and WARNING finding, then re-invoke `plan-critic` against the revised plan (loop 2).
+2. **Fix the plan file for every BLOCKER and every WARNING finding. This fix pass always runs whenever there is at least one BLOCKER or WARNING — it is NOT conditional on a BLOCKER being present.** WARNING is where Scope Reduction Detection lands, and hedging findings must be fixed rather than merely noted.
+2b. **Re-invoke only if a BLOCKER was found** in the loop just completed (loop 2) — the loop repeats on BLOCKERs, the fixing covers WARNINGs too.
 3. Repeat once more if needed (loop 3).
-4. If zero BLOCKER findings remain after any loop, proceed immediately to Step 6 — remaining WARNING findings are acceptable and recorded.
+4. If zero BLOCKER findings remain after any loop, proceed to Step 6 — having already applied the step-2 fixes. Any WARNING deliberately not fixed is recorded with its justification.
 5. If a BLOCKER finding still remains after loop 3, escalate per Rule 4 (`error-recovery.md`): stop, present the remaining BLOCKER findings verbatim, state the decision needed, and present the options. Do NOT proceed to Step 6 with an unresolved BLOCKER.
 
 If `plan-critic` cannot be resolved (memory-layer-only install with no plugin agents present), warn — naming `plan-critic` explicitly as unresolvable — and proceed to Step 6 without a critique. Never skip the critic pass silently.

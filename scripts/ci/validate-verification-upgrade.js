@@ -287,6 +287,12 @@ function checkSecurityAuditor(v, text) {
 // ---------------------------------------------------------------------------
 function checkCodeReviewer(v, text) {
   const rel = 'agents/code-reviewer.md';
+  // Same pin as security-auditor: without it a borderline CRITICAL can be
+  // filed HIGH and then dropped by the >80% confidence filter. Frozen on both
+  // reviewers or neither — an asymmetric freeze is how one of them drifts.
+  if (text.indexOf('Classification is pinned') === -1) {
+    v.error(rel, 'a borderline CRITICAL could be filed as HIGH and then dropped by the confidence filter (expected to find "Classification is pinned")');
+  }
   const outputFormat = section(text, /^## Output Format/, /^## /);
   const tiers = ['**CRITICAL**', '**HIGH**', '**MEDIUM**', '**LOW**'];
   if (!outputFormat) {

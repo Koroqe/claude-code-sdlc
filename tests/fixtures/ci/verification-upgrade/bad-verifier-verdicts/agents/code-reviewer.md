@@ -84,6 +84,12 @@ reviewer that cries wolf trains the pipeline to ignore it. To keep findings trus
   This carve-out is what makes the filter safe: a filter that could silence a CRITICAL finding
   would be worse than no filter at all. If a finding is CRITICAL, it is reported even at low
   self-assessed confidence — the 80% threshold simply does not apply to it.
+- **Classification is pinned for the security classes.** The carve-outs above protect a finding
+  once it is *labelled* CRITICAL — they do nothing for one misfiled as HIGH and then dropped by
+  the confidence filter. So: auth bypass, secret or credential exposure, injection (SQL, command,
+  prompt), and privilege escalation are **always CRITICAL**. When genuinely torn between CRITICAL
+  and HIGH, classify CRITICAL — the cost of an over-tiered finding is a moment of attention; the
+  cost of an under-tiered one is silence.
 - **Consolidate, don't duplicate.** Findings that share one root cause across several locations are
   one finding listing every affected location, not one entry per location. Consolidation only
   merges the location list — it MUST NOT lower a finding's reported severity: if any consolidated

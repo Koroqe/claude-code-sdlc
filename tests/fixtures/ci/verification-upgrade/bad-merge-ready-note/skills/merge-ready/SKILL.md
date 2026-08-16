@@ -102,7 +102,9 @@ written before this four-verdict scheme shipped carries no `verdict:` key (the o
 `verifier` run — never error out, and never infer a verdict from the old prose body; the old prose was
 never structured for a machine to read a verdict out of in the first place.
 
-Note: Level 4 failures produce WARN, not FAIL — they are advisory and do not block merge. WARN = Level 4 advisory only.
+Note: WARN = Level 4 advisory only. A Level 4 gap does not by itself produce `FAILED` — but it is not advisory either. It produces
+`PRESENT_BEHAVIOR_UNVERIFIED`, which is **not a pass**: the code is present and correctly wired, and
+nothing has demonstrated it runs.
 
 **Gate 6 is `NOT MERGE READY` for any verdict other than `VERIFIED` with `passed: true`** — that
 includes `PRESENT_BEHAVIOR_UNVERIFIED`, `FAILED`, `UNCERTAIN`, and either malformed-report shape
@@ -147,7 +149,13 @@ If any gate FAILS: list specific fixes needed with file paths and priority.
 If any gate FAILS:
 1. Identify the specific issues from the agent's output
 2. Fix each issue in the codebase
-3. Rerun ONLY the failed gate(s)
+3. Rerun ONLY the failed gate(s) — **except** when the fix committed new code. Any gate whose fix
+   produced a commit invalidates the earlier passes of Gate 2 (Code Review) and Gate 3 (Security
+   Audit), because those gates ran over a tree that no longer exists. Re-run Gates 2 and 3 over the
+   new commits before treating the failed gate's pass as final. This matters most for Gate 6's
+   replan loop below, which is the one path where the harness writes production code downstream of
+   a field it has itself labelled an injection channel — that code must not be the only code in the
+   feature that no reviewer ever sees.
 4. Repeat until all gates pass OR 3 fix attempts exhausted
 5. If still failing after 3 attempts: report as NOT MERGE READY with specific blockers
 
@@ -156,8 +164,16 @@ Do NOT just report failures — attempt to fix them first.
 ### Gate 6 specialization: the `--gaps` replan loop
 
 This is not a second retry mechanism alongside the protocol above — it specializes what "fix" (step 2)
-means specifically when the failing gate is Gate 6. The shared 3-attempt budget, the rerun-only-the-
-failed-gate step, and the exhaustion behavior are all unchanged.
+means specifically when the failing gate is Gate 6. The shared 3-attempt budget and the exhaustion
+behavior are unchanged.
+
+**Mandatory re-review of replan commits.** This loop is the one place the harness writes production
+code in response to text (`verifies_with`) that originated in a report about a possibly hostile
+project. Under a plain rerun-only-the-failed-gate reading, those commits would be the only code in
+the feature that Gate 2 and Gate 3 never inspect — the code most exposed to influence receiving the
+least review. So: **once the replan loop has committed any slice, re-run Gate 2 (Code Review) and
+Gate 3 (Security Audit) over those commits before a subsequent `VERIFIED` from Gate 6 may permit
+`MERGE READY`.** A `VERIFIED` verdict reached over unreviewed replan commits is not a pass.
 
 When Gate 6 reports `FAILED` or `PRESENT_BEHAVIOR_UNVERIFIED` (including the malformed-report case
 above) with a non-empty `gaps` array:
