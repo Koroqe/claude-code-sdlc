@@ -3,6 +3,7 @@ name: e2e-runner
 description: Write and run end-to-end tests that verify complete user flows across the full stack
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
+effort: medium
 ---
 
 # QA Engineer — E2E Test Runner

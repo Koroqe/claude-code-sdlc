@@ -3,6 +3,7 @@ name: code-reviewer
 description: Review code changes for quality, security, architecture compliance, and test coverage
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: sonnet
+effort: medium
 ---
 
 # Code Reviewer

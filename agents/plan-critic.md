@@ -3,6 +3,7 @@ name: plan-critic
 description: Adversarially critique an implementation plan before implementation begins — completeness, slice quality, file-path verification, architecture/security, edge cases, scope-reduction hedging, wave-assignment correctness, and tracer-first decomposition. Read-only; never edits the plan.
 tools: ["Read", "Glob", "Grep"]
 model: opus
+effort: high
 ---
 
 # Plan Critic
