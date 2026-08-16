@@ -210,7 +210,8 @@ WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
   .claude/rules/              Architecture, security, testing rules
   .claude/scratchpad.md       Session state persistence
-  .claude/settings.json       Permissions config
+  .claude/settings.json       Permissions config (incl. statusLine)
+  .claude/statusline.js       Statusline renderer template (copied, not run)
   docs/PRD.md                 Product requirements document
   docs/qa/                    QA test case directory
   docs/use-cases/             Use case document directory
@@ -1237,6 +1238,13 @@ scaffold_project() {
 
   cp -- "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
   log_ok ".claude/settings.json"
+
+  # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
+  # invoked directly by Claude Code's own statusLine mechanism (the command
+  # templates/settings.json just installed above), never by this installer -
+  # this script itself still never invokes `node` or `jq`.
+  cp -- "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js"
+  log_ok ".claude/statusline.js (statusline renderer template)"
 
   cp -- "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md"
   log_ok "CHANGELOG.md"

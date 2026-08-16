@@ -1,0 +1,26 @@
+{
+  "_fixtureNote": "Constructed test payload modeled on templates/statusline.js's own candidate field-name lists (COST_PATHS / USED_TOKEN_PATHS / MAX_TOKEN_PATHS / RESERVE_TOKEN_PATHS) — NOT a captured live Claude Code statusline payload. The real field names remain UNDETERMINED per that file's FR-13.4 header comment; this fixture exercises the renderer's happy path when a payload happens to match one of its guessed candidates, not a verified live shape. Deliberately carries no 'cwd' field so each fixture scenario directory's own process.cwd() (set by the Verify script's `cd`) is what the renderer reads .claude/scratchpad.md against.",
+  "hook_event_name": "Status",
+  "session_id": "fixture-session",
+  "model": {
+    "id": "claude-fixture",
+    "display_name": "Fixture Model"
+  },
+  "workspace": {
+    "current_dir": ".",
+    "project_dir": "."
+  },
+  "version": "0.0.0-fixture",
+  "cost": {
+    "total_cost_usd": 1.23,
+    "total_duration_ms": 120000,
+    "total_api_duration_ms": 45000,
+    "total_lines_added": 42,
+    "total_lines_removed": 7
+  },
+  "context": {
+    "used_tokens": 84000,
+    "max_tokens": 200000,
+    "autocompact_reserve_tokens": 20000
+  }
+}
