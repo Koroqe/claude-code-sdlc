@@ -236,3 +236,29 @@ report for the first time, converting gap 1 and much of gap 14 into recorded res
 remain is the deliberately unautomated remainder — the installer's end-to-end profile run, the
 statusline renderer and its unverified stdin contract, the two open spikes (FR-7.6, FR-13.4), and the
 routing behaviour itself, which only a live pipeline run can show.
+
+## Amendments after generation
+
+**Gap 4 is closed.** At generation time `origin/feat/adaptive-tier-routing` pointed at `af28d6b` — the
+pre-implementation plan commit — so no CI run existed for any F4 commit, and criterion (c)'s
+named-entrant requirement correctly refused to count the validators as exercised. The branch has since
+been pushed at `cd3994f`. GitHub Actions run 31961651378 completed **success** across all four jobs,
+with **54 steps** in `Validate harness assets` (up from 39 before F4). Every step this feature added
+executed for the first time: both new pass steps, the seven model-profile falsify and control steps,
+the triage-parity falsify step, the two effort falsify steps, and the two new anti-vacuity steps.
+
+This also converts much of gap 14: the 53 STATIC cases now run on every push rather than only locally.
+
+**The verdict is unchanged.** `PRESENT_BEHAVIOR_UNVERIFIED` still stands, and the substantive gaps
+remain exactly as recorded: the installer's end-to-end `--profile` behaviour has no committed
+repeatable check (CI runs only `bash -n` plus two greps); `templates/statusline.js` is executed by
+nothing committed and its stdin contract is unverified by construction, since the fixture is built
+from the renderer's own guessed field names; both spikes (FR-7.6 plugin-snapshot semantics, FR-13.4
+stdin field names) remain open and honestly recorded as such; and the routing behaviour itself —
+triage classification, one-way escalation, the quick-tier gate subset, both override skills — is
+multi-turn orchestration that no static read and no CI step can confirm.
+
+**A correction worth recording.** The delegation prompt for this Gate 6 run asserted "Ten CI validators
+run on every push." That was false at the time, and the verifier checked rather than accepting it.
+Being wrong in the safe direction — refusing to credit an unentered chain — is the behaviour the
+four-verdict scheme exists to produce.
