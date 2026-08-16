@@ -33,6 +33,8 @@ Known limitation: this preflight only fires when this skill is invoked explicitl
 
 Every feature follows this pipeline before any code is written. Each step is performed by a specialized agent role.
 
+**Entering from a quick→full escalation (FR-2.4(d)):** when this workflow is invoked because a `quick`-tier run escalated to `full` — rather than being invoked directly for a brand-new feature — the delegation prompts for Steps 1 through 5 below MUST additionally supply the already-completed work (the escalated slice's `Files:`/`Changes:` and its commit hash) as context, so `prd-writer`/`ba-analyst`/`architect`/`qa-planner` document it accurately rather than purely prospectively. By the time this workflow is invoked in this case, `.claude/scratchpad.md`'s `## Tier:` field already reads `full` — the escalation's own mandatory tier-rewrite step ran before this workflow was ever invoked, never after.
+
 ### Step 1: Product Manager — PRD Documentation
 Delegate to `prd-writer` agent:
 - Read `docs/PRD.md` to understand the existing format
@@ -71,13 +73,14 @@ Delegate to `qa-planner` agent:
 - Cover: happy path, alternative flows, errors, edge cases, auth boundaries, concurrency
 
 ### Step 5: Tech Lead — Implementation Planning
-Delegate to `planner` agent:
+Delegate to `planner` agent, stating **the current feature's PRD section number and title explicitly** in the delegation prompt (FR-12.5) — `planner` no longer discovers this by reading the whole `docs/PRD.md` file, so the delegation prompt is the only place this information reaches it. This degrades safely if ever omitted: `planner` falls back to locating its own section, so no downstream step is coupled to this line being present.
 - Read ALL documentation created above: PRD, use cases, architecture review, test cases
 - Read the project's CLAUDE.md for file structure and conventions
 - Break the feature into 5-9 testable implementation slices
 - Each slice references which use-case scenarios it implements (UC-X.Y)
 - Flag slices needing architect or security pre-review
 - Reference actual project files discovered during exploration
+- **When entered from a quick→full escalation:** instruct `planner` to mark the already-satisfied slice DONE with its existing commit hash in the resulting plan — never re-implemented — per the escalation-entry context supplied above.
 
 #### Step 5a: Plan Critic — Adversarial Plan Review
 After the `planner` agent produces the plan and before Step 6 (Git Setup), invoke `plan-critic` against the plan file. This is the first point at which a plan produced entirely by `/bootstrap-feature` (no interactive plan-mode involved) is critiqued at all.
@@ -97,10 +100,17 @@ If `plan-critic` cannot be resolved (memory-layer-only install with no plugin ag
 - Create feature branch: `feat/<feature-slug>`
 
 ### Step 7: Initialize Scratchpad
+
+Check whether `.claude/scratchpad.md` already exists (a `Read` or `Glob` suffices). This determines which tool writes it:
+- **If it already exists** — the common case, since it is the pipeline's persistent, cross-feature memory (`src/rules/scratchpad.md`'s `## Completed` history) — mutate it with **Edit, never a whole-file Write**. This holds identically whether this is a fresh, non-escalated `/bootstrap-feature` run or the reinit run FR-2.4(d) invokes after a quick→full escalation: `pre:write:shrink-guard` fires on `Write` only, and denies a short new file replacing a long pre-existing one, so `Edit` is the only tool that changes just the parts this step targets without risking that denial.
+- **If no scratchpad exists at all** — a fresh project, or the very first feature ever bootstrapped in it — a `Write` creating it is a `Write` of a nonexistent file and is outside `pre:write:shrink-guard`'s scope; that is the only case where `Write` is used here.
+
 Update `.claude/scratchpad.md` with the full feature context:
+- **`## Tier:`** — write this field explicitly, every time this step runs, on every init or reinit (FR-2.8): `full`, for both a fresh, non-escalated `/bootstrap-feature` run and for the reinit FR-2.4(d) invokes after a quick→full escalation. In the escalation case, the escalation's own mandatory tier-rewrite step already set `## Tier: full` before this workflow was ever invoked — this write is a confirming no-op there, not a second, independent source of truth. Never leave `## Tier:` unwritten, and never let it inherit whatever value happened to be sitting in the file from a previous feature — a field written by one path and read by another (here, `/merge-ready`'s Tier Check preamble) MUST be affirmatively owned at every initialization point.
 - Feature name and branch
 - Status: "implementing wave 1 slice 1/N" (when plan has `Wave:` fields) or "implementing slice 1/N" (when no wave assignments)
 - Full plan with slices grouped by wave: each wave as a `### Wave N` subheading with its slices listed as "pending". When plan has no `Wave:` fields, list slices as a flat numbered list under `### Wave 1 (sequential)`
+- **When entered from a quick→full escalation:** the already-satisfied slice appears in the plan marked DONE with its existing commit hash (per Step 5 above), never as "pending" alongside the rest
 - Empty blockers section
 
 This is CRITICAL for surviving context compaction during long sessions.
