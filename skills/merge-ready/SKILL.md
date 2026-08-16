@@ -15,6 +15,54 @@ Run a full quality gate before merge. All checks must pass.
 
 **Literal-token flag rule:** a documented flag is active ONLY if its literal token appears in `$ARGUMENTS`. Never infer that a flag was passed because the documentation describes it.
 
+## Tier Check
+
+This step runs before Gate 0. It is deliberately unnumbered — mirroring the existing unnumbered
+"Finalization: Changelog Entry" postamble's precedent for adding a step without renumbering the gates —
+because other files and CI checks reference gates by number, and none of them may shift.
+
+Read `.claude/scratchpad.md`'s `## Tier:` field:
+
+- **`full`, or the field absent:** run all 9 gates unmodified, exactly as documented below. Absent-means-
+  full is the backward-compatibility default — a pre-F4 scratchpad with no `## Tier:` field at all gets
+  the full, unreduced gate sequence, never a silently reduced one.
+- **`quick`:** run Gate 0 (Git Hygiene), Gate 2 (Code Review), Gate 3 (Security Audit), and Gate 4 (Build
+  Verification). Report Gate 1, Gate 5, Gate 6, Gate 7, and Gate 8 as `SKIPPED (tier: quick)` in the
+  output table. **Never silently omit a row** — a missing row reads as an oversight; an explicit
+  `SKIPPED (tier: quick)` reads as a decision.
+- **Why Gates 0, 2, 3, and 4 still run (FR-4.8):** Gate 2 and Gate 3 review the diff itself — neither
+  depends on any PRD/use-case/QA artifact — and Gate 4 is deterministic. Skipping any of the three would
+  make `quick` a synonym for "unreviewed"; keeping them is what stops that. This sentence is the
+  justification for the `quick` tier existing at all, not an incidental detail.
+
+**Gate 2/3 quick-tier delegation carve-out.** For a `quick`-tier run, the Gate 2 and Gate 3 delegation
+prompts to `code-reviewer`/`security-auditor` MUST state, verbatim, **before the review request**:
+
+> no `docs/PRD.md` section, `docs/use-cases/*`, or `docs/qa/*` file exists for this change by design and MUST NOT be reported as a finding
+
+This exists because `agents/code-reviewer.md` carries a checklist item ("Test cases documented in
+`docs/qa/`") that a `quick`-tier change never satisfies, by design — no QA file is ever created for it
+(FR-4.4). Without the carve-out, every `quick`-tier Gate 2 run flags that absence as a finding, the
+Auto-Fix Protocol cannot fix it without violating the tier's own design (creating a QA file `quick` tier
+explicitly does not produce), and the run exhausts its 3-attempt budget into `NOT MERGE READY` on a
+correctly-scoped change — a dead end. `agents/code-reviewer.md` and `agents/security-auditor.md` are NOT
+modified by this carve-out; it lives entirely in the delegation prompt, for `quick`-tier runs only.
+
+**Finalization trigger, re-read for tier awareness.** Finalization's "Runs ONLY after all gates report
+PASS" condition (below) is read as **"all gates that were not `SKIPPED` report PASS"** — a `SKIPPED` gate
+neither blocks Finalization nor counts as a FAIL. This is distinct from Gate 5's and Gate 8's existing
+`N/A` convention (no user-facing changes in scope for this feature): `N/A` and `SKIPPED (tier: quick)` are
+different states and MUST NOT be conflated. `N/A` means the gate ran its applicability check and found
+nothing in scope to verify; `SKIPPED (tier: quick)` means the gate did not run at all, because the Tier
+Check preamble excluded it before it ever started.
+
+**`Gates: N/9` progress line.** After each gate reaches a terminal state (PASS, FAIL, or
+`SKIPPED (tier: quick)`), write or refresh a `Gates: N/9` line in `.claude/scratchpad.md` — `N` is the
+count of gates that have reached a terminal state so far — following the existing `Gate 6 attempts: N/3`
+precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`, to make this update** — the
+shipped `pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite of the
+scratchpad.
+
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
 - [ ] Working tree clean (`git status`)
@@ -22,6 +70,9 @@ Run a full quality gate before merge. All checks must pass.
 - [ ] All slice commits present
 
 ## Gate 1: Documentation Completeness
+
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
+
 Verify all agency deliverables exist:
 - [ ] `docs/PRD.md` has a section for this feature
 - [ ] `docs/use-cases/<feature>_use_cases.md` exists with all scenario types
@@ -49,6 +100,9 @@ Delegate to `build-runner` agent:
 - [ ] Build succeeds
 
 ## Gate 5: E2E Tests (if user-facing changes)
+
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
+
 Delegate to `e2e-runner` agent:
 - [ ] E2E tests reference use-case scenarios from `docs/use-cases/`
 - [ ] Critical user flows pass (primary flows from use cases)
@@ -56,6 +110,8 @@ Delegate to `e2e-runner` agent:
 - [ ] Data flow chains work end-to-end
 
 ## Gate 6: Goal-Backward Verification
+
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
 
 **Before delegating**, run `date -u +'%Y-%m-%d %H:%M'` and note the result. The `verifier` agent has
 no `Bash` tool and therefore no clock — if you do not supply the timestamp, it cannot invent one and
@@ -111,12 +167,31 @@ includes `PRESENT_BEHAVIOR_UNVERIFIED`, `FAILED`, `UNCERTAIN`, and either malfor
 above. Only `VERIFIED` with `passed: true` permits Gate 6's Status column to read as passing.
 
 ## Gate 7: Documentation Accuracy
+
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
+
 Delegate to `doc-updater` agent:
 - [ ] `CLAUDE.md` is accurate if structure/commands/env vars changed
 - [ ] PRD section matches implementation
 - [ ] Use cases match actual behavior
 
+**Digest index write (`full` tier only).** After Gate 7 reports PASS on a run where `## Tier:` reads
+`full` or is absent — never for `quick`, which reports Gate 7 `SKIPPED (tier: quick)` and never reaches
+this step, and never for `fast`, which never runs `/merge-ready` at all — `doc-updater`'s delegation gains
+one more duty: append, or — if a row for this feature's PRD section number already exists — refresh in
+place, one row in `docs/digest-index.md`:
+
+`| Section | Title | Summary (≤300 characters) | Docs |`
+
+keyed on section number, using the same idempotency discipline `src/rules/changelog.md`'s guard already
+establishes (there: keyed on entry name; here: keyed on section number). `Docs` lists the PRD section
+anchor, `docs/use-cases/<slug>_use_cases.md`, and `docs/qa/<slug>_test_cases.md`. Quick and fast tiers
+produce no `docs/digest-index.md` row.
+
 ## Gate 8: UI/UX (if user-facing changes)
+
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
+
 - [ ] Visual consistency with project's design system
 - [ ] All component states (loading, error, empty, success)
 - [ ] Responsive behavior
@@ -130,17 +205,20 @@ Delegate to `doc-updater` agent:
 | Gate | Status | Notes |
 |------|--------|-------|
 | Git Hygiene | PASS/FAIL | |
-| Documentation Completeness | PASS/FAIL | |
+| Documentation Completeness | PASS/FAIL/SKIPPED (tier: quick) | |
 | Code Review | PASS/FAIL | |
 | Security Audit | PASS/FAIL | |
 | Build Verification | PASS/FAIL | |
-| E2E Tests | PASS/FAIL/N/A | |
-| Goal-Backward Verification | VERIFIED/PRESENT_BEHAVIOR_UNVERIFIED/FAILED/UNCERTAIN | only VERIFIED with `passed: true` permits merge |
-| Documentation Accuracy | PASS/FAIL | |
-| UI/UX | PASS/FAIL/N/A | |
+| E2E Tests | PASS/FAIL/N/A/SKIPPED (tier: quick) | |
+| Goal-Backward Verification | VERIFIED/PRESENT_BEHAVIOR_UNVERIFIED/FAILED/UNCERTAIN/SKIPPED (tier: quick) | only VERIFIED with `passed: true` permits merge |
+| Documentation Accuracy | PASS/FAIL/SKIPPED (tier: quick) | |
+| UI/UX | PASS/FAIL/N/A/SKIPPED (tier: quick) | |
 
 **Overall: MERGE READY / NOT MERGE READY**
 ```
+
+Under `## Tier: quick`, every row above marked `SKIPPED (tier: quick)` MUST render exactly that value —
+never a blank Status cell, never a silently omitted row (see Tier Check above).
 
 If any gate FAILS: list specific fixes needed with file paths and priority.
 
@@ -236,7 +314,8 @@ exactly this failure mode, which is why it — not memory — is the source of t
 This step records a changelog entry once the feature is cleared for merge.
 
 **When it runs:**
-- Runs ONLY after all gates report PASS and the overall result is **MERGE READY**.
+- Runs ONLY after all gates report PASS and the overall result is **MERGE READY** — read, per the Tier
+  Check section above, as "all gates that were not `SKIPPED` report PASS" when `## Tier: quick`.
 - Does NOT run when the overall result is **NOT MERGE READY**. Skip it entirely in that case.
 
 **What it is NOT:**
