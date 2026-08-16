@@ -1,6 +1,6 @@
 ## Feature: Adaptive Tier Routing and Model Routing (v4.0 roadmap F4)
 ## Branch: feat/adaptive-tier-routing
-## Status: implementing wave 2 slice 2/9
+## Status: quality-gates
 ## Tier: full
 
 ## Docs
@@ -91,9 +91,9 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     modifications and no receipt afterwards.
   - **Pre-review:** security (MANDATORY — first programmatic rewrite of version-controlled files)
 
-### Wave 2
+### Wave 2 [complete]
 
-- [ ] **Slice 2: Triage Phase 0 + fast-tier execution + sensitive-path union**
+- [x] **Slice 2 [DONE 84c964b]: Triage Phase 0 + fast-tier execution + sensitive-path union**
   - **Wave:** 2 · **Use cases:** UC-1..UC-4 + sub-flows; AC-1, AC-2, AC-31
   - **Files:** `skills/develop-feature/SKILL.md`, `src/claude.md`, `templates/rules/security.md`
   - **Changes:** new **Phase 0: Triage** before Phase 1 — FR-1.2 estimated file set stated; FR-1.3(a)–(d)
@@ -121,9 +121,9 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     states all five FR-3 invariants; union wording present; all four validators exit 0.
   - **Pre-review:** security (MANDATORY — untrusted project input feeds tier classification)
 
-### Wave 3
+### Wave 3 [complete]
 
-- [ ] **Slice 3: One-way escalation mechanics + scratchpad tier ownership**
+- [x] **Slice 3 [DONE 67f88e9]: One-way escalation mechanics + scratchpad tier ownership**
   - **Wave:** 3 · **Use cases:** UC-6, UC-7, UC-8 + sub-flows; AC-3, AC-4, AC-5, AC-23
   - **Files:** `skills/develop-feature/SKILL.md`, `skills/bootstrap-feature/SKILL.md`, `docs/PRD.md`
   - **Changes:** FR-2.1 fast→quick trigger checked BEFORE the triggering call; FR-2.3 mechanics; FR-2.2(a)/(b)
@@ -147,7 +147,7 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     and ceiling present; the Edit idiom pinned in both skill and PRD; validators exit 0.
   - **Pre-review:** security (MANDATORY — escalation mechanics)
 
-- [ ] **Slice 4: Quick-tier receiving ends — planner Quick-Tier Contract + implement-slice tier awareness**
+- [x] **Slice 4 [DONE 36b0eca]: Quick-tier receiving ends — planner Quick-Tier Contract + implement-slice tier awareness**
   - **Wave:** 3 · **Use cases:** UC-5, UC-15 + sub-flows; AC-22, AC-26, AC-27
   - **Files:** `agents/planner.md`, `skills/implement-slice/SKILL.md`
   - **Changes:** planner gains a third narrow mode — **Quick-Tier Contract**: description in, exactly one
@@ -175,7 +175,7 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     notice strings and the carve-out are present; `validate-verification-upgrade.js` still exits 0.
   - **Pre-review:** none
 
-- [ ] **Slice 5: merge-ready Tier Check preamble + gate carve-outs + `Gates: N/9` + digest write**
+- [x] **Slice 5 [DONE ad0bbb7]: merge-ready Tier Check preamble + gate carve-outs + `Gates: N/9` + digest write**
   - **Wave:** 3 · **Use cases:** UC-5 (7–8), UC-16 + sub-flows; AC-5, AC-16, AC-25
   - **Files:** `skills/merge-ready/SKILL.md`, `docs/digest-index.md` `[new]`
   - **Changes:** unnumbered **Tier Check** preamble before Gate 0 (no renumbering): `full`/absent → 9 gates
@@ -198,9 +198,9 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     instruction, re-read trigger and digest duty all present; the digest file exists with its header.
   - **Pre-review:** security (RECOMMENDED — a wrong tier read silently skips 5 gates)
 
-### Wave 4
+### Wave 4 [complete]
 
-- [ ] **Slice 6: Override skills `/sdlc-fast` + `/sdlc-quick` + Pipeline Commands + README rows**
+- [x] **Slice 6 [DONE 800087a]: Override skills `/sdlc-fast` + `/sdlc-quick` + Pipeline Commands + README rows**
   - **Wave:** 4 · **Use cases:** UC-9 + sub-flows; AC-6, AC-21 (skills half), AC-28
   - **Files:** `skills/sdlc-fast/SKILL.md` `[new]`, `skills/sdlc-quick/SKILL.md` `[new]`, `src/claude.md`, `README.md`
   - **Changes:** `sdlc-fast` `allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent` — **`Agent` granted
@@ -221,7 +221,7 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     `sdlc-quick`'s matches `develop-feature`'s byte-for-byte; validators exit 0.
   - **Pre-review:** none
 
-- [ ] **Slice 7: `effort:` across all 14 agents + validator support + falsify fixtures**
+- [x] **Slice 7 [DONE 4a6d4c8]: `effort:` across all 14 agents + validator support + falsify fixtures**
   - **Wave:** 4 · **Use cases:** UC-10-A2; AC-12, NFR-6
   - **Files:** all 14 `agents/*.md`, `scripts/ci/validate-agents.js`,
     `tests/fixtures/ci/bad-agent-effort/agents/bad-effort.md` `[new]`,
@@ -247,9 +247,9 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     its named substring; the pre-existing bad-agent fixture is proven not rotted by the new required field.
   - **Pre-review:** none
 
-### Wave 5
+### Wave 5 [complete]
 
-- [ ] **Slice 8: CI drift check — shared table, validator with `--assert-baseline`, fixtures, ALL CI wiring**
+- [x] **Slice 8 [DONE 2face79]: CI drift check — shared table, validator with `--assert-baseline`, fixtures, ALL CI wiring**
   - **Wave:** 5 · **Use cases:** UC-11, UC-14 (read side); AC-9, AC-10
   - **Files:** `scripts/ci/lib/model-profiles.js` `[new]`, `scripts/ci/validate-model-profile.js` `[new]`,
     six `tests/fixtures/ci/model-profile/*` trees `[new]`, `.github/workflows/ci.yml`, `docs/PRD.md`
@@ -283,7 +283,7 @@ direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
     wires all steps including the effort falsifies.
   - **Pre-review:** security (`.github/workflows/` is an FR-1.7 sensitive path)
 
-- [ ] **Slice 9: Statusline — spike, renderer, template wiring, scaffold copy**
+- [x] **Slice 9 [DONE abf3ed7]: Statusline — spike, renderer, template wiring, scaffold copy**
   - **Wave:** 5 · **Use cases:** UC-17, UC-18 + sub-flows; AC-17..AC-20
   - **Files:** `templates/statusline.js` `[new]`, `templates/settings.json`, `install.sh`,
     `tests/fixtures/statusline/{stdin-full.json,active,no-plan,all-done,corrupt}` `[new]`
@@ -334,6 +334,18 @@ Cross-wave repeats are sequential: `install.sh` W1→W5 · `README.md` W1→W4 �
 FIXTURE TCs can neither be registered nor left registered-but-unchecked without generalizing it to
 multiple QA docs — cross-feature infrastructure no F4 requirement schedules. **Deferred to F5.** Nothing
 CI-automatable in F4 depends on it.
+
+## Implementation notes
+
+- **Tracer executed for real** — `install.sh --profile budget` against a throwaway copy changed exactly
+  8 files, and a deliberately seeded `model: sonnet` line in a file *body* survived byte-identical,
+  proving the awk fence-counter is frontmatter-bounded rather than a naive `s/^model:/`.
+- Two spikes reported honestly as **UNDETERMINED** rather than invented: FR-7.6 (does a running session
+  re-read agent frontmatter or snapshot it?) and FR-13.4 (statusline stdin token-usage field names).
+  Both record what would settle them. The statusline degrades to `ctx: unknown`, never a fabricated bar.
+- **Defect found and fixed:** `.gitignore`'s `.sdlc-model-profile` had no path anchor, so it silently
+  ignored that filename at any depth — including fixture roots that need it as content. Caught by
+  re-verifying from a clean `git clone` rather than local disk state. Now anchored to `/`.
 
 ## Blockers
 
