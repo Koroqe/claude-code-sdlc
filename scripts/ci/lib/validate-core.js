@@ -45,7 +45,7 @@ function repoRoot() {
  * an empty directory, without touching the real assets.
  */
 function parseArgs(argv) {
-  const args = { root: repoRoot(), min: null };
+  const args = { root: repoRoot(), min: null, expectFailure: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--root') {
       const value = argv[i + 1];
@@ -54,6 +54,16 @@ function parseArgs(argv) {
         process.exit(1);
       }
       args.root = path.resolve(value);
+      i += 1;
+    } else if (argv[i] === '--expect-failure') {
+      // Turns a falsify run into a positive assertion: the validator must fail,
+      // and its failure text must contain this substring. See Validator#finish.
+      const value = argv[i + 1];
+      if (!value) {
+        process.stderr.write('FATAL: --expect-failure requires a substring argument.\n');
+        process.exit(1);
+      }
+      args.expectFailure = value;
       i += 1;
     } else if (argv[i] === '--min') {
       // Lowers the anti-vacuity floor so a small seeded fixture can be checked
@@ -222,12 +232,46 @@ class Validator {
     return true;
   }
 
-  finish() {
+  /**
+   * `expectFailure` inverts the exit code the way a shell `!` does, but adds
+   * the part `!` cannot: it requires the failure to be the RIGHT one.
+   *
+   * A bare `! node validate.js --root <fixture>` passes for any failure at all,
+   * including "the fixture is missing a file it should have had". So a fixture
+   * that silently rots keeps CI green while the assertion it was built to prove
+   * never fires again — the check looks alive and asserts nothing. Requiring a
+   * substring of the actual failure message closes that: the step goes red both
+   * when the validator wrongly passes AND when it fails for an unrelated reason.
+   */
+  finish(expectFailure) {
     if (this.errors.length > 0) {
-      process.stderr.write(`FAIL ${this.name} — ${this.errors.length} problem(s):\n`);
-      for (const e of this.errors) {
-        process.stderr.write(`  ${e.file}: ${e.message}\n`);
+      const header = `FAIL ${this.name} — ${this.errors.length} problem(s):\n`;
+      const body = this.errors.map((e) => `  ${e.file}: ${e.message}\n`).join('');
+      if (expectFailure) {
+        if ((header + body).indexOf(expectFailure) !== -1) {
+          process.stdout.write(
+            `PASS ${this.name} — failed as expected, matching "${expectFailure}"\n`
+          );
+          process.exit(0);
+        }
+        process.stderr.write(
+          `FAIL ${this.name} — failed, but NOT for the expected reason ` +
+            `"${expectFailure}". The seeded fixture may have rotted, or the ` +
+            `assertion it proves may have been removed. Actual:\n`
+        );
+        process.stderr.write(body);
+        process.exit(1);
       }
+      process.stderr.write(header);
+      process.stderr.write(body);
+      process.exit(1);
+    }
+    if (expectFailure) {
+      process.stderr.write(
+        `FAIL ${this.name} — expected a failure matching "${expectFailure}", ` +
+          `but the validator passed. The seeded defect is gone, so this check ` +
+          `no longer proves anything.\n`
+      );
       process.exit(1);
     }
     process.stdout.write(`PASS ${this.name} — ${this.checkedCount} file(s) checked\n`);
@@ -242,13 +286,15 @@ class Validator {
 function run(name, body) {
   assertNodeVersion();
   const validator = new Validator(name);
+  let parsed = null;
   try {
-    body(validator, parseArgs(process.argv.slice(2)));
+    parsed = parseArgs(process.argv.slice(2));
+    body(validator, parsed);
   } catch (err) {
     process.stderr.write(`FAIL ${name} — unexpected error: ${err && err.message ? err.message : err}\n`);
     process.exit(1);
   }
-  validator.finish();
+  validator.finish(parsed ? parsed.expectFailure : null);
 }
 
 module.exports = {
