@@ -58,6 +58,15 @@ jobs:
       - name: Validate verification upgrade
         run: node scripts/ci/validate-verification-upgrade.js
 
+      # Confirms the 52 FIXTURE-class test cases in
+      # verification-review-upgrade_test_cases.md still have the committed
+      # inputs they need. This does NOT execute any FIXTURE case — no API
+      # access exists in CI to invoke an agent headlessly. It only catches
+      # fixture rot: a fixture directory renamed, emptied, or deleted while
+      # the QA document and manifest still claim it exists.
+      - name: Validate fixture manifest
+        run: node scripts/ci/validate-fixture-manifest.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -115,6 +124,13 @@ jobs:
       - name: Falsify — verification-upgrade validator catches a softened classification pin
         run: node scripts/ci/validate-verification-upgrade.js --root tests/fixtures/ci/verification-upgrade/bad-security-auditor-filter --expect-failure "Classification is pinned"
 
+      # A rotted fixture (renamed/emptied/deleted) must fail loudly — it is
+      # the one failure mode this validator exists to catch, per the QA
+      # document's own count summary ("52 FIXTURE ... committed under
+      # tests/fixtures/").
+      - name: Falsify — fixture-manifest validator catches a rotted fixture path
+        run: node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-missing-fixture --expect-failure "fixture path does not exist"
+
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
         run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/good-personal-path --min 1
@@ -138,6 +154,9 @@ jobs:
 
       - name: Anti-vacuity — verification-upgrade validator fails on an empty tree
         run: node scripts/ci/validate-verification-upgrade.js --root "$(mktemp -d)" --expect-failure "matches too few files"
+
+      - name: Anti-vacuity — fixture-manifest validator fails on an empty tree
+        run: node scripts/ci/validate-fixture-manifest.js --root "$(mktemp -d)" --expect-failure "matches too few"
 
   hook-tests:
     name: Hook contract tests
