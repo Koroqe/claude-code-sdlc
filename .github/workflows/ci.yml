@@ -67,6 +67,14 @@ jobs:
       - name: Validate model profile drift
         run: node scripts/ci/validate-model-profile.js --assert-baseline
 
+      # Both skills/develop-feature/SKILL.md and src/claude.md claim, in
+      # identical prose, that "a CI check greps both copies for parity" over
+      # their Steps 1-7 triage block. This is that check: it extracts Steps
+      # 1-7 from both files and compares them byte-for-byte, naming which
+      # step diverges rather than merely failing "files differ".
+      - name: Validate triage parity
+        run: node scripts/ci/validate-triage-parity.js
+
       # Confirms the 52 FIXTURE-class test cases in
       # verification-review-upgrade_test_cases.md still have the committed
       # inputs they need. This does NOT execute any FIXTURE case — no API
@@ -184,6 +192,14 @@ jobs:
       - name: Falsify — model-profile validator rejects the same committed receipt under --assert-baseline
         run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/committed-receipt --min 1 --assert-baseline --expect-failure "must never be committed"
 
+      # skills/develop-feature/SKILL.md and src/claude.md both claim their
+      # Steps 1-7 triage block is CI-checked for parity. This fixture seeds a
+      # one-step divergence (Step 4's file-count bound) between otherwise
+      # identical mirrors, proving the check actually fires by name rather
+      # than only ever passing on the (currently byte-identical) real tree.
+      - name: Falsify — triage-parity validator catches a one-step divergence between the two copies
+        run: "node scripts/ci/validate-triage-parity.js --root tests/fixtures/ci/triage-parity/bad-step4-drift --min 1 --expect-failure \"Step 4 differs between skills/develop-feature/SKILL.md and src/claude.md\""
+
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
         run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/good-personal-path --min 1
@@ -210,6 +226,15 @@ jobs:
 
       - name: Anti-vacuity — fixture-manifest validator fails on an empty tree
         run: node scripts/ci/validate-fixture-manifest.js --root "$(mktemp -d)" --expect-failure "matches too few"
+
+      - name: Anti-vacuity — triage-parity validator fails on an empty tree
+        run: node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few"
+
+      # Every other validator already had this step; validate-model-profile.js
+      # did not, despite already failing correctly on an empty tree — this
+      # closes that gap so a future change that made it vacuous would be caught.
+      - name: Anti-vacuity — model-profile validator fails on an empty tree
+        run: node scripts/ci/validate-model-profile.js --root "$(mktemp -d)" --expect-failure "matches too few"
 
   hook-tests:
     name: Hook contract tests
