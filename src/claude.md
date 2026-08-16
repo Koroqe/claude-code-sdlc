@@ -130,6 +130,10 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 - `/implement-slice` — Single TDD slice (step 2, one iteration)
 - `/merge-ready` — Quality gates (step 3)
 - `/context-refresh` — Rebuild session context from scratchpad
+- `/sdlc-fast <description>` — **Override-only.** Bypasses Triage (Phase 0) above entirely and runs Fast Tier Execution (FR-3) directly against the supplied description; FR-2 escalation still applies once running. Never invoked by the pipeline itself, never required for a run to complete.
+- `/sdlc-quick <description>` — **Override-only.** Bypasses Triage (Phase 0) above entirely and runs Quick Tier Execution (FR-4) directly against the supplied description; FR-2.2 escalation still applies once running. Never invoked by the pipeline itself, never required for a run to complete.
+
+**Neither override activates from vocabulary.** Both are literal-token-only (FR-6.3): a request's prose containing a word like "quick," "fast," "small," or "trivial" does NOT activate either skill — it is still classified by Triage (Phase 0) above unmodified. This section's own unprefixed-request path has no skill invocation at all, so there is no literal token to check here in the first place — `/sdlc-fast`/`/sdlc-quick` are structurally unavailable from an unprefixed request; the two skill files are their sole entry point.
 
 ### What Plan Mode Plans MUST Contain
 

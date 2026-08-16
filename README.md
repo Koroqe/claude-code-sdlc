@@ -130,6 +130,8 @@ MERGE READY
 
 ## Commands
 
+7 skills ship in the plugin. Five are the primary, autonomous pipeline; two (`/sdlc-fast`, `/sdlc-quick`) are override-only entry points a developer types explicitly to overrule the pipeline's own triage verdict — never invoked by the pipeline itself, and never required for a run to complete.
+
 | Command | What It Does |
 |---------|-------------|
 | `/develop-feature` | Full autonomous pipeline — request to merge-ready |
@@ -137,6 +139,8 @@ MERGE READY
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
 | `/merge-ready` | All 9 quality gates |
 | `/context-refresh` | Rebuild session context from scratchpad |
+| `/sdlc-fast <description>` | Override-only — bypass triage, run fast-tier execution directly |
+| `/sdlc-quick <description>` | Override-only — bypass triage, run quick-tier execution directly |
 
 ### Changelog Automation
 
