@@ -3,6 +3,7 @@ name: test-writer
 description: Write and run tests for new or changed code, expand test coverage, fix failing tests
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
+effort: medium
 ---
 
 # Test Writer

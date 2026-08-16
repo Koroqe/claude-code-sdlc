@@ -3,6 +3,7 @@ name: build-runner
 description: Run typecheck, tests, and build to verify code quality and catch errors
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: sonnet
+effort: low
 ---
 
 # Build Runner

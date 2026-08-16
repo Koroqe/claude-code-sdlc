@@ -3,6 +3,7 @@ name: refactor-cleaner
 description: Refactor code for clarity, reduce duplication, improve type safety, clean up dead code
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
+effort: medium
 ---
 
 # Refactor & Cleaner

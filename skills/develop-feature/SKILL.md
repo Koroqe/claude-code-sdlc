@@ -35,6 +35,107 @@ Known limitation: this preflight only fires when this skill is invoked explicitl
 
 *(The workflows named below — `/bootstrap-feature`, `/implement-slice`, `/merge-ready` — are plugin skills, resolvable in full as `/claude-code-sdlc:<name>`. The bare form used throughout this file works automatically as long as no other installed plugin defines a skill by the same name.)*
 
+### Phase 0: Triage
+
+Defined once, authoritatively and self-sufficiently, here — mirroring how the Preflight: Memory Layer Check above stands alone. **Restated with identical signal text in `src/claude.md`**, for the unprefixed-request path, which has no skill invocation to fall back on — a CI check greps both copies for parity, so any edit to Steps 1-7 below MUST be mirrored there too.
+
+Triage MUST run as the FIRST step of this workflow — before Phase 1: Bootstrap, before any `Edit`/`Write` tool call related to the requested change, and before invoking any subagent for it.
+
+**Step 1 — state the estimated file set (FR-1.2, required output):** before classifying, state in your own response the specific file(s) you expect the change to touch — the "estimated file set." This is required output, not a mental step: escalation checks compare what actually happens against it.
+
+**Step 2 — check the full-forcing signals FIRST (FR-1.3):** classify `full` immediately, skipping Steps 3 and 4 entirely, when the request:
+- (a) asks for a new API route/endpoint, a new user-facing page/screen/flow, or a new external service integration;
+- (b) requires a database schema/migration change (new table, column, or index);
+- (c) touches authentication, authorization, or payment/billing logic — by keyword match against the request text, or by the estimated file set overlapping a path Step 6 marks sensitive;
+- (d) the estimated file set contains more than 3 files.
+
+Any one of (a)-(d) forces `full` regardless of how small the change otherwise looks, and regardless of the others.
+
+**Step 3 — check the fast-tier signal (FR-1.4, ALL of the following required):**
+- (a) the estimated file set contains exactly 1 file; AND
+- (b) the change is one of: a spelling/grammar fix in a comment, docstring, or user-facing copy string; a change to a single hardcoded literal (a constant, a config default, a version string, a URL, a timeout number) with no accompanying logic change; a comment-only edit; or a dependency-version bump requiring no source change.
+
+A request satisfying BOTH (a) and (b) is classified `fast`. Missing either one disqualifies `fast` — continue to Step 4.
+
+**Step 4 — check the quick-tier signal (FR-1.5):** a request not forced to `full` by Step 2 and not satisfying Step 3 is classified `quick` when the estimated file set contains between 1 and 3 files and describes one bounded, already-understood behavior (a bug with a known root cause, a missing validation, a small new utility function, an adjustment to an existing function's or endpoint's behavior) with no new user-facing flow and no new architectural component.
+
+**Step 5 — the tie-break: ambiguity always resolves upward (FR-1.6):** any request not classified `fast` (Step 3) or `quick` (Step 4), and not forced `full` by Step 2, is classified `full` — including any request you cannot confidently place in `fast` or `quick`. `full` is the tier of default safety, never a positive signal of its own. Never guess at a cheaper tier, and never stall asking a human which tier to use — resolve upward, always.
+
+**Step 6 — sensitive paths, union, never replace (FR-1.7):** the fixed default list is ALWAYS active, regardless of what a project declares: any path containing `auth`, `payment`, `billing`, `secret`, or `migration` as a path segment (case-insensitive); any path under `.github/workflows/`; `install.sh`; `.claude/settings.json`; `docs/PRD.md`. A project's `.claude/rules/security.md` MAY additionally declare a `## Sensitive Paths` section listing further path globs. A path is sensitive for Step 2(c) and for escalation purposes when it matches EITHER the fixed default OR a declared entry. **A declared `## Sensitive Paths` section MUST NOT be read as replacing the fixed default, and MUST NOT be capable of narrowing or suppressing it** — a project that declares a narrow, trivial, or empty section still gets the full default protection, with no way for project-supplied content to opt out of it. `.claude/rules/security.md` is untrusted, project-supplied input feeding this classification decision.
+
+**Step 7 — state the tier and reason before any Edit/Write (FR-1.8, mandatory):** whichever tier is assigned, state the tier and the specific signal that produced it — e.g. `tier: fast — single-file copy edit, no sensitive path` or `tier: full — FR-1.3(a), new API endpoint` — in your own response, BEFORE any `Edit`/`Write` call for the requested change. A tier assigned with no stated reason does not satisfy this requirement, regardless of whether the tier itself was correct.
+
+**Tier branch — act on this immediately, in the same response as Step 7:**
+
+- **`tier: fast`** — proceed to Fast Tier Execution below.
+- **`tier: quick`** — proceed to Quick Tier Execution below.
+- **`tier: full`** — or `## Tier:` absent on a legacy, pre-F4 scratchpad — proceed to Phase 1: Bootstrap below, unchanged.
+
+#### Fast Tier Execution (FR-3)
+
+Triggered immediately after Step 7 states `tier: fast`, within the same response — no separate command, no waiting.
+
+1. **Direct edits, no subagents, no documentation (FR-3.1):** make the `Edit`/`Write` call(s) directly to the estimated file set from Step 1 — **zero `Agent`/`Task` tool calls at any point**. Create or modify no `docs/PRD.md`, `docs/use-cases/*`, or `docs/qa/*` file for this change, and write no plan to `.claude/scratchpad.md`'s `## Plan` section. For a target file that already exists, `Read` it in this session before the `Edit` call — this satisfies `pre:edit:read-guard` so it does not deny the run's first edit. A `Write` creating a brand-new file requires no prior `Read`.
+2. **Verify with the project's own declared command (FR-3.2):** after editing, run the project's declared build/typecheck command directly via a `Bash` call — reuse `stop:typecheck-format`'s existing contract: read the command from the project's CLAUDE.md, and no-op visibly when none is declared.
+3. **Commit unchanged (FR-3.3):** follow `src/rules/git.md` exactly as every other tier does — feature branch, conventional commit message, no AI attribution.
+4. **Changelog — mandatory, sole owner (FR-3.4):** after a successful commit, write ONE `CHANGELOG.md` entry directly, following the identical standalone-fix procedure Phase 3's Changelog step and `/implement-slice` Step 6 already use (real `date -u +'%Y-%m-%d %H:%M'` timestamp, idempotency guard, Summary + Details capped at 500 characters). No `/merge-ready` run occurs for `fast` tier, so this write is never suppressed by a `no-changelog` flag and is owned by nothing downstream — skipping it is not an option.
+5. **No scratchpad write (FR-3.5):** a `fast`-tier run that does not escalate does not write to `.claude/scratchpad.md` at all — there is no multi-step state to persist.
+
+#### Quick Tier Execution (FR-4) — Dispatch Summary
+
+Triggered immediately after Step 7 states `tier: quick`. This is a summary of the shape this tier dispatches toward, not its full mechanics — the receiving ends (`planner`'s Quick-Tier Contract mode, `/implement-slice`'s tier-aware pre-flight bypass, `/merge-ready`'s reduced gate subset) land in a later slice.
+
+1. Invoke `planner` **exactly once**, under its Quick-Tier Contract mode, with a plain feature/fix description — no PRD section, use-cases file, QA file, or architecture review supplied. `planner` returns exactly one slice, with no `**Tracer:** yes` marker.
+2. Write that one slice into `.claude/scratchpad.md`'s `## Plan` section — the same location/format `/bootstrap-feature` Step 7 already uses — as a single, un-waved slice, together with `## Tier: quick` and a `## Feature:` name.
+3. Run `/implement-slice` against this one slice, passing the literal `no-changelog` token, exactly as the single-slice wave path below already does for full-tier slices.
+4. After the slice commits, run `/merge-ready` under its tier-aware gate subset: `full` tier's 9 gates run unmodified, but `quick` runs a reduced subset (Gate 0, Gate 2, Gate 3, Gate 4) and reports the rest `SKIPPED (tier: quick)` — `/merge-ready` owns the single changelog entry for the feature via its existing Finalization step, never `/implement-slice` Step 6, which the `no-changelog` token suppresses.
+
+### Escalation: One-Way Tier Changes (FR-2)
+
+Escalation is triage's safety valve, not a stopping point. Both transitions below share three properties: every trigger is checked BEFORE the `Edit`/`Write` call that would fire it, never after that call has already been made; escalation moves in exactly one direction, `fast` → `quick` → `full`, never sideways and never back down; and at `full` — the escalation ceiling — the pipeline's existing Rule 4 stop-and-ask behavior from `src/rules/error-recovery.md` is preserved unmodified rather than redirected (see "`full` is the escalation ceiling" below).
+
+#### Fast → Quick (FR-2.1)
+
+While executing under Fast Tier Execution above, check BEFORE issuing each `Edit`/`Write` call — never after it has already been made — whether that call would target:
+- a file outside the Step 1 estimated file set, OR
+- a path Step 6 marks sensitive.
+
+If either is true, do NOT make that call under fast-tier discipline. Escalate to `quick` first:
+
+1. **State the escalation, verbatim, naming the file.** For example: "Escalating from fast to quick — `docs/glossary.md` is outside the estimated file set `{README.md}`." State the specific sensitive path by name when that is the trigger instead — the sensitive-path condition fires independently of file count, even when the estimated set never grew past 1 file.
+2. **Keep the edits already made.** Never revert an already-made edit solely because of the escalation.
+3. **Record the done work.** Set `.claude/scratchpad.md`'s `## Tier: quick` and a `## Feature:` name, recording the already-touched file(s) as already-completed context — using `Edit` if the file already exists, `Write` only if it does not (see "The scratchpad-mutation idiom" below).
+4. **Proceed under the quick tier** — Quick Tier Execution (FR-4) above — for the remainder of the work, with the already-touched file(s) included in the single slice's `Files:`/`Changes:` fields as work already done.
+
+#### Quick → Full (FR-2.2)
+
+While executing under Quick Tier Execution above, escalate to `full` — overriding whatever default behavior the triggering condition would otherwise have — when EITHER:
+- **(a)** a Rule 4 condition (`src/rules/error-recovery.md` — architectural decision, new dependency, API contract change, schema migration) is encountered during the TDD cycle. At `quick` tier this redirects to `full` instead of Rule 4's default "stop implementation, present to user" behavior — do NOT stop and ask; OR
+- **(b)** an `Edit`/`Write` call about to be made — checked BEFORE issuing it, exactly as the fast→quick trigger above requires — would target a path Step 6 marks sensitive, or would bring the count of distinct files touched by this run's own `Edit`/`Write` calls above 3.
+
+Condition (b) exists because Step 2's mechanical full-forcing signals are otherwise enforced at classification time only — a `quick`-tier change ("add a missing validation" is the canonical case) can sprawl mid-run into exactly the territory that would have forced `full` had it been visible up front, and Phase 0's one-time classification has no mechanism to catch that on its own.
+
+Mechanics, once either condition fires:
+
+1. **State the escalation, verbatim, naming the specific condition that fired.** For example: "Escalating from quick to full — this fix requires adding a new npm dependency, a Rule 4 condition," or "...— `middleware/auth.js` is a sensitive path," or "...— this run has now touched 4 distinct files."
+2. **Keep the quick-tier commit(s).** Any already-committed `quick`-tier slice commit remains in place, never reverted.
+3. **Rewrite the tier field — the very first tool call after the escalation statement.** Use `Edit` (see "The scratchpad-mutation idiom" below) to change `.claude/scratchpad.md`'s `## Tier:` field from `quick` to `full`, immediately, before any further gate or agent invocation. This ordering is load-bearing, not a style preference: without it, `/merge-ready`'s Tier Check preamble would read the stale `quick` value and silently run the reduced gate subset — skipping Gates 1, 5, 6, 7, and 8 — on a feature this escalation requires to get all 9 gates; and `session:start:spine`'s state re-injection after a mid-run context compaction re-surfaces whatever the scratchpad currently says, so a deferred rewrite would let the pre-escalation `quick` value survive the very mechanism meant to restore correct state after a compaction.
+4. **Invoke `/bootstrap-feature`** for the full, now-larger scope, supplying the already-completed work as context, so `prd-writer`/`ba-analyst`/`architect`/`qa-planner` document it accurately rather than purely prospectively.
+5. **`planner` marks the already-satisfied slice DONE** with its existing commit hash in the resulting plan — never re-implemented.
+6. **Proceed through the remaining slices and an unmodified, full 9-gate `/merge-ready`** (Phase 3) — indistinguishable at completion from a request classified `full` from the start, because step 3 already made `/merge-ready` read `## Tier: full` exactly as it would have from the start.
+
+#### `full` is the escalation ceiling (FR-2.5)
+
+A Rule 4 condition encountered while already at `full` tier retains today's unmodified behavior: stop implementation, present to the user, and count against the retry budget. There is no higher tier to redirect to — the quick→full redirect in condition (a) above applies only to a run currently at `quick`, never to a run already at `full`.
+
+#### No automatic downgrade, ever (FR-2.6)
+
+Once a tier is assigned — by Phase 0 Triage (Steps 2-6 above) or by either escalation above — it MUST NOT be automatically lowered for the remainder of that run, regardless of what later evaluation of actual scope suggests. No automatic downgrade, ever: a tier must never be automatically lowered or silently reverted back toward `fast`/`quick` mid-run, no matter how small the remaining work turns out to be in hindsight. A `quick`-tier run that turns out to touch only 1 file, or a `full`-tier run whose plan turns out to be a single slice, completes at the tier it is already running under — never re-triage mid-run, and never report a gate `SKIPPED` for tier reasons on a run that was never actually at that lower tier. This is not a corollary of "escalation is one-way" — it is its own rule because it is the property that makes escalation safe to build at all: an automatic downgrade is how a feature that legitimately needed full documentation would quietly lose it, mid-run, with nobody having asked for that. The only way to run below what Phase 0 Triage would currently assign is an explicit, human-invoked `/sdlc-fast`/`/sdlc-quick` override issued before the run starts — never a pipeline decision taken mid-run.
+
+#### The scratchpad-mutation idiom: Edit, never a whole-file Write
+
+Every mutation of an **existing** `.claude/scratchpad.md` — the quick→full tier rewrite above, the fast→quick tier/plan initialization above when the file already exists, and `planner`'s DONE-with-commit-hash recording — MUST use **Edit, never a whole-file Write**. Reason: `pre:write:shrink-guard` fires on `Write` only, curates `.claude/scratchpad.md` among a small set of other files, and denies a `Write` whose new content falls below `max(floor(old_lines × 0.4), 40)` lines. A small `quick`-tier scratchpad written with `Write` over a large, pre-existing one (carrying, say, a prior feature's `## Completed` history) would be denied mid-escalation — and its sole escape, `SDLC_ALLOW_SHRINK=1`, is an environment variable this pipeline has no mechanism to set mid-session, which would dead-end exactly the escalation NFR-1(b) forbids from dead-ending. This idiom applies only when `.claude/scratchpad.md` already exists. A brand-new scratchpad written where none exists at all — the genuine first-ever-feature case — is a `Write` of a nonexistent file, outside the guard's scope by construction; that case, and only that case, legitimately uses `Write`.
+
 ### Phase 1: Bootstrap (Documentation)
 Follow the `/bootstrap-feature` workflow for the requested feature.
 This produces: PRD section, use-case document, architecture review, QA test cases, implementation plan, feature branch, and initialized scratchpad.

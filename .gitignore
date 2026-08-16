@@ -1,3 +1,9 @@
 .DS_Store
 .vscode/
 .claude/tmp/
+
+# install.sh --local --profile <name> receipt — a local install artifact
+# recording which model profile was last applied to agents/*.md. Committing
+# it would let a contributor's rewritten tree pass the CI drift check that
+# exists to catch exactly that mismatch.
+/.sdlc-model-profile

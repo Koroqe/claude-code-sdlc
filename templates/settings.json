@@ -28,8 +28,17 @@
     "every hook fire twice.",
     "",
     "Projects that genuinely need curl/wget can re-allow them in",
-    ".claude/settings.local.json, which is gitignored and personal."
+    ".claude/settings.local.json, which is gitignored and personal.",
+    "",
+    "statusLine below renders .claude/statusline.js in Claude Code's own",
+    "status bar (FR-13). It is not a hook and has no reverse dependency on",
+    "this pipeline - nothing here reads its output back in, so removing it",
+    "changes only whether the bar renders, never any other behavior."
   ],
+  "statusLine": {
+    "type": "command",
+    "command": "node .claude/statusline.js"
+  },
   "permissions": {
     "allow": [
       "Bash(git commit*)",

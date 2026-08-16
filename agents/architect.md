@@ -3,6 +3,7 @@ name: architect
 description: Review architecture decisions, validate module boundaries, design database schema changes, evaluate API design
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: opus
+effort: high
 ---
 
 # Architecture Reviewer

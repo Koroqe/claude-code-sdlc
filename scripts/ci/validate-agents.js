@@ -7,9 +7,10 @@
  * Checks (PRD Section 6, FR-5.2):
  *   - frontmatter parses
  *   - `name` matches the filename
- *   - `name`, `description`, `tools`, `model` are all present and non-empty
+ *   - `name`, `description`, `tools`, `model`, `effort` are all present and non-empty
  *   - every entry in `tools` is a real Claude Code tool
  *   - `model` is a recognised alias, `inherit`, or an explicit model id
+ *   - `effort` is one of `low`, `medium`, `high`
  *
  * The expected agent count is a floor, not an equality check — adding a
  * fourteenth agent must not require editing this validator (QA 18.2.4).
@@ -28,7 +29,8 @@ const VALID_TOOLS = new Set([
 
 const VALID_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable', 'fast', 'inherit']);
 const EXPLICIT_MODEL_ID = /^claude-[a-z0-9.-]+$/;
-const REQUIRED_FIELDS = ['name', 'description', 'tools', 'model'];
+const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
+const REQUIRED_FIELDS = ['name', 'description', 'tools', 'model', 'effort'];
 
 core.run('validate-agents', (v, args) => {
   const dir = path.join(args.root, 'agents');
@@ -76,6 +78,14 @@ core.run('validate-agents', (v, args) => {
         rel,
         `\`model: ${model}\` is not a known alias (${[...VALID_MODEL_ALIASES].join(', ')}) ` +
         'or an explicit `claude-*` model id'
+      );
+    }
+
+    const effort = parsed.data.effort;
+    if (!VALID_EFFORT_LEVELS.has(effort)) {
+      v.error(
+        rel,
+        `\`effort: ${effort}\` is not a known level (${[...VALID_EFFORT_LEVELS].join(', ')})`
       );
     }
   }

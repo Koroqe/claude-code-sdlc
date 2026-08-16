@@ -38,6 +38,40 @@ set -euo pipefail
 # required to have either.
 # ============================================================================
 
+# ----------------------------------------------------------------------------
+# Model profiles (--profile) — spike finding (FR-7.6)
+#
+# `install.sh --local --profile <quality|balanced|budget|inherit>` rewrites
+# the `model:` frontmatter line of all 14 files under agents/ to a per-role
+# value (see model_for_role() below; README.md's "Model Profiles" section
+# carries the full table).
+#
+# Whether an already-running Claude Code session re-reads agents/*.md
+# frontmatter live, or instead snapshots agent definitions once at plugin
+# load/session start, could NOT be determined from this repository or this
+# development environment. Recorded honestly as UNDETERMINED rather than
+# assumed, with the evidence gathered and what would settle it:
+#   - This plugin's own manifest (.claude-plugin/plugin.json) points
+#     `agents:` at a static directory path (./agents/). How, or whether,
+#     Claude Code reloads content under that path during an already-running
+#     session is the host application's own internal behavior — it is not
+#     implemented by, or introspectable from, this repository's code.
+#   - This environment has no marketplace-installed copy of this plugin
+#     under ~/.claude/plugins/marketplaces/ to diff before/after a rewrite
+#     (that directory is empty here), and restarting a live session to
+#     observe reload behavior directly was not something this task could do.
+#   - What would settle it: install this plugin via `/plugin marketplace add
+#     <path>` + `/plugin install`, run `install.sh --local --profile <name>`
+#     against that installed checkout, then — WITHOUT restarting the session
+#     or reinstalling the plugin — invoke one of the rewritten agents and
+#     observe whether the new `model:` value actually took effect.
+#
+# Until this is settled, treat a new session, or a `/plugin` reinstall, as
+# REQUIRED after `--profile` runs for the new `model:` values to take
+# effect. That is the safer assumption, and the one consistent with the
+# class of drift this feature exists to close (PRD Section 10.1).
+# ----------------------------------------------------------------------------
+
 VERSION="4.0.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 PLUGIN_NAME="claude-code-sdlc"
@@ -53,10 +87,22 @@ DRY_RUN=false
 RESTORE_DIR=""
 TRUST_PROJECT=""
 DO_TRUST=false
+PROFILE=""
 
 # Populated by load_manifest()
 MANIFEST_OWNS=()
 MANIFEST_LEGACY=()
+
+# The 14 agent roles --profile rewrites, in FR-8.1's table order. Populated
+# by neither load_manifest() nor any manifest file — model_for_role()'s case
+# arms are this feature's own source of truth, deliberately independent of
+# the memory-layer manifest, which never mentions agents/ at all.
+AGENT_ROLES=(architect plan-critic planner security-auditor ba-analyst build-runner code-reviewer doc-updater e2e-runner prd-writer qa-planner refactor-cleaner test-writer verifier)
+
+# Staged temp files for the current --profile preflight pass. Cleared by
+# cleanup_profile_tempfiles() on any preflight failure and after a
+# successful commit phase.
+PROFILE_TEMPFILES=()
 
 # Colors
 RED='\033[0;31m'
@@ -106,13 +152,37 @@ OPTIONS:
                      Allow the hooks to run this project's CLAUDE.md-declared
                      typecheck/format commands (defaults to the current
                      directory). Untrusted projects only ever get a report.
+  --profile <name>   Rewrite agents/*.md model: frontmatter to one of
+                     quality | balanced | budget | inherit. Requires --local.
+                     See MODEL PROFILES below.
   --help             Show this help message
 
-  --dry-run combines with --uninstall and --restore to preview them.
+  --dry-run combines with --uninstall, --restore, and --profile to preview
+  them.
 
   --uninstall removes only what the install receipt and manifest list. Files
   you added yourself — including your own agents in ~/.claude/agents/ — are
   never removed, and a backup is taken before anything is deleted.
+
+MODEL PROFILES (requires --local; see README.md's "Model Profiles" section
+for the full quality/balanced/budget/inherit table):
+  bash install.sh --local --profile quality    # explicit shipped baseline
+  bash install.sh --local --profile balanced   # a middle ground
+  bash install.sh --local --profile budget     # cheapest roles with a backstop
+  bash install.sh --local --profile inherit    # every agent inherits the host default
+  bash install.sh --local --profile budget --dry-run   # preview only
+
+  Rewrites only the model: frontmatter line of all 14 files under agents/ —
+  every other line, in every file, is byte-identical before and after.
+  Two-phase: all 14 are validated before any of them is written, so a
+  malformed file leaves the whole tree unchanged rather than 13-of-14
+  rewritten. Writes .sdlc-model-profile at the repo root (gitignored — a
+  local artifact, never committed) naming the profile applied, only after
+  all 14 files are rewritten. Cannot combine with --uninstall, --restore,
+  --init-project, or --trust-project.
+
+  Whether an already-running Claude Code session picks up a rewrite without
+  restarting is UNDETERMINED — see this script's own header comment.
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (loaded as user memory)
@@ -140,7 +210,8 @@ WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
   .claude/rules/              Architecture, security, testing rules
   .claude/scratchpad.md       Session state persistence
-  .claude/settings.json       Permissions config
+  .claude/settings.json       Permissions config (incl. statusLine)
+  .claude/statusline.js       Statusline renderer template (copied, not run)
   docs/PRD.md                 Product requirements document
   docs/qa/                    QA test case directory
   docs/use-cases/             Use case document directory
@@ -672,6 +743,229 @@ build_removal_set() {
 }
 
 # ----------------------------------------------------------------------------
+# Model profile table (FR-8.1)
+#
+# One `<profile>:<role>) echo <model> ;;` case arm per profile/role pair,
+# plus a single `inherit:*) echo inherit ;;` wildcard standing in for all 14
+# inherit rows. This exact shape is a contract, not a style choice: a later
+# validator text-parses these arms (never executes this file) and asserts
+# they byte-compare against scripts/ci/lib/model-profiles.js's copy of the
+# same table (FR-10.3). Reformatting an arm, even harmlessly, would break
+# that parse.
+# ----------------------------------------------------------------------------
+model_for_role() {
+  local profile="$1" role="$2"
+  case "${profile}:${role}" in
+    quality:architect) echo opus ;;
+    quality:plan-critic) echo opus ;;
+    quality:planner) echo opus ;;
+    quality:security-auditor) echo opus ;;
+    quality:ba-analyst) echo sonnet ;;
+    quality:build-runner) echo sonnet ;;
+    quality:code-reviewer) echo sonnet ;;
+    quality:doc-updater) echo sonnet ;;
+    quality:e2e-runner) echo sonnet ;;
+    quality:prd-writer) echo sonnet ;;
+    quality:qa-planner) echo sonnet ;;
+    quality:refactor-cleaner) echo sonnet ;;
+    quality:test-writer) echo sonnet ;;
+    quality:verifier) echo sonnet ;;
+    balanced:architect) echo opus ;;
+    balanced:plan-critic) echo sonnet ;;
+    balanced:planner) echo opus ;;
+    balanced:security-auditor) echo opus ;;
+    balanced:ba-analyst) echo sonnet ;;
+    balanced:build-runner) echo haiku ;;
+    balanced:code-reviewer) echo sonnet ;;
+    balanced:doc-updater) echo haiku ;;
+    balanced:e2e-runner) echo sonnet ;;
+    balanced:prd-writer) echo haiku ;;
+    balanced:qa-planner) echo sonnet ;;
+    balanced:refactor-cleaner) echo sonnet ;;
+    balanced:test-writer) echo sonnet ;;
+    balanced:verifier) echo sonnet ;;
+    budget:architect) echo sonnet ;;
+    budget:plan-critic) echo sonnet ;;
+    budget:planner) echo sonnet ;;
+    budget:security-auditor) echo opus ;;
+    budget:ba-analyst) echo sonnet ;;
+    budget:build-runner) echo haiku ;;
+    budget:code-reviewer) echo sonnet ;;
+    budget:doc-updater) echo haiku ;;
+    budget:e2e-runner) echo sonnet ;;
+    budget:prd-writer) echo haiku ;;
+    budget:qa-planner) echo sonnet ;;
+    budget:refactor-cleaner) echo haiku ;;
+    budget:test-writer) echo haiku ;;
+    budget:verifier) echo sonnet ;;
+    inherit:*) echo inherit ;;
+    *) return 1 ;;
+  esac
+}
+
+# ----------------------------------------------------------------------------
+# Model profile rewrite (--profile)
+#
+# Rewrites the `model:` frontmatter line of all 14 agents/*.md files to the
+# value model_for_role() assigns that role under the chosen profile.
+#
+# Two-phase, mirroring install_user_config()'s existing "preflight EVERY
+# entry before copying any of them" discipline: every file is preflighted
+# into its own same-directory temp file first (mktemp beside its target, the
+# write_receipt() precedent, so the later `mv` is a same-filesystem rename
+# and therefore atomic); only after all 14 preflights succeed does a second
+# pass `mv` any of them into place. A preflight failure removes every temp
+# file already staged — never leaking earlier files — and exits non-zero
+# with the real tree completely untouched, never N of 14.
+# ----------------------------------------------------------------------------
+cleanup_profile_tempfiles() {
+  local t
+  for t in ${PROFILE_TEMPFILES[@]+"${PROFILE_TEMPFILES[@]}"}; do
+    rm -f -- "$t"
+  done
+  PROFILE_TEMPFILES=()
+}
+
+# Prints the current `model:` value found within a file's frontmatter
+# (strictly between its first and second `---` line), or nothing if absent.
+frontmatter_model_of() {
+  awk '
+    BEGIN { fences = 0 }
+    {
+      if ($0 == "---") { fences++; next }
+      if (fences == 1 && $0 ~ /^model: /) { sub(/^model: /, ""); print; exit }
+    }
+  ' "$1"
+}
+
+# Written only after all 14 rewrites succeed, via the identical
+# temp-then-mv pattern write_receipt() already uses for .sdlc-receipt — an
+# interrupted or partially-failed rewrite must never leave a receipt
+# claiming a profile that was not fully applied.
+write_profile_receipt() {
+  local tmp
+  tmp="$(mktemp "$SCRIPT_DIR/.sdlc-model-profile.XXXXXX")" || {
+    log_error "Failed to create temp file for the profile receipt in $SCRIPT_DIR — no receipt was written."
+    cleanup_profile_tempfiles
+    exit 1
+  }
+  printf '%s\n' "$PROFILE" > "$tmp"
+  mv -- "$tmp" "$SCRIPT_DIR/.sdlc-model-profile"
+}
+
+do_profile() {
+  # Runs for the whole preflight/commit lifecycle below. Guarantees that an
+  # unhandled exit (SIGINT, or `set -e` firing on a bare `mktemp` failure)
+  # still removes any hidden `.<role>.md.XXXXXX` files already staged under
+  # agents/, not just the failure paths that call cleanup_profile_tempfiles()
+  # explicitly. Cleared once Phase 2 has committed everything, so a
+  # successful run does not re-run cleanup over files it legitimately
+  # renamed into place.
+  trap cleanup_profile_tempfiles EXIT
+
+  get_source_dir
+
+  local role file src target current tmp
+  local -a mv_targets=()
+
+  if [ "$DRY_RUN" = true ]; then
+    echo ""
+    log_info "Dry run — model profile '$PROFILE' in $SCRIPT_DIR/agents:"
+    for role in "${AGENT_ROLES[@]}"; do
+      src="$SCRIPT_DIR/agents/${role}.md"
+      if [ ! -f "$src" ]; then
+        say_untrusted "Missing expected agent file: " "agents/${role}.md"
+        exit 1
+      fi
+      target="$(model_for_role "$PROFILE" "$role")" || {
+        log_error "No model-profile table entry for ${PROFILE}:${role}"
+        exit 1
+      }
+      current="$(frontmatter_model_of "$src")"
+      current="$(printf '%s' "$current" | tr -d '[:cntrl:]')"
+      printf '  %-18s current=%-8s target=%s\n' "$role" "${current:-<none>}" "$target"
+    done
+    echo ""
+    log_info "No files were changed."
+    return 0
+  fi
+
+  # Phase 1 — preflight all 14 into same-directory temp files. Nothing under
+  # agents/ is written by this loop.
+  for role in "${AGENT_ROLES[@]}"; do
+    file="${role}.md"
+    src="$SCRIPT_DIR/agents/$file"
+
+    if [ ! -f "$src" ]; then
+      log_error "Missing expected agent file: agents/$file"
+      cleanup_profile_tempfiles
+      exit 1
+    fi
+
+    target="$(model_for_role "$PROFILE" "$role")" || {
+      log_error "No model-profile table entry for ${PROFILE}:${role}"
+      cleanup_profile_tempfiles
+      exit 1
+    }
+
+    tmp="$(mktemp "$SCRIPT_DIR/agents/.${file}.XXXXXX")" || {
+      log_error "Failed to create temp file for agents/$file — no files were modified."
+      cleanup_profile_tempfiles
+      exit 1
+    }
+
+    # Bounded substitution: the frontmatter-fence counter means only a
+    # `model: ` line strictly between the first and second `---` is ever
+    # touched — never a `model: ` string appearing anywhere in the agent's
+    # prompt body by coincidence. A zero- or multiple-match result is a
+    # failure, not a silent no-op success, and is named by file.
+    if ! awk -v target="model: ${target}" -v fname="agents/${file}" '
+      BEGIN { fences = 0; matched = 0 }
+      {
+        if ($0 == "---") { fences++; print; next }
+        if (fences == 1 && $0 ~ /^model: /) { print target; matched++; next }
+        print
+      }
+      END {
+        if (matched != 1) {
+          print "ERROR: " fname ": expected exactly one model: line in frontmatter, found " matched > "/dev/stderr"
+          exit 1
+        }
+      }
+    ' "$src" > "$tmp"; then
+      rm -f -- "$tmp"
+      log_error "Preflight failed for agents/$file — no files were modified."
+      cleanup_profile_tempfiles
+      exit 1
+    fi
+
+    PROFILE_TEMPFILES+=("$tmp")
+    mv_targets+=("$src")
+  done
+
+  # Phase 2 — every one of the 14 preflighted cleanly; commit them all. Each
+  # `mv` is a same-filesystem rename (the temp file lives beside its
+  # target), so this phase cannot itself degrade into a partial, non-atomic
+  # copy.
+  local i
+  for i in "${!mv_targets[@]}"; do
+    mv -- "${PROFILE_TEMPFILES[$i]}" "${mv_targets[$i]}"
+  done
+  PROFILE_TEMPFILES=()
+
+  # Phase 2 fully committed — nothing legitimately staged remains, so clear
+  # the trap before it can fire cleanup over files this run intentionally
+  # kept (there are none, but a later failure in write_profile_receipt must
+  # not be misread as a Phase 1/2 leak).
+  trap - EXIT
+
+  write_profile_receipt
+
+  log_ok "Model profile '$PROFILE' applied to ${#mv_targets[@]} agent file(s) in $SCRIPT_DIR/agents"
+  log_info "Receipt written to $SCRIPT_DIR/.sdlc-model-profile"
+}
+
+# ----------------------------------------------------------------------------
 # Uninstall / dry-run / restore
 # ----------------------------------------------------------------------------
 do_uninstall() {
@@ -969,6 +1263,13 @@ scaffold_project() {
   cp -- "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
   log_ok ".claude/settings.json"
 
+  # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
+  # invoked directly by Claude Code's own statusLine mechanism (the command
+  # templates/settings.json just installed above), never by this installer -
+  # this script itself still never invokes `node` or `jq`.
+  cp -- "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js"
+  log_ok ".claude/statusline.js (statusline renderer template)"
+
   cp -- "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md"
   log_ok "CHANGELOG.md"
 
@@ -1106,6 +1407,18 @@ main() {
         esac
         RESTORE_DIR="$2"
         shift 2 ;;
+      --profile)
+        if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+          log_error "--profile requires a value: quality, balanced, budget, or inherit."
+          exit 1
+        fi
+        case "$2" in
+          quality|balanced|budget|inherit) PROFILE="$2" ;;
+          *)
+            say_untrusted "--profile requires quality, balanced, budget, or inherit, got: " "$2"
+            exit 1 ;;
+        esac
+        shift 2 ;;
       --help|-h) print_help; exit 0 ;;
       *)
         say_untrusted "Unknown option: " "$1"
@@ -1126,6 +1439,22 @@ main() {
   if [ "$DO_UNINSTALL" = true ] && [ "$INIT_PROJECT" = true ]; then
     log_error "--uninstall and --init-project cannot be combined."
     exit 1
+  fi
+
+  if [ -n "$PROFILE" ]; then
+    if [ "$LOCAL_MODE" != true ]; then
+      log_error "--profile requires --local: the rewrite targets agents/*.md inside the plugin-source checkout that /plugin marketplace add will later point at. A non-local run's source directory is a temporary clone cleanup_source_dir deletes before the process exits, so a rewrite there would be silently discarded."
+      exit 1
+    fi
+    if [ "$DO_UNINSTALL" = true ] || [ -n "$RESTORE_DIR" ] || [ "$INIT_PROJECT" = true ] || [ "$DO_TRUST" = true ]; then
+      log_error "--profile cannot be combined with --uninstall, --restore, --init-project, or --trust-project."
+      exit 1
+    fi
+  fi
+
+  if [ -n "$PROFILE" ]; then
+    do_profile
+    return 0
   fi
 
   if [ "$DO_TRUST" = true ]; then
