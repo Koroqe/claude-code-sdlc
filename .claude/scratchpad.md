@@ -1,6 +1,6 @@
 ## Feature: Verification & Review Upgrade (v4.0 roadmap F3)
 ## Branch: feat/verification-review-upgrade
-## Status: quality-gates
+## Status: complete
 
 ## Docs
 
@@ -177,6 +177,23 @@ counted as exercised even with no entrant — which was fixed before commit.
 Security pre-review on Slice 1 returned FAIL (1 HIGH, 2 MEDIUM, 2 LOW), all fixed: untrusted-content
 boundary, slug path-traversal guard, YAML scalar quoting, Gate 6 report-freshness check, and the
 no-Bash `git diff` inconsistency.
+
+## Merge-ready gate results
+
+Gate 0 git hygiene PASS · Gate 1 docs PASS · Gate 2 code review **PASS** (after 4 fixes) ·
+Gate 3 security **PASS** (after 5 fixes) · Gate 4 build PASS (29 CI steps + 16 hook test files) ·
+Gate 5 E2E N/A · **Gate 6 `PRESENT_BEHAVIOR_UNVERIFIED`** · Gate 7 docs accuracy PASS · Gate 8 N/A
+
+**Gate 6 is deliberately not VERIFIED, and that is the feature working.** 74 of 98 test cases have
+no executor in this repo, so most agent-level behaviour is present and correctly wired but never
+exercised. Two gaps were closed by hand: `plan-critic` was run against all five fixtures (every
+expected BLOCKER fired, golden plan clean, extraction faithful), and pushing the branch exercises
+the 7 new CI steps for the first time. The rest stand as honest, recorded gaps.
+
+Defects caught at merge-ready and fixed: replan-loop commits bypassed Gates 2/3 entirely (HIGH);
+`security-auditor` was told to scope to a diff it has no tool to obtain; the plan-critic loop gated
+its fix pass on a BLOCKER, silently downgrading scope-reduction findings to "merely recorded"; a
+validator function was written with the wrong signature and never executed.
 
 ## Blockers
 
