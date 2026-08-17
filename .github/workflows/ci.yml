@@ -117,6 +117,14 @@ jobs:
       - name: Validate documented commands
         run: node scripts/ci/validate-doc-commands.js
 
+      # The producer side of the instinct store. Its consolidation arithmetic —
+      # elevation, decay, retirement — is specified in prose and performed by a
+      # model, and the verification gate named it the feature's largest gap:
+      # everything downstream is tested code, while nothing proved the store's
+      # own contents were ever produced correctly.
+      - name: Validate instinct store arithmetic
+        run: node scripts/ci/validate-instinct-store.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -247,6 +255,12 @@ jobs:
       # check discriminates rather than objecting to every documented command.
       - name: Falsify — doc-commands validator catches a broken documented command
         run: 'node scripts/ci/validate-doc-commands.js --root tests/fixtures/ci/doc-commands/bad-broken-commands --min 1 --expect-failure "no terminal to answer from" --expect-problems 3'
+
+      # Five entries, five different invariants. A sixth property is proven by
+      # omission: an entry whose confidence sits BELOW its formula ceiling is
+      # legitimate decay and must not be flagged.
+      - name: Falsify — instinct-store validator catches broken consolidation arithmetic
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-arithmetic --min 1 --expect-failure "exceeds what 2 occurrence(s) can produce" --expect-problems 5'
 
       # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
       # model-profile drift validator, each a passing mirror except one
