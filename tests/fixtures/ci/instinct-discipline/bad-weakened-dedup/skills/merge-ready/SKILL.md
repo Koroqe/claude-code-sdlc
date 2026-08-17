@@ -9,9 +9,10 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
 
 > This is a trimmed, structurally-identical mirror of `skills/merge-ready/SKILL.md`'s "Post-Gate
 > Instinct Capture" step, committed only so `scripts/ci/validate-instinct-discipline.js`'s falsify step
-> has a tree to run against. This file carries the C3/FR-1.5a dedup clause UNCHANGED — the deliberate
-> defect in this fixture lives only in `agents/planner.md`, isolating the failure to the FR-6.2a
-> assertion.
+> has a tree to run against. This file carries the C3/FR-1.5a dedup clause UNCHANGED, and must NOT be
+> flagged. This fixture's one deliberate defect lives in `skills/implement-slice/SKILL.md`, whose dedup
+> scan is relaxed from AND to OR; a run that also trips this file would prove the validator treats the
+> two capture surfaces as one instead of isolating to the file that actually carries the defect.
 
 ## Post-Gate Instinct Capture
 

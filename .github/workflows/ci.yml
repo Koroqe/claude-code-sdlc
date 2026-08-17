@@ -195,7 +195,7 @@ jobs:
       # away — proving the mechanical backstop for the higher-risk prose path
       # actually fires by name, and isolates to the one file with the defect.
       - name: Falsify — instinct-discipline validator catches a weakened FR-6.2a clause
-        run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened --min 1 --expect-failure "FR-6.2a"
+        run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened --min 1 --expect-failure "FR-6.2a" --expect-problems 1
 
       # The validator's OTHER arm. Gate 3 (security) flagged that only the
       # FR-6.2a check had a seeded control, leaving the C3/FR-1.5a dedup check
@@ -203,7 +203,7 @@ jobs:
       # OR — a defect that still reads as a well-formed dedup clause to a human
       # skimming the diff, which is why it needs a machine to catch it.
       - name: Falsify — instinct-discipline validator catches an OR-matched dedup scan
-        run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened-dedup --min 1 --expect-failure "to BOTH match"
+        run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened-dedup --min 1 --expect-failure "to BOTH match" --expect-problems 1
 
       # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
       # model-profile drift validator, each a passing mirror except one

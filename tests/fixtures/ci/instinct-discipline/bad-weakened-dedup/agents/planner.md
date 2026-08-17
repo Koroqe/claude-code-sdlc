@@ -9,9 +9,13 @@ effort: high
 # Tech Lead — Feature Planner (seeded CI fixture — trimmed mirror, NOT the real file)
 
 > This is a trimmed, structurally-identical mirror of `agents/planner.md`'s Process section, committed
-> only so `scripts/ci/validate-instinct-discipline.js`'s falsify step has a tree to run against. It
-> carries the SAME content as the real file up through Process step 3's opening paragraphs — with
-> exactly one deliberate defect: the entire attach-time-validation paragraph binding `Rule:` attachment
+> only so `scripts/ci/validate-instinct-discipline.js`'s falsify step has a tree to run against. This
+> file is CLEAN — its attach-time-validation paragraph is present and unweakened, so the
+> validator must NOT flag it. That is the point: this fixture's one deliberate defect lives in
+> `skills/implement-slice/SKILL.md`, and a run that also trips here would prove the validator is not
+> isolating. (The sibling `bad-weakened/` fixture is the one that removes this paragraph.)
+>
+> Retained below verbatim: the paragraph binding `Rule:` attachment
 > to the shared allowlist has been removed, as if a later, unrelated edit had quietly trimmed it away.
 > Deliberately, that removed paragraph's own requirement-number marker is not referenced anywhere in
 > this note either, so the validator's marker search below finds no accidental early match.

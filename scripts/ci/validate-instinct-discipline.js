@@ -75,7 +75,15 @@ function flatten(text) {
 function checkPlannerFr62a(v, text) {
   const rel = 'agents/planner.md';
   const flat = flatten(text);
-  const markerIdx = flat.indexOf('FR-6.2a');
+  // Anchor on the BOLDED requirement heading first. Anchoring on a bare
+  // "FR-6.2a" takes whichever mention comes first in the file — so any prose
+  // above the clause that merely names it (a header comment, a changelog note)
+  // silently moves the window off the real clause and reports it as weakened.
+  // That misfire was observed for real on a fixture header. Bare match stays as
+  // the fallback so a clause that loses its bold markers is still found rather
+  // than reported missing entirely.
+  const boldIdx = flat.indexOf('**FR-6.2a');
+  const markerIdx = boldIdx !== -1 ? boldIdx : flat.indexOf('FR-6.2a');
   if (markerIdx === -1) {
     v.error(
       rel,

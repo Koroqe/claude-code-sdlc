@@ -9,8 +9,9 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
 
 > This is a trimmed, structurally-identical mirror of `skills/implement-slice/SKILL.md`'s "Capture
 > Instincts" step, committed only so `scripts/ci/validate-instinct-discipline.js`'s falsify step has a
-> tree to run against. This file carries the C3/FR-1.5a dedup clause UNCHANGED — the deliberate defect
-> in this fixture lives only in `agents/planner.md`, isolating the failure to the FR-6.2a assertion.
+> tree to run against. **This file carries THIS fixture's one deliberate defect:** its C3/FR-1.5a
+> pre-capture dedup scan matches on `Pattern:` **or** `Category:` rather than requiring both, so the
+> validator must fail naming this file and the `both match` requirement — and must flag no other file.
 
 ### 6. Capture Instincts
 

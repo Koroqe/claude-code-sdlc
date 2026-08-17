@@ -493,9 +493,10 @@ of it is worse than losing an ordinary document.
    `Confidence:` is whatever step 3's formula already produced at that occurrence count; elevation
    itself performs no separate recomputation.
 
-3. **C2, stated verbatim — an invariant governing steps 1, 4 and 5, not an action of its own.**
-   Nothing is edited at this position; the numbering is retained only because steps 2 and 5 refer to
-   "step 3's formula" by number. The formula `min(0.9, 0.3 + 0.2 × (occurrences − 1))`, clamped to
+3. **C2, stated verbatim — an invariant governing every step that touches `Confidence:` (steps 2, 5
+   and 7), not an action of its own.** Nothing is edited at this position; the numbering is retained
+   only because steps 2 and 7 cite "step 3's formula" by number.
+   The formula `min(0.9, 0.3 + 0.2 × (occurrences − 1))`, clamped to
    `[0.3, 0.9]`, is recomputed **ONLY at a new-occurrence event** and **OVERWRITES** any decayed value.
    Between occurrences, confidence moves only via decay (step 5 below) — never via this formula. A new
    occurrence always wins over any prior decay: recomputing from the formula on a fresh occurrence
