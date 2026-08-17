@@ -1,6 +1,6 @@
 ## Feature: Self-Improvement Loop (v4.0 roadmap F5)
 ## Branch: feat/self-improvement-loop-v4
-## Status: implementing wave 3 slice 5/11
+## Status: quality-gates — all 11 slices committed across 4 waves; Gates 0-4 PASS, 6-7 pending
 ## Tier: full
 
 ## Docs
@@ -14,7 +14,7 @@
 ## Deliverables checklist
 
 - [x] PRD §11 · [x] Use cases · [x] Architecture review · [x] QA test cases
-- [ ] Slices 1–11 · [ ] CHANGELOG.md entry — written once at `/merge-ready` Finalization
+- [x] Slices 1–11 (all committed) · [ ] CHANGELOG.md entry — written once at `/merge-ready` Finalization
 
 ## D1 — Shared Rule-text validation (ONE definition, both consumers)
 
@@ -154,9 +154,9 @@ recreates the oversized slice or breaks same-wave disjointness.
   - **Done when:** planner tools byte-identical; cap, sub-field and D1 present with the
     excluded-silently clause · **Pre-review:** **security (MANDATORY)**
 
-### Wave 3 (5 slices, disjoint)
+### Wave 3 [complete] (5 slices, disjoint)
 
-- [ ] **Slice 5: `/implement-slice` capture + per-slice debugger trigger** (FR-2.1/2.2, **1.7**, 8.5, C3, C8)
+- [x] **Slice 5 [DONE 1ddd8a4]: `/implement-slice` capture + per-slice debugger trigger** (FR-2.1/2.2, **1.7**, 8.5, C3, C8)
   - **Wave:** 3 · **Use cases:** UC-1, UC-2, UC-4; AC-1, AC-5, AC-12 · **Files:** `skills/implement-slice/SKILL.md`
   - **Changes:** capture step after the commit step; Trigger 1's three heuristics; Trigger 2 tally line
     `Deviation rule fires this feature: rule1=<n> ...` via **Edit**, read back from file, threshold 2+,
@@ -177,7 +177,7 @@ recreates the oversized slice or breaks same-wave disjointness.
     grep -q 'migration' skills/implement-slice/SKILL.md && node scripts/ci/validate-skills.js`
   - **Done when:** all greps pass and the carve-out names both counters · **Pre-review:** none
 
-- [ ] **Slice 6: `/merge-ready` capture, consolidation arithmetic, Gate 4/5 trigger** (FR-2.3, 3, 4, 1.6, **1.7**, 8.4, C2, C8)
+- [x] **Slice 6 [DONE 9e49ad6]: `/merge-ready` capture, consolidation arithmetic, Gate 4/5 trigger** (FR-2.3, 3, 4, 1.6, **1.7**, 8.4, C2, C8)
   - **Wave:** 3 · **Use cases:** UC-3, 5, 6, 7, 8, 17, 18; AC-4, AC-8–11 · **Files:** `skills/merge-ready/SKILL.md`
   - **Changes:** "Post-Gate Instinct Capture" strictly between the gate loop and Finalization,
     **unconditional on outcome**; FR-1.5a dedup and FR-1.7 categories restated (capture fires here too).
@@ -198,7 +198,7 @@ recreates the oversized slice or breaks same-wave disjointness.
   - **Done when:** all greps + the awk ordering check pass · **Pre-review:** architect (recommended —
     C2 precedence and stamp timing are where prose drift silently corrupts the arithmetic)
 
-- [ ] **Slice 7: `/develop-feature` wave result contract + aggregation** (FR-2.4, 7.0/C5, 7.1)
+- [x] **Slice 7 [DONE f8ba989]: `/develop-feature` wave result contract + aggregation** (FR-2.4, 7.0/C5, 7.1)
   - **Wave:** 3 · **Use cases:** UC-15, UC-16; AC-6 · **Files:** `skills/develop-feature/SKILL.md`
   - **Changes:** sixth CRITICAL rule (do NOT write the store). Result contract extended beyond
     PASS/FAIL to require `(category, count)` deviation pairs, detected corrections, **and the final
@@ -212,7 +212,7 @@ recreates the oversized slice or breaks same-wave disjointness.
     node scripts/ci/validate-triage-parity.js`
   - **Done when:** greps pass; triage-parity still exits 0 · **Pre-review:** none
 
-- [ ] **Slice 8: fixture-manifest validator generalisation + 51-entry migration** (FR-9.1–9.4, 9.6, 9.7, id-grammar fix)
+- [x] **Slice 8 [DONE a3e9e49]: fixture-manifest validator generalisation + 51-entry migration** (FR-9.1–9.4, 9.6, 9.7, id-grammar fix)
   - **Wave:** 3 · **Use cases:** UC-20, UC-22; AC-7 (mechanism)
   - **Files:** `scripts/ci/validate-fixture-manifest.js`, `tests/fixtures/manifest.json`
   - **Changes:** replace hardcoded `QA_DOC` with discovery over `docs/qa/*_test_cases.md`; required
@@ -230,7 +230,7 @@ recreates the oversized slice or breaks same-wave disjointness.
   - **Done when:** the real-tree run fails **by document name** on today's actual gap — the defect FR-9
     exists to close — and the migration greps pass · **Pre-review:** none
 
-- [ ] **Slice 9: agent-count and documentation surface** (FR-10.1–10.4)
+- [x] **Slice 9 [DONE 2fe784f]: agent-count and documentation surface** (FR-10.1–10.4)
   - **Wave:** 3 · **Use cases:** none dedicated; AC-13, AC-14
   - **Files:** `README.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `src/claude.md`
   - **Changes:** README line 5 → 15; "## The 14 Agents" → 15 + `debugger` row; **all four further live
@@ -247,9 +247,9 @@ recreates the oversized slice or breaks same-wave disjointness.
     node scripts/ci/validate-version-consistency.js && node scripts/ci/validate-triage-parity.js`
   - **Done when:** the negative greps prove no live "14"/"all 14"/"13-of-14" survives · **Pre-review:** none
 
-### Wave 4 (2 slices, disjoint)
+### Wave 4 [complete] (2 slices, disjoint)
 
-- [ ] **Slice 10: manifest registration + committed fixture inputs** (FR-9.5 real-tree closure, 9.7 completion)
+- [x] **Slice 10 [DONE 280d7d4]: manifest registration + committed fixture inputs** (FR-9.5 real-tree closure, 9.7 completion)
   - **Wave:** 4 · **Use cases:** UC-20, UC-21; AC-7 (positive half)
   - **Files:** `tests/fixtures/manifest.json`, `tests/fixtures/agents/planner/instincts/` [new],
     `tests/fixtures/agents/debugger/` [new]
@@ -263,7 +263,7 @@ recreates the oversized slice or breaks same-wave disjointness.
   - **Done when:** AC-7's positive half — validator exits 0 with all 10 documents discovered and every
     FIXTURE case registered; `grep -c adaptive` no longer 0 · **Pre-review:** none
 
-- [ ] **Slice 11: seeded-bad fixtures + prose-discipline validator + CI wiring** (FR-9.8, critic W11, gap 8)
+- [x] **Slice 11 [DONE be2bd26]: seeded-bad fixtures + prose-discipline validator + CI wiring** (FR-9.8, critic W11, gap 8)
   - **Wave:** 4 · **Use cases:** UC-21, UC-22; AC-7 (negative half)
   - **Files:** three new `tests/fixtures/ci/fixture-manifest/bad-*` trees,
     `bad-missing-fixture`'s manifest, `scripts/ci/validate-instinct-discipline.js` [new],
