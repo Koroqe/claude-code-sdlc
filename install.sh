@@ -879,6 +879,44 @@ write_profile_receipt() {
   mv -- "$tmp" "$SCRIPT_DIR/.sdlc-model-profile"
 }
 
+# Refuse to rewrite agents/*.md over uncommitted work.
+#
+# --profile rewrites the `model:` frontmatter line of all 15 agent files in
+# place. On a clean checkout that is trivially reversible with
+# `git checkout -- agents/`. Over uncommitted changes it is not: the user's own
+# edits to those files are gone, and the two-phase atomic commit below makes it
+# MORE certain to complete, not less.
+#
+# The roadmap already warned about this in prose — "do NOT run install.sh
+# --profile against this checkout, it would rewrite the live agents/*.md" —
+# which is exactly the kind of instruction this project keeps learning to
+# mechanize instead of restate.
+#
+# Not fatal to an unattended run: --profile is an install-time operation, and
+# the remedy (commit or stash) is concrete and one command. Escape sentinel
+# matches the convention the blocking hooks already use.
+profile_refuse_dirty_tree() {
+  [ "${SDLC_ALLOW_DIRTY_PROFILE:-}" = "1" ] && return 0
+  command -v git > /dev/null 2>&1 || return 0
+  git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree > /dev/null 2>&1 || return 0
+
+  dirty="$(git -C "$SCRIPT_DIR" status --porcelain -- agents 2> /dev/null)"
+  [ -z "$dirty" ] && return 0
+
+  log_error "agents/ has uncommitted changes; refusing to rewrite it with --profile."
+  echo ""
+  echo "  --profile rewrites the model: line of all 15 agent files in place. On a"
+  echo "  clean checkout that is reversible with 'git checkout -- agents/'. Over"
+  echo "  uncommitted work it is not."
+  echo ""
+  echo "  Uncommitted under agents/:"
+  printf '%s\n' "$dirty" | tr -d '[:cntrl:]' | sed 's/^/    /'
+  echo ""
+  echo "  Commit or stash first, then rerun. To override deliberately:"
+  echo "    SDLC_ALLOW_DIRTY_PROFILE=1 bash install.sh --local --profile ${PROFILE}"
+  exit 1
+}
+
 do_profile() {
   # Runs for the whole preflight/commit lifecycle below. Guarantees that an
   # unhandled exit (SIGINT, or `set -e` firing on a bare `mktemp` failure)
@@ -890,6 +928,12 @@ do_profile() {
   trap cleanup_profile_tempfiles EXIT
 
   get_source_dir
+
+  # After get_source_dir, because SCRIPT_DIR is what the guard inspects.
+  # Skipped for --dry-run, which writes nothing.
+  if [ "$DRY_RUN" != true ]; then
+    profile_refuse_dirty_tree
+  fi
 
   local role file src target current tmp
   local -a mv_targets=()

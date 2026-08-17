@@ -435,6 +435,12 @@ bash install.sh --local --profile inherit    # every agent inherits the host's d
 bash install.sh --local --profile budget --dry-run   # preview only — changes nothing
 ```
 
+`--profile` rewrites the `model:` line of all 15 agent files in place. It refuses to run when
+`agents/` has uncommitted changes, since a clean checkout can undo the rewrite with
+`git checkout -- agents/` and a dirty one cannot. `--dry-run` previews regardless, and
+`SDLC_ALLOW_DIRTY_PROFILE=1` overrides deliberately.
+
+
 `--profile` requires `--local` — it rewrites the plugin-source checkout `/plugin marketplace add <path>` points at, and a non-`--local` run's source is a temporary clone deleted before the process exits, so the rewrite would be silently discarded there. It cannot be combined with `--uninstall`, `--restore`, `--init-project`, or `--trust-project`.
 
 The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 15 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 14-of-15 rewritten.
