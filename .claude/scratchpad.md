@@ -1,6 +1,6 @@
 ## Feature: Self-Improvement Loop (v4.0 roadmap F5)
 ## Branch: feat/self-improvement-loop-v4
-## Status: implementing wave 2 slice 2/11
+## Status: implementing wave 3 slice 5/11
 ## Tier: full
 
 ## Docs
@@ -94,9 +94,9 @@ recreates the oversized slice or breaks same-wave disjointness.
     injected context — run as a real child process via `runHook()` with a caller-supplied `cwd`.
     Proves the highest-risk self-reinforcing surface first and pins the schema later slices use.
 
-### Wave 2 (3 slices, disjoint)
+### Wave 2 [complete]
 
-- [ ] **Slice 2: mechanical wave-safety backstops** (FR-7.2/7.3/7.4)
+- [x] **Slice 2 [DONE 9b2725a]: mechanical wave-safety backstops** (FR-7.2/7.3/7.4)
   - **Wave:** 2 · **Use cases:** UC-16; AC-6
   - **Files:** `hooks/handlers/pre-agent-isolation-guard.js`, `hooks/handlers/pre-write-shrink-guard.js`,
     `hooks/hooks.json`, `tests/hooks/test-guard-isolation.js`, `tests/hooks/test-guard-shrink.js`
@@ -112,7 +112,7 @@ recreates the oversized slice or breaks same-wave disjointness.
   - **Done when:** both test files pass all seven new cases; the `hooks.json` grep passes;
     `validate-hooks` exits 0 at 9 ids / 10 registrations · **Pre-review:** none
 
-- [ ] **Slice 3: `debugger` agent + profile rows + install.sh + gitignore** (FR-8.1–8.3, 8.8, 8.9, FR-1.1 install half, FR-10.1's install strings)
+- [x] **Slice 3 [DONE 092bcea]: `debugger` agent + profile rows + install.sh + gitignore** (FR-8.1–8.3, 8.8, 8.9, FR-1.1 install half, FR-10.1's install strings)
   - **Wave:** 2 · **Use cases:** UC-17, UC-19; AC-13 (install surface), AC-17
   - **Files:** `agents/debugger.md` [new], `scripts/ci/lib/model-profiles.js`, `install.sh`,
     `templates/.gitignore`
@@ -135,7 +135,7 @@ recreates the oversized slice or breaks same-wave disjointness.
     the net, not the silent unknown-role `continue`); 15 agents; banner greps pass · **Pre-review:**
     **security (MANDATORY)** — `Bash` + scoped `Write`, auto-invoked on attacker-influenceable input
 
-- [ ] **Slice 4: planner application + bootstrap delegation/confirmation** (FR-6.1–6.5, C4, C9)
+- [x] **Slice 4 [DONE 4e84e04]: planner application + bootstrap delegation/confirmation** (FR-6.1–6.5, C4, C9)
   - **Wave:** 2 · **Use cases:** UC-12, UC-13, UC-14; AC-3, AC-18
   - **Files:** `agents/planner.md`, `skills/bootstrap-feature/SKILL.md`
   - **Changes:** planner reads `## Prevention Rules` **capped at top 20 by Confidence** (ties:
@@ -321,6 +321,12 @@ decided in-plan, pre-review verifies · 6. §11.6's stale QA-doc row — one-lin
 already satisfied at HEAD · 8. `hooks.json` description — **resolved Slice 2 with a grep** ·
 9. FR-5.8 is a dangling number (§11's FR-5 stops at 5.7) — content is real and binding; Slice 1
 implements it citing Design Decision 5
+
+## Known transient (closes in Wave 3)
+
+`validate-verification-upgrade.js`'s agent-count check is RED between Wave 2 and Wave 3: Slice 3 bumped
+`install.sh` to 15 while README and both `.claude-plugin/*.json` still read 14. Slice 9 closes it. Worth
+recording that the plan split one consistency check across two waves, guaranteeing a red window.
 
 ## Blockers
 
