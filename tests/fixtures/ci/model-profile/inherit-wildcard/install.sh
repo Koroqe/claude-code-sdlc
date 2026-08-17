@@ -19,6 +19,7 @@ model_for_role() {
     quality:refactor-cleaner) echo sonnet ;;
     quality:security-auditor) echo opus ;;
     quality:test-writer) echo sonnet ;;
+    quality:debugger) echo sonnet ;;
     quality:verifier) echo sonnet ;;
     balanced:architect) echo opus ;;
     balanced:ba-analyst) echo sonnet ;;
@@ -33,6 +34,7 @@ model_for_role() {
     balanced:refactor-cleaner) echo sonnet ;;
     balanced:security-auditor) echo opus ;;
     balanced:test-writer) echo sonnet ;;
+    balanced:debugger) echo sonnet ;;
     balanced:verifier) echo sonnet ;;
     budget:architect) echo sonnet ;;
     budget:ba-analyst) echo sonnet ;;
@@ -47,6 +49,7 @@ model_for_role() {
     budget:refactor-cleaner) echo haiku ;;
     budget:security-auditor) echo opus ;;
     budget:test-writer) echo haiku ;;
+    budget:debugger) echo sonnet ;;
     budget:verifier) echo sonnet ;;
     inherit:*) echo inherit ;;
     *) return 1 ;;
