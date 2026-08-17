@@ -317,16 +317,18 @@ shares a file. Every dependency points to an earlier wave.
 1. id-grammar rejects `TC-FR*` — **resolved Slice 8** · 2. FR-8.5 counter vs PROTECTED scratchpad —
 **resolved Slices 5+7** · 3. mid-wave corrections cannot reach a subagent — recorded, 2 TCs
 unexercisable · 4. FR-8.2 "append" with no `Edit` — **resolved Slice 3** · 5. debugger profile values —
-decided in-plan, pre-review verifies · 6. §11.6's stale QA-doc row — one-line Gate 7 fix · 7. AC-15
+decided in-plan, pre-review verifies · 6. §11.6's stale QA-doc row — **resolved Gate 7** · 7. AC-15
 already satisfied at HEAD · 8. `hooks.json` description — **resolved Slice 2 with a grep** ·
-9. FR-5.8 is a dangling number (§11's FR-5 stops at 5.7) — content is real and binding; Slice 1
-implements it citing Design Decision 5
+9. FR-5.8 was a dangling number (§11's FR-5 stopped at 5.7) — **resolved Gate 7**: §11.3 now carries an
+FR-5.8 heading holding the stated-limitation text that Design Decision 5 and QA TC-11.7 both cite; the
+behaviour was already implemented in Slice 1
 
-## Known transient (closes in Wave 3)
+## Known transient — CLOSED
 
-`validate-verification-upgrade.js`'s agent-count check is RED between Wave 2 and Wave 3: Slice 3 bumped
-`install.sh` to 15 while README and both `.claude-plugin/*.json` still read 14. Slice 9 closes it. Worth
-recording that the plan split one consistency check across two waves, guaranteeing a red window.
+`validate-verification-upgrade.js`'s agent-count check was RED between Wave 2 and Wave 3: Slice 3
+bumped `install.sh` to 15 while README and both `.claude-plugin/*.json` still read 14. Slice 9 closed
+it. Worth carrying forward: the plan split one consistency check across two waves, which guaranteed a
+red window — a planning smell to catch at plan-critic time, not at merge.
 
 ## Blockers
 
