@@ -1,0 +1,21 @@
+{
+  "_purpose": "Seeded-bad mirror of tests/fixtures/manifest.json for scripts/ci/validate-fixture-manifest.js's falsify step (FR-9.4, FR-9.8(a), QA TC-22.1) — proves a dangling `qaDoc` reference (naming a document that does not exist under docs/qa/*_test_cases.md anywhere in this seeded root) is reported as its own distinct error, separate from a missing-entry or stale-id finding.",
+  "cases": [
+    {
+      "id": "TC-1.1",
+      "agent": "verifier",
+      "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
+      "fixture": null,
+      "note": "correctly registered against the one real committed document — isolates the failure below to the second entry's dangling qaDoc, rather than also tripping the bijection/wholesale-unregistered checks for this document.",
+      "expect": "verdict PRESENT_BEHAVIOR_UNVERIFIED for a fully wired but never-exercised route"
+    },
+    {
+      "id": "TC-9.9",
+      "agent": "verifier",
+      "qaDoc": "docs/qa/nonexistent-feature_test_cases.md",
+      "fixture": null,
+      "note": "deliberate defect: `qaDoc` names a document that does not match any discovered docs/qa/*_test_cases.md file in this seeded root (typo'd, renamed, or removed) — the dangling-reference case FR-9.8(a) / QA TC-22.1 requires.",
+      "expect": "the dangling qaDoc reference is reported by name, distinct from a missing-entry or stale-id finding"
+    }
+  ]
+}
