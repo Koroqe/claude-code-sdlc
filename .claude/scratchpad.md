@@ -1,6 +1,6 @@
 ## Feature: Self-Improvement Loop (v4.0 roadmap F5)
 ## Branch: feat/self-improvement-loop-v4
-## Status: implementing wave 1 slice 1/11
+## Status: implementing wave 2 slice 2/11
 ## Tier: full
 
 ## Docs
@@ -57,9 +57,9 @@ recreates the oversized slice or breaks same-wave disjointness.
 
 ## Plan (11 slices, 4 waves)
 
-### Wave 1
+### Wave 1 [complete]
 
-- [ ] **Slice 1: session-start injection + store scaffold** (FR-5, FR-1.1 template half)
+- [x] **Slice 1 [DONE 4360e87]: session-start injection + store scaffold** (FR-5, FR-1.1 template half)
   - **Wave:** 1
   - **Tracer:** yes
   - **Use cases:** UC-9, UC-10, UC-11, UC-1-EC2; AC-2
