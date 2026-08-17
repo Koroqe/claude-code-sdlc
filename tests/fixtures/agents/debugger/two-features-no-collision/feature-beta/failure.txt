@@ -1,0 +1,13 @@
+$ npm run e2e -- --grep "digest notifications"
+
+FAIL tests/e2e/notifications/digest.e2e.test.js
+  digest notifications
+    ✕ sends exactly one digest email per user per window (701 ms)
+
+  ● digest notifications › sends exactly one digest email per user per window
+
+    Expected 1 email delivery
+    Received 2 email deliveries
+
+Gate 5 (E2E) — FAIL
+Gate 5 attempts: 2/3

@@ -1,0 +1,23 @@
+$ npm run build && npm test -- --grep "widget import"
+
+FAIL tests/unit/widgets/import.test.js
+  widget import
+    ✕ rejects a row missing the required sku column (22 ms)
+
+  ● widget import › rejects a row missing the required sku column
+
+    Expected the importer to throw ValidationError('missing sku')
+    Received: no error thrown; row silently skipped
+
+      18 |   const result = await importWidgetsCsv(csvMissingSku);
+    > 19 |   await expect(result).rejects.toThrow('missing sku');
+         |                        ^
+      20 | });
+
+      at Object.<anonymous> (tests/unit/widgets/import.test.js:19:24)
+
+Test Suites: 1 failed, 9 passed, 10 total
+Tests:       1 failed, 54 passed, 55 total
+Time:        3.204 s
+
+Slice 4 build-runner attempts: 1/3

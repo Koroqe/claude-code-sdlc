@@ -1,0 +1,21 @@
+$ npm run e2e -- --grep "nightly export"
+
+FAIL tests/e2e/reports/nightlyExport.e2e.test.js
+  nightly export
+    ✓ runs once per configured window (612 ms)
+    ✕ does not double-run when the scheduler restarts mid-window (588 ms)
+
+  ● nightly export › does not double-run when the scheduler restarts mid-window
+
+    Expected exactly 1 export to be recorded for the window
+    Received: 2 exports recorded for the same window
+
+      77 |   const exports = await countExportsForWindow(windowStart);
+    > 78 |   expect(exports).toBe(1);
+         |                   ^
+      79 | });
+
+      at Object.<anonymous> (tests/e2e/reports/nightlyExport.e2e.test.js:78:20)
+
+Gate 5 (E2E) — FAIL
+Gate 5 attempts: 2/3

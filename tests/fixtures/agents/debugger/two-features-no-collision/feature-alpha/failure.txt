@@ -1,0 +1,18 @@
+$ npm test -- --grep "invoice total"
+
+FAIL tests/unit/billing/invoice.test.js
+  invoice total
+    ✕ sums three line items to a rounded total (9 ms)
+
+  ● invoice total › sums three line items to a rounded total
+
+    Expected: 30.30
+    Received: 30.299999999999997
+
+      12 | const total = computeInvoiceTotal([10.1, 10.1, 10.1]);
+    > 13 | expect(total).toBe(30.30);
+         |               ^
+      14 | });
+
+Gate 4 (Build/Test) — FAIL
+Gate 4 attempts: 2/3
