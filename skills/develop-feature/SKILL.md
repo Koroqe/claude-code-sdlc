@@ -198,14 +198,24 @@ CRITICAL RULES FOR PARALLEL EXECUTION:
 3. Chain git commands: git add <files> && git commit -m '...' (single command to prevent staging conflicts)
 4. Read the project's CLAUDE.md at .claude/CLAUDE.md for conventions
 5. This slice runs under a `no-changelog` suppression flag — do NOT write a CHANGELOG.md entry. The single feature changelog entry is owned by merge-ready (Phase 3)
+6. Do NOT write to .claude/instincts.md — the orchestrator captures instincts after collecting the wave's results
 
-Report your result: PASS (with commit hash) or FAIL (with error details)."
+Report your result: PASS (with commit hash) or FAIL (with error details) — this existing PASS/FAIL requirement is extended, not replaced, by the fields below.
+
+In addition to PASS/FAIL, you MUST also report:
+- **Deviation-rule fires as `(category, count)` pairs** — e.g. `(rule1, 1) (rule3, 2)` — covering every fire of `src/rules/error-recovery.md` Rules 1-4 during this slice's implementation, across every attempt, not only the final one.
+- **Any detected user corrections** (Trigger 1 heuristics) received mid-slice.
+- **Your final `Slice [N] build-runner attempts: N/3` count.**
+
+Why this matters: Rule 1 and Rule 2 fires are **free** — they cost no retry budget and are therefore invisible in any retry count you report. Without the `(category, count)` pairs, the orchestrator would never learn a rule fired twice in your slice. And the tally these numbers feed lives in `.claude/scratchpad.md`, which you cannot write — it is itself `PROTECTED` (Rule 1 above) — so reporting-then-folding is the only channel through which this information reaches it. Without the attempts count specifically, the `2/3` debugger-trigger threshold has no durable input at all on this parallel path."
 ```
 
 After all subagents complete:
-1. **Collect results** — which slices succeeded (commit hashes), which failed (errors)
-2. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
-3. **Handle failures** (per error-recovery parallel wave rules):
+1. **Collect results** — which slices succeeded (commit hashes), which failed (errors), and each subagent's reported `(category, count)` deviation pairs, detected corrections, and final `Slice [N] build-runner attempts: N/3` count
+2. **Fold deviation fires into the per-feature tally** — for every reported `(category, count)` pair from every sibling in the wave, `Edit` `.claude/scratchpad.md`'s `Deviation rule fires this feature: rule1=<n> rule2=<n> rule3=<n> rule4=<n>` line, adding each reported count onto the existing per-rule total (never overwriting it). **Reconciliation clause (verbatim):** two fires of the same rule **within a single slice** count exactly as two fires across two siblings, and fires from earlier waves carry forward into the same feature-level tally — without this, a two-fires-in-one-slice wave captures under neither threshold. Then persist each sibling's reported `Slice [N] build-runner attempts: N/3` count into `.claude/scratchpad.md` via `Edit`.
+3. **Capture Trigger 2 and Trigger 3 instincts — orchestrator-only writes:** after folding, write one instinct entry per pattern per feature for Trigger 2 (any deviation-rule category whose folded tally now stands at `2` or more) and for Trigger 3 (any sibling slice whose reported attempts count reached an exhausted budget, i.e. `3/3`, with the underlying check still FAILing) — mirroring Trigger 3's existing coverage, extended here to wave failures. No wave subagent ever writes `.claude/instincts.md` (Rule 6 above); this write belongs to the orchestrator alone.
+4. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
+5. **Handle failures** (per error-recovery parallel wave rules):
    - All succeeded → proceed to next wave
    - Some failed → keep successful sibling commits (independent files), report failures, ask user: retry / continue / abort
    - All failed → report as blocker, stop
