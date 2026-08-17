@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "claude-code-sdlc@claude-code-sdlc": true
+  }
+}
