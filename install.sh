@@ -248,13 +248,30 @@ HELPEOF
 # ----------------------------------------------------------------------------
 confirm() {
   if [ "$AUTO_YES" = true ]; then return 0; fi
-  if [ ! -r /dev/tty ]; then
-    log_error "No terminal available for confirmation. Re-run with --yes to proceed non-interactively."
+
+  # `[ -r /dev/tty ]` is NOT sufficient: in a piped or sandboxed shell the node
+  # can exist and test readable while the actual open fails with "Device not
+  # configured", which leaked a raw bash error and a bare "Aborted." Probe by
+  # genuinely opening it, and when that fails say what to do about it.
+  # Grouped so the redirection failure itself is suppressed — a bare
+  # `exec 3< /dev/tty 2>/dev/null` still leaks bash's own error to stderr.
+  if ! { exec 3< /dev/tty; } 2> /dev/null; then
+    log_error "No terminal available for confirmation."
+    log_info "Re-run non-interactively with --yes:"
+    echo "    curl -fsSL https://raw.githubusercontent.com/${REPO_SLUG}/main/install.sh | bash -s -- --yes"
+    echo "    # or, from a checkout:  bash install.sh --yes"
     return 1
   fi
+
   echo -e "${YELLOW}$1 [y/N]${NC}"
   local response=""
-  read -r response < /dev/tty || return 1
+  if ! read -r response <&3; then
+    exec 3<&-
+    log_error "Could not read a response from the terminal. Re-run with --yes."
+    return 1
+  fi
+  exec 3<&-
+
   case "$response" in
     [yY][eE][sS]|[yY]) return 0 ;;
     *) return 1 ;;

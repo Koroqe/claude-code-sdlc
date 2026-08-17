@@ -13,7 +13,7 @@
 
 ```bash
 # 1. once per machine
-curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash -s -- --yes
 
 # 2. once per project — without this, nothing loads
 cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --scope project
@@ -62,7 +62,7 @@ Claude Code out of the box:
 **Step 1 — one command, once per machine:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash -s -- --yes
 ```
 
 **Step 2 — REQUIRED, once per project you use it in:**
