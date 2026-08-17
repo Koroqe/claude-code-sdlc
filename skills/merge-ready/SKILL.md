@@ -320,6 +320,123 @@ exactly this failure mode, which is why it — not memory — is the source of t
   report `NOT MERGE READY` with the remaining `gaps` entries named individually, per step 5 of the
   protocol above.
 
+### Gate 4 and Gate 5 specialization: `debugger` auto-invocation (FR-8.4)
+
+Scope: **Gate 4 (Build Verification) and Gate 5 (E2E Tests) only.** This does not replace the shared
+3-attempt budget the Auto-Fix Protocol already enforces for every gate — it inserts one diagnostic step
+before that budget's final attempt, specifically for these two gates. Gate 6's specialization above (the
+`--gaps` replan loop) is a distinct mechanism and is unaffected by this one.
+
+**Persisted attempt counters (survive context compaction), mirroring the Gate 6 precedent above exactly:**
+- After every Gate 4 attempt (the initial run and each rerun), write `Gate 4 attempts: N/3` to
+  `.claude/scratchpad.md` via `Edit`, never a whole-file `Write` — the shipped `pre:write:shrink-guard`
+  fires on `Write` only and would deny a shrinking rewrite of the scratchpad.
+- After every Gate 5 attempt (the initial run and each rerun), write `Gate 5 attempts: N/3` to
+  `.claude/scratchpad.md` via `Edit`, identically.
+- Before deciding whether to retry either gate, **read its counter back from the file** — never rely on
+  what you recall having written earlier in the conversation.
+
+**Auto-invoke `debugger` at `2/3`.** When `Gate 4 attempts: 2/3` (respectively `Gate 5 attempts: 2/3`)
+is reached with the gate still FAILing, auto-invoke the `debugger` agent BEFORE the 3rd (final) fix
+attempt for that gate — feeding it both prior failure outputs for the gate and the feature slug.
+`debugger` returns a diagnosis (root cause plus one recommended fix, classified under one of the four
+`src/rules/error-recovery.md` deviation rules) or `UNDIAGNOSED`.
+
+- **`UNDIAGNOSED` is non-blocking.** If `debugger` exhausts its 5 hypothesis cycles without a
+  conclusive diagnosis, the 3rd (final) attempt proceeds exactly as it would have without this feature —
+  the absence of a diagnosis never itself becomes a NOT MERGE READY reason and never stalls the run.
+- When `debugger` does reach a diagnosis, the 3rd attempt applies the recommended fix under whichever of
+  the four deviation rules `debugger` itself named.
+- Any commit produced by a `debugger`-informed fix is new code and remains subject to step 3 of the
+  Auto-Fix Protocol above (re-run Gates 2 and 3 over it before treating the gate's later pass as final)
+  — a debugger-informed fix is not exempt from re-review.
+
+**C8/FR-8.10 inline fallback.** `debugger` is invoked directly by whichever context is already running
+`/merge-ready` — never routed through a separate top-level orchestrator call first. If nested agent
+spawn is unavailable in the running context, perform `debugger`'s bounded scientific-method protocol
+**inline** instead of skipping it — one falsifiable hypothesis, one minimal `Bash`/`Read`/`Grep`
+experiment, record the result, narrow or conclude, up to 5 cycles — rather than proceeding to the 3rd
+attempt with no diagnostic step at all. The `UNDIAGNOSED` verdict and the final-attempt escalation path
+are unchanged by which path performed the diagnosis. A diagnosis that cannot run as a subagent must
+degrade to a slower, inline diagnosis, never to silence.
+
+**Feeds Post-Gate Instinct Capture, below.** When a Gate 4 or Gate 5 instinct is captured below and the
+fix that resolved it was informed by a `debugger` diagnosis, that diagnosis's root-cause text — reshaped
+only as needed to satisfy D1's allowlist — becomes the captured instinct's `Rule:` text, rather than a
+freshly-authored restatement of the same fact.
+
+## Post-Gate Instinct Capture
+
+**Position and trigger condition (FR-2.3).** This step runs immediately after every gate in the loop
+above (Gates 0–8, including the Gate 4/5 and Gate 6 specializations) has reached a terminal state, and
+strictly before `## Finalization: Changelog Entry` below. It fires **unconditionally on the overall
+MERGE READY / NOT MERGE READY outcome** — a gate that needed fixing taught the pipeline something
+whether or not the feature ultimately shipped, so this step is never skipped, gated, or made conditional
+on the result the way Finalization and Consolidate Instincts (below) both are.
+
+**What fires it.** For every gate, across this entire `/merge-ready` run, whose Auto-Fix Protocol needed
+at least one fix (regardless of whether the eventual rerun PASSed) OR that exhausted its 3-attempt
+budget, capture exactly **one** instinct entry:
+- `Trigger: Gate Auto-Fix` — the gate's Auto-Fix Protocol applied a fix and the gate (or a later rerun)
+  reached a terminal state.
+- `Trigger: Gate Retry Exhausted` — the gate's attempt counter reached `3/3` still FAILing.
+
+A gate that PASSed on its first attempt with no fix needed produces no entry.
+
+**FR-1.5a pre-capture dedup scan — MANDATORY, restated here because capture fires in this file too, not
+only in `/implement-slice`.** Before minting a new `### <slug>` heading, scan every existing entry in
+BOTH `## Prevention Rules` and `## Instincts Log` for one whose `Pattern:` and `Category:` both match
+the pattern about to be captured. On a match, this is a recapture of that existing entry: update it in
+place — this feature's slug is added to `(features: ...)` only if not already present there; a second
+capture of the same slug within this same feature run updates the entry's captures-this-feature state
+but does NOT add a second occurrence. Only when no existing entry's `Pattern:` and `Category:` both
+match may a new slug be minted. Skipping this scan is exactly what fragments occurrence counts across
+near-duplicate headings until nothing ever elevates (Consolidate Instincts, below) or retires.
+
+**FR-1.7 category rules — restated in full:**
+- `Category: security` — the capturing gate is Gate 3 (Security Audit), OR the instinct's `Pattern:`
+  overlaps a path matching `auth`, `payment`, `billing`, or `secret` as a path segment (case-insensitive),
+  or `.github/workflows/`, `install.sh`, `.claude/settings.json`.
+- `Category: data-integrity` — `Pattern:` contains `migration` as a path segment, OR the capturing
+  context is a data-mutation or financial code path (Section 9 FR-7.2's existing definition, reused
+  verbatim).
+- `Category: general` — otherwise. This is the conservative default: `general` requires one more
+  occurrence to elevate (Consolidate Instincts, below) than either of the other two categories.
+
+**Full FR-1.4 entry schema — every field required, each on its own line, under a `### <slug>` heading
+(kebab-case, ≤60 characters, the mechanical dedup key):**
+
+```
+### <slug>
+Confidence: <value produced by min(0.9, 0.3 + 0.2 × (occurrences − 1)) at this capture's occurrence count>
+Category: security | data-integrity | general
+Pattern: <file path or glob this instinct concerns>
+Rule: <single-line ALWAYS/NEVER/WHEN prevention heuristic, generalized beyond this one instance>
+Trigger: Gate Auto-Fix | Gate Retry Exhausted
+Occurrences: <integer> (features: <slug1>, <slug2>, ...)
+Last confirmed at: <the CURRENT `## Meta` Feature counter value, read from the file>
+Retires at: <Last confirmed at + 10>
+```
+
+A first-ever capture of a slug is 1 occurrence, `Confidence: 0.3`. `Occurrences:`, `Last confirmed at:`,
+and `Retires at:` follow FR-1.5/FR-1.4 exactly as any other capture path in this pipeline.
+
+**`Rule:` text MUST be minted within D1's allowlist.** A `Rule:` value is valid iff it is a single
+physical line, 1–200 characters, matching `/^[\p{L}\p{N} ._/():+#&',—-]{1,200}$/u`. Everything else
+fails — every character FR-6.2a names (backtick, pipe, `<`, `>`, `;`, `$`) plus quotes, braces, `=`,
+`*`, `%`, `!`, `?`, `@`, `[`, `]`. **A `Rule:` that fails this check is excluded entirely** — the
+capture for that gate is skipped, never truncated into shape, never echoed, never attached raw. When the
+skipped gate is Gate 4 or Gate 5 and the fix was `debugger`-informed (above), reshape the diagnosis's
+root-cause text to fit the allowlist before minting; if it cannot be reshaped without losing its
+meaning, skip the capture and name the skip in this step's output — never force a lossy paraphrase
+through silently.
+
+**Lazy creation.** If `.claude/instincts.md` does not exist when this step first needs to write, create
+it from `templates/instincts.md`'s scaffold via `Write` — the file does not yet exist, so
+`pre:write:shrink-guard` does not apply — then append the new entry via `Edit`. Every subsequent
+mutation of an existing entry or heading in this file, here or in Consolidate Instincts below, uses
+`Edit`, never a whole-file `Write`.
+
 ## Finalization: Changelog Entry
 
 This step records a changelog entry once the feature is cleared for merge.
@@ -345,3 +462,78 @@ This step records a changelog entry once the feature is cleared for merge.
 
 **Failure handling:**
 - If the `doc-updater` agent fails to write the entry, surface it as a **WARNING**. A changelog write failure does NOT fail the merge — the merge remains MERGE READY.
+
+## Consolidate Instincts
+
+This step runs immediately alongside Finalization above — the same `/merge-ready` Finalization point,
+performing the instinct-store equivalent of what Finalization does for `CHANGELOG.md` (FR-3.1).
+
+**Gating — wording identical to the changelog step's trigger above:**
+- Runs ONLY after all gates report PASS and the overall result is **MERGE READY** — read, per the Tier
+  Check section above, as "all gates that were not `SKIPPED` report PASS" when `## Tier: quick`.
+- Does NOT run when the overall result is **NOT MERGE READY**. Skip it entirely in that case.
+
+Additionally (FR-1.6): this step's counter increment (step 1 below) does NOT run on a single-gate rerun
+(`/merge-ready $gate`) — only a full run reaching MERGE READY increments the counter. Captures from a
+run that does not reach MERGE READY (the unconditional per-gate capture step earlier in this file still
+ran) remain in the store, unconsolidated, until a later run for the same feature actually reaches MERGE
+READY.
+
+Execute in this exact order. Every mutation below is via `Edit`, never a whole-file `Write` — the
+shipped `pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite of the store,
+and this file is now self-reinforcing context, so a whole-file reconstruction that silently drops most
+of it is worse than losing an ordinary document.
+
+1. **Increment the counter.** `Edit` `## Meta`'s `Feature counter` to exactly its current value `+1`.
+   Never on a single-gate rerun, never on a NOT MERGE READY outcome (gating above).
+
+2. **Elevation sweep.** For every `## Instincts Log` entry, if `Occurrences:` has reached `2`
+   (`Category: security` or `Category: data-integrity`) or `3` (`Category: general`), move the entry to
+   `## Prevention Rules` — a structural relocation within the same file, via `Edit`. The entry's
+   `Confidence:` is whatever step 3's formula already produced at that occurrence count; elevation
+   itself performs no separate recomputation.
+
+3. **C2, stated verbatim.** The formula `min(0.9, 0.3 + 0.2 × (occurrences − 1))`, clamped to
+   `[0.3, 0.9]`, is recomputed **ONLY at a new-occurrence event** and **OVERWRITES** any decayed value.
+   Between occurrences, confidence moves only via decay (step 5 below) — never via this formula. A new
+   occurrence always wins over any prior decay: recomputing from the formula on a fresh occurrence
+   discards whatever the decayed value was. Without this precedence stated explicitly, two readers
+   implement two different stores — one where decay is permanent damage a later occurrence cannot
+   repair, and one (the correct one) where a fresh occurrence resets the number outright.
+
+4. **Confirming re-stamp — runs AFTER the increment (step 1), so the post-increment value is what
+   survives.** For every entry that received a confirming event this Finalization (FR-4.3: a new
+   occurrence captured this feature, or a `planner`-application confirmation per FR-6.3), `Edit` its
+   `Last confirmed at` field to the POST-INCREMENT `## Meta` Feature counter value — the value step 1
+   just wrote, not the value that was on disk before this step ran — and recompute `Retires at` as
+   `Last confirmed at + 10`. Ordering the re-stamp after the increment is what makes the post-increment
+   `Last confirmed at` the value that survives; re-stamping before the increment would stamp every
+   reconfirmed entry one feature too early, silently shortening every one of its future retirement
+   windows by one.
+
+5. **Decay sweep — `## Prevention Rules` only.** For every `## Prevention Rules` entry that received NO
+   confirming event this Finalization (i.e., not touched by step 4), `Edit` its `Confidence:` down by
+   `0.05`, floored at `0.3` — never below. This is what causes an unconfirmed Prevention Rule to fall out
+   of the `≥0.7` session-start injection window (FR-5.2) before its retirement (step 6) — a graceful
+   decline distinct from retirement: a decayed-but-not-retired rule still applies at `/bootstrap-feature`
+   time (FR-6, unfiltered by confidence) even after it stops being injected at session start.
+
+6. **Retirement sweep.** For every entry, in either section, where `(current ## Meta Feature counter) −
+   (Last confirmed at) ≥ 10`, **delete the entry — its heading and all of its fields — via `Edit`, never
+   archive it.** Unlike `.claude/scratchpad.md`'s `## Archive` (which preserves genuinely valuable
+   project history), a retired instinct is, by construction, one that has stopped recurring or being
+   applied; keeping it forever would defeat the reason this store replaces a flat, append-only log. This
+   check is evaluated against the `Feature counter` and `Last confirmed at` values **read from the file
+   at this point in the sequence** — i.e. the post-increment (step 1), post-re-stamp (step 4) values —
+   never against an in-memory recollection of how many features have passed.
+
+7. **FR-3.6 — 50-entry consolidation merge.** If `## Instincts Log` still exceeds 50 entries after steps
+   2 and 6 above, merge entries describing the same root cause (matching `Pattern:` and near-duplicate
+   `Rule:` text) into a single entry, summing their `(features: ...)` occurrence lists' union before
+   recomputing `Confidence:` per step 3's formula. This is a belt-and-suspenders bound on top of step 6's
+   10-feature retirement window, for a project whose capture rate outpaces that window.
+
+**Failure handling:** if any `Edit` in this sequence fails (e.g. a malformed entry that does not match
+the expected heading/field shape), surface it as a **WARNING** and continue with the remaining entries —
+identically to Finalization's changelog-write failure handling above, a consolidation failure does NOT
+fail the merge; the merge remains MERGE READY.
