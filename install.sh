@@ -1466,13 +1466,7 @@ print_footer() {
   echo "  Both layers are installed: the memory layer here, and the plugin"
   echo "  (agents, skills, hooks) via the claude plugin CLI."
   echo ""
-  echo "  On Claude Code 2.1.x, turn it on for each project you use it in:"
-  echo ""
-  echo "    cd your-project && claude plugin install ${PLUGIN_REF} --scope project"
-  echo ""
-  echo "  Then open a new session and run /agents to confirm 15 agents."
-  echo ""
-  echo "  Then describe a feature and the pipeline will automatically:"
+  echo "  Once activated (see below), describe a feature and the pipeline will:"
   echo "    1. Document requirements (PRD)"
   echo "    2. Analyze use cases"
   echo "    3. Run architecture review"
@@ -1500,6 +1494,38 @@ print_footer() {
     echo "  Backup of previous config: $BACKUP_DIR"
     echo ""
   fi
+
+  print_next_step
+}
+
+# Deliberately the last output of a successful run, and deliberately loud.
+# Step 1 alone leaves an install that looks complete and loads nothing: on
+# Claude Code 2.1.x a user-scope enable reports success and still resolves 0 of
+# 15 agents, while project scope resolves all 15. Someone who misses this line
+# concludes the harness is broken, so it must survive being scrolled past.
+print_next_step() {
+  if [ "$NO_PLUGIN" = true ]; then
+    return 0
+  fi
+
+  echo -e "${YELLOW}============================================${NC}"
+  echo -e "${BOLD}  ONE STEP LEFT — required, per project${NC}"
+  echo -e "${YELLOW}============================================${NC}"
+  echo ""
+
+  if [ "$INIT_PROJECT" = true ]; then
+    echo -e "  ${GREEN}Already done for this project.${NC} For any OTHER project, run:"
+  else
+    echo "  The plugin is installed but does NOT load until you enable it"
+    echo "  in a project. Run this in each project you use it in:"
+  fi
+
+  echo ""
+  echo -e "    ${BOLD}cd your-project && claude plugin install ${PLUGIN_REF} --scope project${NC}"
+  echo ""
+  echo "  Then open a NEW session and run /agents — expect 15 agents named"
+  echo "  ${PLUGIN_NAME}:<role>. If you see none, this step has not taken effect."
+  echo ""
 }
 
 # ============================================================================

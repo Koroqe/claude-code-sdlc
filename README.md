@@ -9,6 +9,26 @@
 
 ---
 
+## Quick start — both steps are required
+
+```bash
+# 1. once per machine
+curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
+
+# 2. once per project — without this, nothing loads
+cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --scope project
+```
+
+Then open a **new** session and run `/agents`. You should see 15 agents prefixed
+`claude-code-sdlc:`. If you see none, you skipped step 2 — see [Install](#install).
+
+> **Step 2 is not optional and is easy to miss.** On Claude Code 2.1.x a plugin enabled at user
+> scope silently does not load: `claude plugin enable` reports success, writes the setting, and
+> still resolves **0 of 15 agents**. Enabled at project scope it resolves **all 15**. Step 1 alone
+> leaves you with an install that looks complete and does nothing.
+
+---
+
 ## Why
 
 Claude Code out of the box:
@@ -45,16 +65,22 @@ Claude Code out of the box:
 curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
 ```
 
-**Step 2 — one command, once per project:**
+**Step 2 — REQUIRED, once per project you use it in:**
 
 ```bash
 cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --scope project
 ```
 
-Open a new Claude Code session and run `/agents`. You should see 15 agents.
+> Skipping step 2 is the single most likely way to end up with a harness that appears installed and
+> does nothing. Step 1 installs the plugin; step 2 is what makes it load. You must repeat step 2 in
+> **every** project — the memory layer from step 1 is global, the plugin activation is not.
 
-New project? `bash install.sh --init-project` does step 2 for you, along with scaffolding
-`.claude/`, `docs/` and `CHANGELOG.md`.
+**Verify — open a new session** (the agent list is fixed at session start, so your current session
+will not show them) **and run `/agents`.** Expect 15 entries prefixed `claude-code-sdlc:`. Seeing
+none means step 2 has not taken effect in this directory.
+
+Starting a new project? `bash install.sh --init-project` performs step 2 for you, along with
+scaffolding `.claude/`, `docs/` and `CHANGELOG.md`.
 
 ### Why step 2 exists
 
@@ -114,6 +140,22 @@ deliberately.
 Plugin agents resolve as `claude-code-sdlc:<name>` — `claude-code-sdlc:planner`,
 `claude-code-sdlc:verifier`, and so on. Skills work the same way, though the bare form
 (`/develop-feature`) resolves too as long as no other installed plugin defines that name.
+
+### If it isn't working
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `/agents` shows no `claude-code-sdlc:` agents | step 2 not run in this project | `claude plugin install claude-code-sdlc@claude-code-sdlc --scope project`, then open a new session |
+| Agents appear in one project but not another | step 2 is per-project | run step 2 in the other project too |
+| `claude plugin list` says `enabled`, agents still missing | you are in a different directory than the one enabled, or the session predates the change | check `.claude/settings.json` exists there; open a new session |
+| Agents load, but a plain English request doesn't start the pipeline | memory layer missing (plugin installed on its own) | run step 1 |
+| `claude: command not found` during step 1 | Claude Code not on `PATH` | install Claude Code, then rerun step 1 |
+
+A quick check that step 2 landed:
+
+```bash
+cat .claude/settings.json   # expect an "enabledPlugins" entry
+```
 
 ### Uninstall
 
