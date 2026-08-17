@@ -3,5 +3,10 @@
 # would eventually be swept into someone's commit.
 .claude/tmp/
 
+# Per-feature debugger diagnostic scratch (FR-8.8) — transient, per-invocation
+# hypothesis/result logs, never curated project knowledge like
+# .claude/instincts.md or .claude/scratchpad.md, both of which stay tracked.
+.claude/debug/
+
 .DS_Store
 node_modules/
