@@ -102,6 +102,14 @@ jobs:
       - name: Validate plugin manifest
         run: node scripts/ci/validate-plugin-manifest.js
 
+      # The defect class this project has shipped most often: an instruction no
+      # agent could obey with the tools it was actually granted. Seven reached
+      # main across F3/F4/F5, every one caught by review and none by any
+      # mechanism. It fails silently at runtime — the agent cannot do the step,
+      # so it does not, and the run reports success.
+      - name: Validate capability match
+        run: node scripts/ci/validate-capability-match.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -219,6 +227,13 @@ jobs:
       # assertion also proves the validator does not over-flag legal input.
       - name: Falsify — plugin-manifest validator catches a directory-string agents key
         run: "node scripts/ci/validate-plugin-manifest.js --root tests/fixtures/ci/plugin-manifest/bad-directory-string --min 1 --expect-failure \"agents: Invalid input\" --expect-problems 1"
+
+      # Both seeded defects are verbatim reproductions of instructions that
+      # shipped to main. The unmodified architect agent and develop-feature
+      # skill in the same fixture must NOT trip, proving the check isolates
+      # rather than flagging every file that mentions a tool.
+      - name: Falsify — capability validator catches an unimplementable instruction
+        run: 'node scripts/ci/validate-capability-match.js --root tests/fixtures/ci/capability-match/bad-unimplementable --min 1 --expect-failure "does not grant `Bash`" --expect-problems 2'
 
       # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
       # model-profile drift validator, each a passing mirror except one
