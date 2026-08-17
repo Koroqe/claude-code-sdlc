@@ -9,12 +9,15 @@ set -euo pipefail
 # pipeline instruction and process rules that Claude Code loads as user memory
 # on every session.
 #
-# The agents and skills do NOT come from here. They ship in the Claude Code
-# plugin. Install both:
+# Installs BOTH layers. The memory layer is copied into ~/.claude directly;
+# the plugin layer (agents, skills, hooks) is installed by driving the
+# `claude plugin` CLI, so one command does the whole job:
 #
-#   bash install.sh                      # this script — memory layer
-#   /plugin marketplace add <path|repo>  # in a Claude Code session
-#   /plugin install claude-code-sdlc@claude-code-sdlc
+#   curl -fsSL <raw-url>/install.sh | bash
+#
+# Pass --no-plugin to install only the memory layer. If `claude` is not on
+# PATH the script still installs the memory layer and prints the two commands
+# needed to add the plugin later.
 #
 # Why the split: Claude Code auto-loads ~/.claude/claude.md and
 # ~/.claude/rules/*.md as user memory, and plugins have no user-memory
@@ -74,6 +77,7 @@ set -euo pipefail
 
 VERSION="4.0.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
+REPO_SLUG="Koroqe/claude-code-sdlc"
 PLUGIN_NAME="claude-code-sdlc"
 CLAUDE_DIR=""
 BACKUP_DIR=""
@@ -88,6 +92,7 @@ RESTORE_DIR=""
 TRUST_PROJECT=""
 DO_TRUST=false
 PROFILE=""
+NO_PLUGIN=false
 
 # Populated by load_manifest()
 MANIFEST_OWNS=()
@@ -143,6 +148,7 @@ USAGE:
 
 OPTIONS:
   --init-project     Scaffold .claude/ template + docs/ in current directory
+  --no-plugin        Install only the memory layer; skip the plugin step
   --yes              Skip confirmation prompts
   --local            Use local checkout instead of cloning from GitHub
   --dry-run          Print what would change and exit without touching anything
@@ -1249,6 +1255,79 @@ scaffold_cp() {
   log_ok "$3"
 }
 
+# ----------------------------------------------------------------------------
+# Plugin layer (the second half of the hybrid split)
+#
+# The memory layer above and the plugin are two different channels because
+# plugins have NO user-memory component type — the manifest schema has no
+# `instructions`, `memory`, or `context` field, confirmed against the plugin
+# reference. That is a property of Claude Code, not a choice this project made,
+# so it cannot be collapsed away. What CAN be collapsed is the number of things
+# a person has to run: `claude plugin ...` are ordinary CLI subcommands, so
+# this script drives them and the whole install becomes one command.
+#
+# Strictly fail-open, and deliberately so: this script's contract is that it
+# depends on nothing but a POSIX shell and git. If `claude` is not on PATH the
+# memory layer is still fully installed and we print the two commands to finish
+# by hand, rather than aborting a run that has already succeeded at its own job.
+#
+# `claude plugin marketplace add` exits 0 even when it fails (observed on
+# Claude Code 2.1.9, re-adding an existing marketplace), so success is decided
+# by re-reading the marketplace list rather than by exit code.
+# ----------------------------------------------------------------------------
+PLUGIN_MARKETPLACE="claude-code-sdlc"
+PLUGIN_REF="claude-code-sdlc@claude-code-sdlc"
+
+install_plugin() {
+  if [ "$NO_PLUGIN" = true ]; then
+    return 0
+  fi
+
+  echo ""
+  log_info "Installing the plugin layer (agents, skills, hooks)"
+
+  if ! command -v claude > /dev/null 2>&1; then
+    log_warn "\`claude\` is not on PATH — the memory layer is installed, the plugin is not."
+    log_info "Finish from any shell once Claude Code is installed:"
+    echo "    claude plugin marketplace add ${REPO_SLUG}"
+    echo "    claude plugin install ${PLUGIN_REF}"
+    return 0
+  fi
+
+  # Source: a local checkout when --local, otherwise the public repo.
+  plugin_source="$REPO_SLUG"
+  if [ "$LOCAL_MODE" = true ] && [ -n "$SCRIPT_DIR" ]; then
+    plugin_source="$SCRIPT_DIR"
+  fi
+
+  if claude plugin marketplace list 2>/dev/null | grep -q "$PLUGIN_MARKETPLACE"; then
+    claude plugin marketplace update "$PLUGIN_MARKETPLACE" > /dev/null 2>&1 || true
+    log_ok "marketplace ${PLUGIN_MARKETPLACE} (already added — updated)"
+  else
+    claude plugin marketplace add "$plugin_source" > /dev/null 2>&1 || true
+    if claude plugin marketplace list 2>/dev/null | grep -q "$PLUGIN_MARKETPLACE"; then
+      log_ok "marketplace ${PLUGIN_MARKETPLACE} added"
+    else
+      log_warn "could not add the marketplace automatically. Run:"
+      echo "    claude plugin marketplace add ${plugin_source}"
+      echo "    claude plugin install ${PLUGIN_REF}"
+      return 0
+    fi
+  fi
+
+  claude plugin install "$PLUGIN_REF" > /dev/null 2>&1 || true
+  # A plugin installs disabled; enabling is what makes the agents resolve.
+  claude plugin enable "$PLUGIN_REF" > /dev/null 2>&1 || true
+
+  if claude plugin list 2>/dev/null | grep -q "$PLUGIN_MARKETPLACE"; then
+    log_ok "plugin ${PLUGIN_REF} installed and enabled"
+    log_info "Open a new session, then run /agents to confirm 15 agents resolve."
+  else
+    log_warn "the plugin did not install. Run it directly to see the reason:"
+    echo "    claude plugin install ${PLUGIN_REF}"
+  fi
+}
+
 scaffold_project() {
   echo ""
   log_info "Scaffolding project template in $(pwd)/.claude/"
@@ -1402,6 +1481,7 @@ main() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --init-project) INIT_PROJECT=true; shift ;;
+      --no-plugin) NO_PLUGIN=true; shift ;;
       --yes) AUTO_YES=true; shift ;;
       --local) LOCAL_MODE=true; shift ;;
       --uninstall) DO_UNINSTALL=true; shift ;;
@@ -1520,6 +1600,7 @@ main() {
   fi
 
   install_user_config
+  install_plugin
 
   if [ "$INIT_PROJECT" = true ]; then
     scaffold_project
