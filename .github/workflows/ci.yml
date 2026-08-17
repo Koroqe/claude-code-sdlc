@@ -94,6 +94,14 @@ jobs:
       - name: Validate instinct discipline
         run: node scripts/ci/validate-instinct-discipline.js
 
+      # The plugin manifest is what `claude plugin install` actually parses.
+      # v4.0.0 shipped `"agents": "./agents/"`, which that schema rejects, so
+      # the plugin was uninstallable for every user while CI stayed green —
+      # `claude plugin validate .` had been hand-checked once and validates
+      # marketplace.json, never plugin.json. This step is the mechanization.
+      - name: Validate plugin manifest
+        run: node scripts/ci/validate-plugin-manifest.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -204,6 +212,13 @@ jobs:
       # skimming the diff, which is why it needs a machine to catch it.
       - name: Falsify — instinct-discipline validator catches an OR-matched dedup scan
         run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened-dedup --min 1 --expect-failure "to BOTH match" --expect-problems 1
+
+      # Reproduces the shipped defect verbatim. The fixture keeps skills as a
+      # directory string on purpose: measured one key at a time, `skills`
+      # accepts that shape and only `agents` rejects it, so the exact-count
+      # assertion also proves the validator does not over-flag legal input.
+      - name: Falsify — plugin-manifest validator catches a directory-string agents key
+        run: "node scripts/ci/validate-plugin-manifest.js --root tests/fixtures/ci/plugin-manifest/bad-directory-string --min 1 --expect-failure \"agents: Invalid input\" --expect-problems 1"
 
       # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
       # model-profile drift validator, each a passing mirror except one
