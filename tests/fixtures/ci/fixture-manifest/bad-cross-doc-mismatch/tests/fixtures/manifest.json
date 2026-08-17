@@ -1,0 +1,13 @@
+{
+  "_purpose": "Seeded-bad mirror of tests/fixtures/manifest.json for scripts/ci/validate-fixture-manifest.js's falsify step (FR-9.3, FR-9.8(b), QA TC-21.2) — proves the (qaDoc, id) pair, not id alone, is the unit of identity: an entry whose id belongs to one real document but whose qaDoc names a DIFFERENT real document must not be silently treated as satisfying either document's bijection.",
+  "cases": [
+    {
+      "id": "TC-1.1",
+      "agent": "verifier",
+      "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
+      "fixture": null,
+      "note": "deliberate defect: TC-1.1 is documented as a FIXTURE case only in docs/qa/verification-review-upgrade_test_cases.md, not in docs/qa/adaptive-tier-routing_test_cases.md — this entry wrongly points TC-1.1 at the real-but-wrong document.",
+      "expect": "the (qaDoc, id) pair, not id alone, is the unit of identity — this entry must not be treated as satisfying either document's bijection"
+    }
+  ]
+}

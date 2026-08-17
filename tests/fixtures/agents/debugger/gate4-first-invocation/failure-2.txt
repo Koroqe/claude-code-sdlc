@@ -1,0 +1,30 @@
+$ npm test -- --grep "export pipeline"
+
+FAIL tests/unit/reports/export.test.js
+  export pipeline
+    ✓ streams rows in the requested page size (39 ms)
+    ✕ exports the CSV with the documented column order (17 ms)
+
+  ● export pipeline › exports the CSV with the documented column order
+
+    Expected header row: id,name,total
+    Received header row: name,id,total
+
+      40 |   const csv = await exportReportAsCsv(report);
+      41 |   const header = csv.split('\n')[0];
+    > 42 |   expect(header).toBe('id,name,total');
+         |                  ^
+      43 | });
+
+      at Object.<anonymous> (tests/unit/reports/export.test.js:42:19)
+
+Test Suites: 1 failed, 12 passed, 13 total
+Tests:       1 failed, 87 passed, 88 total
+Time:        4.877 s
+
+Gate 4 (Build/Test) — FAIL
+Gate 4 attempts: 2/3
+
+Note: the first auto-fix attempt (between failure-1.txt and this run) reordered the columns in the
+CSV-writer's header literal but not in its row-writer, so the header still emits the object's own
+key order rather than the documented column order.

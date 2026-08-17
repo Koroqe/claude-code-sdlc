@@ -103,7 +103,7 @@
           {
             "id": "pre:agent:isolation-guard",
             "type": "command",
-            "description": "Refuses a parallel-wave subagent writing the scratchpad or changelog; the orchestrator owns both.",
+            "description": "Refuses a parallel-wave subagent writing the scratchpad, changelog or instinct store; the orchestrator owns all three.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:agent:isolation-guard",
             "timeout": 10
           }

@@ -2,7 +2,7 @@
 
 **Turn Claude Code into a full software development team.**
 
-14 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+15 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-4.0.0-green.svg)]()
@@ -33,6 +33,7 @@ Claude Code out of the box:
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
 - **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
 - **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
+- **Cross-session learning** — corrections, repeated deviation-rule fires, and gate auto-fixes graduate into a project-scoped instinct store (`.claude/instincts.md`) that's injected into future sessions and attached to matching plan slices, so the same mistake isn't relearned every feature
 
 ---
 
@@ -107,7 +108,7 @@ MERGE READY
 
 ---
 
-## The 14 Agents
+## The 15 Agents
 
 | Agent | Role |
 |-------|------|
@@ -125,6 +126,7 @@ MERGE READY
 | `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
+| `debugger` | Scientific-method bug hunt with persistent state — auto-invoked on a repeated gate or slice-verify failure, before the retry budget is spent |
 
 ---
 
@@ -298,13 +300,13 @@ Agents are tiered by task complexity to reduce cost:
 | Tier | Agents | Rationale |
 |------|--------|-----------|
 | `opus` | `architect`, `planner`, `plan-critic`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
-| `sonnet` | all other 10 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
+| `sonnet` | all other 11 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
 
 This static split is what shipped as the `quality` profile below. It is no longer meant to be changed by hand-editing frontmatter — see **Model Profiles** for the supported way.
 
 ### Model Profiles
 
-`agents/*.md`'s `model:` field is a rewrite target, not a hand-edit target: `install.sh --local --profile <name>` atomically rewrites the `model:` frontmatter line of all 14 agent files at once, to one of four profiles.
+`agents/*.md`'s `model:` field is a rewrite target, not a hand-edit target: `install.sh --local --profile <name>` atomically rewrites the `model:` frontmatter line of all 15 agent files at once, to one of four profiles.
 
 | Role | `quality` | `balanced` | `budget` | `inherit` |
 |---|---|---|---|---|
@@ -315,6 +317,7 @@ This static split is what shipped as the `quality` profile below. It is no longe
 | `ba-analyst` | sonnet | sonnet | sonnet | inherit |
 | `build-runner` | sonnet | haiku | haiku | inherit |
 | `code-reviewer` | sonnet | sonnet | sonnet | inherit |
+| `debugger` | sonnet | sonnet | sonnet | inherit |
 | `doc-updater` | sonnet | haiku | haiku | inherit |
 | `e2e-runner` | sonnet | sonnet | sonnet | inherit |
 | `prd-writer` | sonnet | haiku | haiku | inherit |
@@ -335,9 +338,9 @@ bash install.sh --local --profile budget --dry-run   # preview only — changes 
 
 `--profile` requires `--local` — it rewrites the plugin-source checkout `/plugin marketplace add <path>` points at, and a non-`--local` run's source is a temporary clone deleted before the process exits, so the rewrite would be silently discarded there. It cannot be combined with `--uninstall`, `--restore`, `--init-project`, or `--trust-project`.
 
-The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 14 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 13-of-14 rewritten.
+The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 15 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 14-of-15 rewritten.
 
-**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 14 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
+**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 15 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
 
 **Does a running session pick this up?** Undetermined. Whether an already-open Claude Code session re-reads `agents/*.md` live, or instead snapshots agent definitions at plugin load, could not be confirmed in the environment this was built in — there was no marketplace-installed copy of this plugin to test against, and restarting a session to observe reload behavior directly wasn't something that build task could do. Until someone settles it: treat a new session, or a `/plugin` reinstall, as required after `--profile` runs for the new values to take effect. See `install.sh`'s own header comment for the full finding and what would settle it.
 

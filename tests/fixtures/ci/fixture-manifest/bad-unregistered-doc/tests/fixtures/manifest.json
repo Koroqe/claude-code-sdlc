@@ -1,0 +1,13 @@
+{
+  "_purpose": "Seeded-bad mirror of tests/fixtures/manifest.json for scripts/ci/validate-fixture-manifest.js's falsify step (FR-9.5, FR-9.8(c), QA TC-21.1/TC-21.3) — reproduces the actual HEAD bug in miniature: a discovered document containing a FIXTURE-kind case with ZERO manifest entries pointing at it at all, while a second real document in the same tree is correctly and completely registered (proving the failure isolates to the one unregistered document, not to a manifest that is simply empty or wrong everywhere).",
+  "cases": [
+    {
+      "id": "TC-1.1",
+      "agent": "verifier",
+      "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
+      "fixture": null,
+      "note": "correctly registered — isolates the wholesale-unregistered finding below to docs/qa/adaptive-tier-routing_test_cases.md, which has no entry at all.",
+      "expect": "verdict PRESENT_BEHAVIOR_UNVERIFIED for a fully wired but never-exercised route"
+    }
+  ]
+}

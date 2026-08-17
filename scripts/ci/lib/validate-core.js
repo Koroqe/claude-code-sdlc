@@ -45,7 +45,7 @@ function repoRoot() {
  * an empty directory, without touching the real assets.
  */
 function parseArgs(argv) {
-  const args = { root: repoRoot(), min: null, expectFailure: null };
+  const args = { root: repoRoot(), min: null, expectFailure: null, expectProblems: null };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--root') {
       const value = argv[i + 1];
@@ -64,6 +64,21 @@ function parseArgs(argv) {
         process.exit(1);
       }
       args.expectFailure = value;
+      i += 1;
+    } else if (argv[i] === '--expect-problems') {
+      // Pins the EXACT problem count of a falsify run. --expect-failure alone
+      // only proves the expected message is somewhere in the output, so a
+      // fixture that grew unintended extra failures still passes as long as the
+      // one expected string survives — which is how a fixture stops isolating
+      // without anyone noticing. Observed for real: an edit to a fixture's
+      // header comment introduced five unrelated failures alongside the one
+      // being asserted, and the --expect-failure step stayed green.
+      const value = Number(argv[i + 1]);
+      if (!Number.isInteger(value) || value < 1) {
+        process.stderr.write('FATAL: --expect-problems requires a positive integer argument.\n');
+        process.exit(1);
+      }
+      args.expectProblems = value;
       i += 1;
     } else if (argv[i] === '--min') {
       // Lowers the anti-vacuity floor so a small seeded fixture can be checked
@@ -243,14 +258,27 @@ class Validator {
    * substring of the actual failure message closes that: the step goes red both
    * when the validator wrongly passes AND when it fails for an unrelated reason.
    */
-  finish(expectFailure) {
+  finish(expectFailure, expectProblems) {
     if (this.errors.length > 0) {
       const header = `FAIL ${this.name} — ${this.errors.length} problem(s):\n`;
       const body = this.errors.map((e) => `  ${e.file}: ${e.message}\n`).join('');
       if (expectFailure) {
+        if (expectProblems !== null && expectProblems !== undefined
+            && this.errors.length !== expectProblems) {
+          process.stderr.write(
+            `FAIL ${this.name} — failed with the expected reason present, but ` +
+              `reported ${this.errors.length} problem(s) where exactly ${expectProblems} ` +
+              `was asserted. The fixture has stopped isolating: it is now tripping ` +
+              `assertions it was not built to prove. Actual:\n`
+          );
+          process.stderr.write(body);
+          process.exit(1);
+        }
         if ((header + body).indexOf(expectFailure) !== -1) {
           process.stdout.write(
-            `PASS ${this.name} — failed as expected, matching "${expectFailure}"\n`
+            `PASS ${this.name} — failed as expected, matching "${expectFailure}"` +
+              (expectProblems ? ` (exactly ${expectProblems} problem(s))` : '') +
+              '\n'
           );
           process.exit(0);
         }
@@ -294,7 +322,10 @@ function run(name, body) {
     process.stderr.write(`FAIL ${name} — unexpected error: ${err && err.message ? err.message : err}\n`);
     process.exit(1);
   }
-  validator.finish(parsed ? parsed.expectFailure : null);
+  validator.finish(
+    parsed ? parsed.expectFailure : null,
+    parsed ? parsed.expectProblems : null
+  );
 }
 
 module.exports = {

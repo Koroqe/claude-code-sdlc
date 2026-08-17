@@ -42,7 +42,7 @@ set -euo pipefail
 # Model profiles (--profile) — spike finding (FR-7.6)
 #
 # `install.sh --local --profile <quality|balanced|budget|inherit>` rewrites
-# the `model:` frontmatter line of all 14 files under agents/ to a per-role
+# the `model:` frontmatter line of all 15 files under agents/ to a per-role
 # value (see model_for_role() below; README.md's "Model Profiles" section
 # carries the full table).
 #
@@ -93,11 +93,11 @@ PROFILE=""
 MANIFEST_OWNS=()
 MANIFEST_LEGACY=()
 
-# The 14 agent roles --profile rewrites, in FR-8.1's table order. Populated
+# The 15 agent roles --profile rewrites, in FR-8.1's table order. Populated
 # by neither load_manifest() nor any manifest file — model_for_role()'s case
 # arms are this feature's own source of truth, deliberately independent of
 # the memory-layer manifest, which never mentions agents/ at all.
-AGENT_ROLES=(architect plan-critic planner security-auditor ba-analyst build-runner code-reviewer doc-updater e2e-runner prd-writer qa-planner refactor-cleaner test-writer verifier)
+AGENT_ROLES=(architect plan-critic planner security-auditor ba-analyst build-runner code-reviewer debugger doc-updater e2e-runner prd-writer qa-planner refactor-cleaner test-writer verifier)
 
 # Staged temp files for the current --profile preflight pass. Cleared by
 # cleanup_profile_tempfiles() on any preflight failure and after a
@@ -172,13 +172,13 @@ for the full quality/balanced/budget/inherit table):
   bash install.sh --local --profile inherit    # every agent inherits the host default
   bash install.sh --local --profile budget --dry-run   # preview only
 
-  Rewrites only the model: frontmatter line of all 14 files under agents/ —
+  Rewrites only the model: frontmatter line of all 15 files under agents/ —
   every other line, in every file, is byte-identical before and after.
-  Two-phase: all 14 are validated before any of them is written, so a
-  malformed file leaves the whole tree unchanged rather than 13-of-14
+  Two-phase: all 15 are validated before any of them is written, so a
+  malformed file leaves the whole tree unchanged rather than 14-of-15
   rewritten. Writes .sdlc-model-profile at the repo root (gitignored — a
   local artifact, never committed) naming the profile applied, only after
-  all 14 files are rewritten. Cannot combine with --uninstall, --restore,
+  all 15 files are rewritten. Cannot combine with --uninstall, --restore,
   --init-project, or --trust-project.
 
   Whether an already-running Claude Code session picks up a rewrite without
@@ -190,7 +190,7 @@ WHAT GETS INSTALLED (~/.claude/):
   .sdlc-receipt    Record of exactly what this install placed
 
 WHAT DOES NOT COME FROM HERE:
-  agents/          14 specialized agents — ship in the plugin
+  agents/          15 specialized agents — ship in the plugin
   skills/          5 pipeline skills    — ship in the plugin
 
   Install the plugin from a Claude Code session:
@@ -746,7 +746,7 @@ build_removal_set() {
 # Model profile table (FR-8.1)
 #
 # One `<profile>:<role>) echo <model> ;;` case arm per profile/role pair,
-# plus a single `inherit:*) echo inherit ;;` wildcard standing in for all 14
+# plus a single `inherit:*) echo inherit ;;` wildcard standing in for all 15
 # inherit rows. This exact shape is a contract, not a style choice: a later
 # validator text-parses these arms (never executes this file) and asserts
 # they byte-compare against scripts/ci/lib/model-profiles.js's copy of the
@@ -763,6 +763,7 @@ model_for_role() {
     quality:ba-analyst) echo sonnet ;;
     quality:build-runner) echo sonnet ;;
     quality:code-reviewer) echo sonnet ;;
+    quality:debugger) echo sonnet ;;
     quality:doc-updater) echo sonnet ;;
     quality:e2e-runner) echo sonnet ;;
     quality:prd-writer) echo sonnet ;;
@@ -777,6 +778,7 @@ model_for_role() {
     balanced:ba-analyst) echo sonnet ;;
     balanced:build-runner) echo haiku ;;
     balanced:code-reviewer) echo sonnet ;;
+    balanced:debugger) echo sonnet ;;
     balanced:doc-updater) echo haiku ;;
     balanced:e2e-runner) echo sonnet ;;
     balanced:prd-writer) echo haiku ;;
@@ -791,6 +793,7 @@ model_for_role() {
     budget:ba-analyst) echo sonnet ;;
     budget:build-runner) echo haiku ;;
     budget:code-reviewer) echo sonnet ;;
+    budget:debugger) echo sonnet ;;
     budget:doc-updater) echo haiku ;;
     budget:e2e-runner) echo sonnet ;;
     budget:prd-writer) echo haiku ;;
@@ -806,17 +809,17 @@ model_for_role() {
 # ----------------------------------------------------------------------------
 # Model profile rewrite (--profile)
 #
-# Rewrites the `model:` frontmatter line of all 14 agents/*.md files to the
+# Rewrites the `model:` frontmatter line of all 15 agents/*.md files to the
 # value model_for_role() assigns that role under the chosen profile.
 #
 # Two-phase, mirroring install_user_config()'s existing "preflight EVERY
 # entry before copying any of them" discipline: every file is preflighted
 # into its own same-directory temp file first (mktemp beside its target, the
 # write_receipt() precedent, so the later `mv` is a same-filesystem rename
-# and therefore atomic); only after all 14 preflights succeed does a second
+# and therefore atomic); only after all 15 preflights succeed does a second
 # pass `mv` any of them into place. A preflight failure removes every temp
 # file already staged — never leaking earlier files — and exits non-zero
-# with the real tree completely untouched, never N of 14.
+# with the real tree completely untouched, never N of 15.
 # ----------------------------------------------------------------------------
 cleanup_profile_tempfiles() {
   local t
@@ -838,7 +841,7 @@ frontmatter_model_of() {
   ' "$1"
 }
 
-# Written only after all 14 rewrites succeed, via the identical
+# Written only after all 15 rewrites succeed, via the identical
 # temp-then-mv pattern write_receipt() already uses for .sdlc-receipt — an
 # interrupted or partially-failed rewrite must never leave a receipt
 # claiming a profile that was not fully applied.
@@ -890,7 +893,7 @@ do_profile() {
     return 0
   fi
 
-  # Phase 1 — preflight all 14 into same-directory temp files. Nothing under
+  # Phase 1 — preflight all 15 into same-directory temp files. Nothing under
   # agents/ is written by this loop.
   for role in "${AGENT_ROLES[@]}"; do
     file="${role}.md"
@@ -943,7 +946,7 @@ do_profile() {
     mv_targets+=("$src")
   done
 
-  # Phase 2 — every one of the 14 preflighted cleanly; commit them all. Each
+  # Phase 2 — every one of the 15 preflighted cleanly; commit them all. Each
   # `mv` is a same-filesystem rename (the temp file lives beside its
   # target), so this phase cannot itself degrade into a partial, non-atomic
   # copy.
@@ -1229,6 +1232,23 @@ install_user_config() {
 # ----------------------------------------------------------------------------
 # Project scaffold
 # ----------------------------------------------------------------------------
+# Copy a template into the project, refusing to follow a symlinked destination.
+# `cp` writes THROUGH a symlink to whatever it points at, so a hostile repo
+# committing `.claude/settings.json -> ~/.ssh/authorized_keys` would have this
+# scaffold clobber that target the moment someone ran --init-project inside the
+# clone. Refuse and keep going: a skipped template is a visible inconvenience,
+# an overwritten file outside the project is not recoverable.
+# Pure POSIX test, no node/jq — install.sh's zone of the three-Node-zones rule.
+scaffold_cp() {
+  scaffold_cp_dst="$2"
+  if [ -L "$scaffold_cp_dst" ]; then
+    log_warn "$scaffold_cp_dst is a symlink — refusing to write through it (skipped)"
+    return 0
+  fi
+  cp -- "$1" "$scaffold_cp_dst"
+  log_ok "$3"
+}
+
 scaffold_project() {
   echo ""
   log_info "Scaffolding project template in $(pwd)/.claude/"
@@ -1245,34 +1265,37 @@ scaffold_project() {
 
   mkdir -p .claude/rules docs/qa docs/use-cases
 
-  cp -- "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md"
-  log_ok ".claude/CLAUDE.md (template — fill in your project details)"
+  scaffold_cp "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md" ".claude/CLAUDE.md (template — fill in your project details)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md"
-  log_ok ".claude/rules/architecture.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md" ".claude/rules/architecture.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md"
-  log_ok ".claude/rules/security.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md" ".claude/rules/security.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md"
-  log_ok ".claude/rules/testing.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md" ".claude/rules/testing.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md"
-  log_ok ".claude/scratchpad.md"
+  scaffold_cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md" ".claude/scratchpad.md"
 
-  cp -- "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
-  log_ok ".claude/settings.json"
+  scaffold_cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json" ".claude/settings.json"
 
   # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
   # invoked directly by Claude Code's own statusLine mechanism (the command
   # templates/settings.json just installed above), never by this installer -
   # this script itself still never invokes `node` or `jq`.
-  cp -- "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js"
-  log_ok ".claude/statusline.js (statusline renderer template)"
+  scaffold_cp "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js" ".claude/statusline.js (statusline renderer template)"
 
-  cp -- "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md"
-  log_ok "CHANGELOG.md"
+  scaffold_cp "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md" "CHANGELOG.md"
 
+  # FR-1.1: skip-if-exists, identical in shape to the CHANGELOG.md/scratchpad.md
+  # provisioning above — never overwrites a project's own accumulated instincts.
+  if [ -f ".claude/instincts.md" ]; then
+    log_ok ".claude/instincts.md (already exists — skipped)"
+  else
+    scaffold_cp "$SCRIPT_DIR/templates/instincts.md" ".claude/instincts.md" ".claude/instincts.md"
+  fi
+
+  if [ -L "docs/PRD.md" ]; then
+    log_warn "docs/PRD.md is a symlink — refusing to write through it (skipped)"
+  else
   cat > "docs/PRD.md" << 'EOF'
 # Product Requirements Document
 
@@ -1293,6 +1316,7 @@ TODO: High-level description of the product.
 <!-- New feature sections will be appended here by the prd-writer agent -->
 EOF
   log_ok "docs/PRD.md (template)"
+  fi
 
   touch docs/qa/.gitkeep
   log_ok "docs/qa/"

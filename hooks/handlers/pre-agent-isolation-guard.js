@@ -46,7 +46,7 @@ const path = require('path');
 const sanitize = require('../lib/sanitize.js');
 
 const ESCAPE = 'SDLC_ALLOW_SUBAGENT_WRITE';
-const PROTECTED = ['.claude/scratchpad.md', 'CHANGELOG.md'];
+const PROTECTED = ['.claude/scratchpad.md', 'CHANGELOG.md', '.claude/instincts.md'];
 
 function protectedRelative(root, target) {
   const absolute = path.resolve(root, String(target || ''));

@@ -1,377 +1,340 @@
-## Feature: Adaptive Tier Routing and Model Routing (v4.0 roadmap F4)
-## Branch: feat/adaptive-tier-routing
-## Status: complete
+## Feature: Self-Improvement Loop (v4.0 roadmap F5)
+## Branch: feat/self-improvement-loop-v4
+## Status: complete — all 11 slices committed; Gates 0-7 PASS (Gate 6 verdict PRESENT_BEHAVIOR_UNVERIFIED, recorded as written); changelog written
 ## Tier: full
 
 ## Docs
 
-- PRD `docs/PRD.md` §10 (lines ~1910–2225) — FR-1..FR-13, AC-1..AC-31
-- Use cases `docs/use-cases/adaptive-tier-routing_use_cases.md` — UC-1..UC-18
-- QA `docs/qa/adaptive-tier-routing_test_cases.md` — 100 TCs (47 STATIC / 10 FIXTURE / 43 BEHAVIORAL)
-- Architecture: **PASS** (retry 2 of 2) · Plan critic: 4 BLOCKER + 7 WARNING, all fixed in rev. 2
+- PRD `docs/PRD.md` §11 (lines ~2240–2483) — FR-1..FR-10, AC-1..AC-18; §4 revised in place → `[SUPERSEDED]`
+- Use cases `docs/use-cases/self-improvement-loop_use_cases.md` — UC-1..UC-22
+- QA `docs/qa/self-improvement-loop_test_cases.md` — 119 TCs (52 STATIC / 14 FIXTURE / 53 BEHAVIORAL)
+- Architecture: **PASS with 10 binding constraints — all applied to the PRD text**
+- Plan critic: 3 BLOCKER + 10 WARNING + 3 INFO — all addressed in plan v2
 
-## Binding constraints C1–C6 — do NOT re-open
+## Deliverables checklist
 
-- **C1** `## Tier:` quick→full rewrite is the **first tool call** after the escalation trigger.
-  `bootstrap-feature` Step 7 affirmatively writes `## Tier:` on every init so it is owned, never stale.
-- **C2** `skills/sdlc-fast/SKILL.md` `allowed-tools` **MUST include `Agent`** — the mandated escalation
-  needs `planner`/`test-writer`/`build-runner`. No-subagent is instruction-enforced. Never tighten.
-- **C3** Quick-tier absence carve-outs live in **delegation prompts, verbatim, before the request**.
-  `agents/code-reviewer.md` and `agents/test-writer.md` are NOT modified (beyond `effort:`).
-- **C4** Quick tier passes the literal `no-changelog` token; `/merge-ready` Finalization owns the single write.
-- **C5** FR-1.7 sensitive paths are **union** — the fixed default is always active, project declarations
-  are additive only and structurally cannot narrow it.
-- **C6** `install.sh` rewrite: awk fence-bounded, **same-directory** `mktemp`, per-file exactly-one-
-  substitution assertion, preflight all 14 → then commit all 14 (preflight failure → **zero** modified),
-  receipt only after all 14. Never `sed -i`, never `node`/`jq`.
+- [x] PRD §11 · [x] Use cases · [x] Architecture review · [x] QA test cases
+- [x] Slices 1–11 (all committed) · [x] CHANGELOG.md entry — 2026-08-17 03:04 UTC
 
-## CRITICAL execution rule (plan-critic BLOCKER 2)
+## D1 — Shared Rule-text validation (ONE definition, both consumers)
 
-**Every `install.sh --profile` invocation runs against a throwaway `cp -R` copy with its own fresh
-`git init` — NEVER the real checkout.** `install.sh:486` resolves `SCRIPT_DIR` to the real repo, so a
-direct run rewrites the live `agents/*.md`. If the real tree is ever touched:
-`git checkout -- agents/ && rm -f .sdlc-model-profile`.
+A `Rule:` value is valid iff it is a **single physical line, 1–200 characters**, matching the allowlist
+`/^[\p{L}\p{N} ._/():+#&',—-]{1,200}$/u` — `FEATURE_RE`'s class extended by exactly `,` and `—`.
+Everything else fails, including every character FR-6.2a names (backtick, pipe, `<`, `>`, `;`, `$`)
+plus quotes, braces, `=`, `*`, `%`, `!`, `?`, `@`, `[`, `]`.
 
-## Plan (9 slices, 5 waves)
+**Why one definition:** the plan critic found Slice 1 specifying an allowlist and Slice 4 a six-character
+denylist. A rule containing a comma would pass `planner`'s looser check and reach an **executed plan**
+while the hook silently dropped it — the weaker check guarding the channel FR-6.2a itself calls
+"strictly worse than injection". Verified empirically before fixing.
+**Why allowlist:** it rejects everything unnamed, not only six named characters.
+**Why extended by `,` and `—`:** the QA doc's own canonical rule text (TC-12.1, TC-14.1) contains both;
+the unextended class would reject the test suite's own legitimate fixtures.
+
+A failing entry is **excluded entirely** — never truncated into shape, never echoed, never attached raw.
+Capture steps (Slices 5, 6) MUST mint `Rule:` lines within this allowlist.
+
+## D2 — Cross-file validator re-run rule
+
+Any `Verify:` command reading files outside its slice's `Files:` (`validate-agents.js`,
+`validate-skills.js`, `validate-triage-parity.js`, `validate-hooks.js`, `validate-model-profile.js`,
+`run-tests.js`) may FAIL on a same-wave sibling's in-flight state. On such a failure: re-run once after
+all wave siblings commit; only a second failure counts against the slice (free — harness coupling, not
+a slice defect). The post-wave collection step re-runs the wave's union of these, and that run is
+authoritative. Coupled pairs: 3↔4 (`agents/`), 5/6/7 (`skills/`), 7↔9 (triage-parity's two CORE_FILES).
+
+## Binding constraints C1–C10 — already in the PRD, implemented by the slices
+
+C1 injection hardening · C2 confidence recomputes only on a new occurrence, decay persists, stamp
+timing pinned · C3/FR-1.5a pre-capture dedup by `Pattern:`+`Category:` · C4/FR-6.2a attach-time
+validation · C5/FR-7.0 wave fires reported as `(category, count)` · C6/FR-8.9 debugger profile rows in
+the same slice as the agent · C7/FR-7.4 store joins `isCurated` · C8/FR-8.10 inline diagnostic
+fallback · C9/FR-6.5 planner read capped at top 20
+
+**Slice count 11** — past the 9 ceiling deliberately: the critic mandated splitting the oversized
+fixture-manifest slice into three, and adding a prose-discipline validator. Any further merge either
+recreates the oversized slice or breaks same-wave disjointness.
+
+## Plan (11 slices, 4 waves)
 
 ### Wave 1 [complete]
 
-- [x] **Slice 1 [DONE 63bd950]: `install.sh --profile` — two-phase rewrite, receipt, dry-run, spike, receipt hygiene**
+- [x] **Slice 1 [DONE 4360e87]: session-start injection + store scaffold** (FR-5, FR-1.1 template half)
   - **Wave:** 1
   - **Tracer:** yes
-  - **Use cases:** UC-10 (+A1–A4, EC1, EC2), UC-12 (+EC1), UC-13 (+A1, EC1), UC-14 (write side, A1);
-    AC-7, AC-8, AC-11, AC-13, AC-29, AC-30
-  - **Files:** `install.sh`, `README.md`, `.gitignore`, `docs/PRD.md`
-  - **Changes:** Step 0 = FR-7.6 spike (does a running session re-read agent frontmatter or snapshot at
-    plugin load?) recorded in `install.sh`'s header + README. Add `--profile <quality|balanced|budget|
-    inherit>`; REQUIRES `--local`; mutually exclusive with `--uninstall`, `--restore`, `--init-project`,
-    `--trust-project`. `model_for_role()` as `case` arms in exactly `<profile>:<role>) echo <model> ;;`
-    shape plus one `inherit:*) echo inherit ;;` wildcard (the FR-10.3 contract Slice 8 text-parses).
-    C6 idiom verbatim. `--dry-run` prints 14 current/target pairs, modifies nothing. Only the `model:`
-    frontmatter line is ever touched — `effort:` excluded by name. `.gitignore` gains
-    `.sdlc-model-profile`. README gains the model-profiles section. PRD FR-7.1 amended to name
-    `--trust-project`. **Verification runs only against throwaway copies (see CRITICAL rule above).**
-  - **Verify:**
-    ```
-    bash -n install.sh \
-    && test -z "$(grep -nE '(^|[^a-zA-Z])(node|jq)([^a-zA-Z]|$)' install.sh | grep -v '^[0-9]*: *#')" \
-    && grep -qxF '.sdlc-model-profile' .gitignore \
-    && grep -qF -- '--trust-project' docs/PRD.md \
-    && node scripts/ci/validate-version-consistency.js && node scripts/ci/validate-verification-upgrade.js \
-    && R="$PWD" && T="$(mktemp -d)" && cp -R "$R" "$T/r" && cd "$T/r" && rm -rf .git \
-    && git init -q && git -c user.email=t@t -c user.name=t add -A \
-    && git -c user.email=t@t -c user.name=t commit -qm base \
-    && ! bash install.sh --profile budget \
-    && bash install.sh --profile budget 2>&1 | grep -qi -- '--local' \
-    && test -z "$(git status --porcelain)" \
-    && ! bash install.sh --local --profile budget --uninstall \
-    && ! bash install.sh --local --profile budget --trust-project \
-    && bash install.sh --local --profile budget --dry-run && test -z "$(git status --porcelain)" \
-    && echo "model: sonnet" >> agents/test-writer.md \
-    && git -c user.email=t@t -c user.name=t commit -qam body-seed \
-    && bash install.sh --local --profile budget \
-    && test "$(git diff --name-only | wc -l | tr -d ' ')" = 8 \
-    && grep -qF 'model: sonnet' agents/architect.md && grep -qF 'model: haiku' agents/test-writer.md \
-    && tail -1 agents/test-writer.md | grep -qxF 'model: sonnet' \
-    && grep -qF 'model: opus' agents/security-auditor.md \
-    && test "$(cat .sdlc-model-profile)" = budget \
-    && git checkout -q -- agents && rm -f .sdlc-model-profile \
-    && bash install.sh --local --profile inherit \
-    && test "$(grep -l '^model: inherit$' agents/*.md | wc -l | tr -d ' ')" = 14 \
-    && git checkout -q -- agents && rm -f .sdlc-model-profile \
-    && awk '/^---$/{f++} !(f==1 && /^model: /)' agents/architect.md > a.tmp && mv a.tmp agents/architect.md \
-    && git -c user.email=t@t -c user.name=t commit -qam preflight-seed \
-    && ! bash install.sh --local --profile budget \
-    && test -z "$(git status --porcelain)" && test ! -f .sdlc-model-profile \
-    && cd "$R" && rm -rf "$T" \
-    && test -z "$(git status --porcelain -- agents/)" && test ! -f "$R/.sdlc-model-profile"
-    ```
-  - **Done when:** the whole Verify chain exits 0 in one run; the spike finding is in both `install.sh`'s
-    header and the README; `.gitignore` ignores the receipt; the real checkout shows zero `agents/`
-    modifications and no receipt afterwards.
-  - **Pre-review:** security (MANDATORY — first programmatic rewrite of version-controlled files)
+  - **Use cases:** UC-9, UC-10, UC-11, UC-1-EC2; AC-2
+  - **Files:** `hooks/handlers/session-start-spine.js`, `templates/instincts.md` [new],
+    `tests/hooks/test-instincts-injection.js` [new]
+  - **Changes:** template = exactly three sections (`## Meta` with `Feature counter: 0`,
+    `## Prevention Rules`, `## Instincts Log`), no seeded entries. Hook: second capped read of
+    `<cwd>/.claude/instincts.md` via existing `readCapped` (symlink-refusing, absent → silent); parse
+    `## Prevention Rules` only; extract only the `Rule:` line; `sanitize.sanitizeField`; validate
+    against **D1**; failures excluded entirely; heading text never reaches output. Select
+    `Confidence ≥ 0.7`, top 6, ties by higher `Last confirmed at`. Emit `prevention rule: <text>`;
+    framing sentence **only when ≥1 survives**. **Return-path restructure (critic W9):** the current
+    early returns at `:183` and `:199` fire *before* the body is assembled, so a tracked store with no
+    scratchpad — a fresh clone — would inject nothing. Compute scratchpad parts, prevention lines and
+    drift independently; return `null` only when all three are empty (preserving byte-identical
+    TC-10.3); otherwise assemble one body through the existing shared `capBlock`. Header: "SIX TYPED
+    FIELDS" → seven typed constructs; threat model names the second read source; honesty statement that
+    the regex constrains **characters, not semantics**.
+  - **Verify:** `node tests/hooks/test-instincts-injection.js && node tests/hooks/run-tests.js &&
+    test -f templates/instincts.md && [ "$(grep -c '^## ' templates/instincts.md)" = "3" ] &&
+    grep -qx 'Feature counter: 0' templates/instincts.md &&
+    grep -qi 'seven typed' hooks/handlers/session-start-spine.js &&
+    grep -qi 'constrains characters' hooks/handlers/session-start-spine.js`
+  - **Done when:** the new test exits 0 asserting: (a) an 8-qualifying fixture injects exactly 6 lines
+    in order; (b) a hostile `Rule:` contributes **no fragment** while a benign sibling IS injected;
+    (c) both files absent + no drift → exactly `null`; (d) zero-qualifying → neither rules nor framing;
+    (e) `SDLC_SESSION_CONTEXT_MAX_CHARS=250` truncates via `capBlock` without expanding the ≤6
+    selection; **(f) qualifying rules with NO scratchpad still inject**; and the pre-existing spine test
+    passes unchanged.
+  - **Pre-review:** **security (MANDATORY)**
+  - *Tracer rationale:* thinnest genuinely-executable end-to-end path — store → capped read → D1 →
+    injected context — run as a real child process via `runHook()` with a caller-supplied `cwd`.
+    Proves the highest-risk self-reinforcing surface first and pins the schema later slices use.
 
 ### Wave 2 [complete]
 
-- [x] **Slice 2 [DONE 84c964b]: Triage Phase 0 + fast-tier execution + sensitive-path union**
-  - **Wave:** 2 · **Use cases:** UC-1..UC-4 + sub-flows; AC-1, AC-2, AC-31
-  - **Files:** `skills/develop-feature/SKILL.md`, `src/claude.md`, `templates/rules/security.md`
-  - **Changes:** new **Phase 0: Triage** before Phase 1 — FR-1.2 estimated file set stated; FR-1.3(a)–(d)
-    full-forcing signals checked FIRST; FR-1.4 fast signals (ALL required); FR-1.5 quick; FR-1.6 upward
-    tie-break; FR-1.7 fixed defaults (`auth`, `payment`, `billing`, `secret`, `migration` segments
-    case-insensitive; `.github/workflows/`; `install.sh`; `.claude/settings.json`; `docs/PRD.md`) **unioned**
-    with an optional project `## Sensitive Paths`, additive only (C5); FR-1.8 reason stated before any
-    Edit/Write. Fast branch: Read-before-Edit, direct edits, zero Agent calls, commit, mandatory changelog
-    entry, no scratchpad write. Quick branch: dispatch summary. Full: unchanged. `src/claude.md` restates
-    triage identically for the unprefixed path. `templates/rules/security.md` gains the additive-only section.
-  - **Verify:**
-    ```
-    grep -qF "Phase 0" skills/develop-feature/SKILL.md \
-    && for f in skills/develop-feature/SKILL.md src/claude.md; do \
-         for s in auth payment billing secret migration '.github/workflows/' 'install.sh' '.claude/settings.json' 'docs/PRD.md'; do \
-           grep -qF -- "$s" "$f" || exit 1; done; \
-         grep -qiF "estimated file set" "$f" || exit 1; grep -qF "tier: fast" "$f" || exit 1; done \
-    && grep -qF "## Sensitive Paths" templates/rules/security.md \
-    && grep -qiE "never (replace|narrow)" templates/rules/security.md \
-    && grep -qF "no-changelog" skills/develop-feature/SKILL.md \
-    && node scripts/ci/validate-skills.js && node scripts/ci/validate-personal-paths.js \
-    && node scripts/ci/validate-unicode-safety.js && node scripts/ci/validate-verification-upgrade.js
-    ```
-  - **Done when:** both copies carry the complete signal set and all 9 fixed defaults; the fast branch
-    states all five FR-3 invariants; union wording present; all four validators exit 0.
-  - **Pre-review:** security (MANDATORY — untrusted project input feeds tier classification)
+- [x] **Slice 2 [DONE 9b2725a]: mechanical wave-safety backstops** (FR-7.2/7.3/7.4)
+  - **Wave:** 2 · **Use cases:** UC-16; AC-6
+  - **Files:** `hooks/handlers/pre-agent-isolation-guard.js`, `hooks/handlers/pre-write-shrink-guard.js`,
+    `hooks/hooks.json`, `tests/hooks/test-guard-isolation.js`, `tests/hooks/test-guard-shrink.js`
+  - **Changes:** `PROTECTED` gains `.claude/instincts.md`; `isCurated()` gains the same; `.claude/debug/`
+    in neither (single-writer, FR-7.3). `hooks.json` description → "scratchpad, changelog or instinct
+    store" (no id/registration change; budget stays 9/10). Tests derive inputs from the committed
+    captured stdin fixtures, overriding only `tool_input.file_path` to preserve the `agent_id` shape.
+  - **Verify:** `node tests/hooks/test-guard-isolation.js && node tests/hooks/test-guard-shrink.js &&
+    grep -q "instincts.md" hooks/handlers/pre-agent-isolation-guard.js &&
+    grep -q "instincts.md" hooks/handlers/pre-write-shrink-guard.js &&
+    grep -qi 'instinct' hooks/hooks.json && node scripts/ci/validate-hooks.js &&
+    node tests/hooks/run-tests.js`
+  - **Done when:** both test files pass all seven new cases; the `hooks.json` grep passes;
+    `validate-hooks` exits 0 at 9 ids / 10 registrations · **Pre-review:** none
 
-### Wave 3 [complete]
+- [x] **Slice 3 [DONE 092bcea]: `debugger` agent + profile rows + install.sh + gitignore** (FR-8.1–8.3, 8.8, 8.9, FR-1.1 install half, FR-10.1's install strings)
+  - **Wave:** 2 · **Use cases:** UC-17, UC-19; AC-13 (install surface), AC-17
+  - **Files:** `agents/debugger.md` [new], `scripts/ci/lib/model-profiles.js`, `install.sh`,
+    `templates/.gitignore`
+  - **Changes:** agent `tools: ["Read","Glob","Grep","Bash","Write"]`, `model: sonnet`, `effort: high`;
+    ≤5 hypothesis cycles; **persist via Read-then-Write of full merged content** — spelled out because
+    it holds `Write` but no `Edit`, so a naive "append" is unimplementable (viable only because
+    `.claude/debug/` is outside both guards). Deny-by-default constraint in kind to `verifier`'s.
+    `model-profiles.js` TABLE gains `debugger: sonnet/sonnet/sonnet/inherit`; header "10 sonnet roles"
+    → 11. `install.sh`: three `:debugger) echo sonnet ;;` arms, `AGENT_ROLES`, **banner line 193
+    `14 specialized agents` → 15 (critic BLOCKER 1)**, "all 14" comments → 15, `scaffold_project()`
+    copies the instincts template skip-if-exists. This slice owns ALL `install.sh` edits.
+    `templates/.gitignore` gains `.claude/debug/`.
+  - **Verify:** `node scripts/ci/validate-model-profile.js && node scripts/ci/validate-agents.js &&
+    bash -n install.sh && grep -q "'debugger':" scripts/ci/lib/model-profiles.js &&
+    [ "$(grep -c ':debugger) echo sonnet ;;' install.sh)" = "3" ] &&
+    grep -q '15 specialized agents' install.sh && ! grep -q '14 specialized agents' install.sh &&
+    grep -qi 'instincts' install.sh && grep -qF '.claude/debug/' templates/.gitignore &&
+    [ "$(ls agents/*.md | wc -l | tr -d ' ')" = "15" ]`
+  - **Done when:** drift validator passes with the debugger triple in both hand-maintained copies (inside
+    the net, not the silent unknown-role `continue`); 15 agents; banner greps pass · **Pre-review:**
+    **security (MANDATORY)** — `Bash` + scoped `Write`, auto-invoked on attacker-influenceable input
 
-- [x] **Slice 3 [DONE 67f88e9]: One-way escalation mechanics + scratchpad tier ownership**
-  - **Wave:** 3 · **Use cases:** UC-6, UC-7, UC-8 + sub-flows; AC-3, AC-4, AC-5, AC-23
-  - **Files:** `skills/develop-feature/SKILL.md`, `skills/bootstrap-feature/SKILL.md`, `docs/PRD.md`
-  - **Changes:** FR-2.1 fast→quick trigger checked BEFORE the triggering call; FR-2.3 mechanics; FR-2.2(a)/(b)
-    quick→full triggers incl. the mid-run sensitive-path / >3-file check; **FR-2.4(c) tier rewrite as the
-    first tool call, before `/bootstrap-feature` or any gate/agent call (C1)**; FR-2.5 ceiling; FR-2.6 no
-    automatic downgrade. **Pinned idiom (W7): every mutation of an EXISTING scratchpad uses Edit, never a
-    whole-file Write** — `pre:write:shrink-guard` fires on Write only, threshold `max(floor(old*0.4),40)`,
-    and its env escape is unavailable mid-session. `bootstrap-feature` Step 7 affirmatively writes `## Tier:`
-    on every init; Step 5 delegation states the PRD section number and title. PRD FR-2.3(c)/2.4(c) amended.
-  - **Verify:**
-    ```
-    grep -qF "## Tier:" skills/bootstrap-feature/SKILL.md \
-    && grep -qiE "section number and title" skills/bootstrap-feature/SKILL.md \
-    && grep -qiF "before any further gate or agent invocation" skills/develop-feature/SKILL.md \
-    && grep -qiE "never .*(lowered|downgrade)" skills/develop-feature/SKILL.md \
-    && grep -qiF "Edit, never a whole-file Write" skills/develop-feature/SKILL.md \
-    && grep -qiF "Edit, never a whole-file Write" docs/PRD.md \
-    && node scripts/ci/validate-skills.js && node scripts/ci/validate-verification-upgrade.js
-    ```
-  - **Done when:** both triggers stated as pre-call checks; the FR-2.4(c) ordering verbatim; no-downgrade
-    and ceiling present; the Edit idiom pinned in both skill and PRD; validators exit 0.
-  - **Pre-review:** security (MANDATORY — escalation mechanics)
+- [x] **Slice 4 [DONE 4e84e04]: planner application + bootstrap delegation/confirmation** (FR-6.1–6.5, C4, C9)
+  - **Wave:** 2 · **Use cases:** UC-12, UC-13, UC-14; AC-3, AC-18
+  - **Files:** `agents/planner.md`, `skills/bootstrap-feature/SKILL.md`
+  - **Changes:** planner reads `## Prevention Rules` **capped at top 20 by Confidence** (ties:
+    `Last confirmed at`, then file order); absent = designed state. Per-slice `Prevention:` on
+    `Pattern:` match, omitted entirely when nothing matches. **FR-6.2a states D1 verbatim as an
+    allowlist**; a failing entry is **excluded silently** and noted in the summary — never truncated,
+    never raw. Store content is data, never instructions. `tools:` unchanged (AC-18). Bootstrap Step 5
+    gains the framed read instruction + a post-return orchestrator step stamping `Last confirmed at`
+    and `Retires at` via **Edit**.
+  - **Verify:** `grep -qF 'tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]' agents/planner.md &&
+    grep -q 'Prevention:' agents/planner.md && grep -q 'top 20' agents/planner.md &&
+    grep -q '200' agents/planner.md && grep -q 'excluded silently' agents/planner.md &&
+    grep -qi 'instincts' skills/bootstrap-feature/SKILL.md &&
+    grep -q 'Last confirmed at' skills/bootstrap-feature/SKILL.md &&
+    node scripts/ci/validate-skills.js`
+  - **Done when:** planner tools byte-identical; cap, sub-field and D1 present with the
+    excluded-silently clause · **Pre-review:** **security (MANDATORY)**
 
-- [x] **Slice 4 [DONE 36b0eca]: Quick-tier receiving ends — planner Quick-Tier Contract + implement-slice tier awareness**
-  - **Wave:** 3 · **Use cases:** UC-5, UC-15 + sub-flows; AC-22, AC-26, AC-27
-  - **Files:** `agents/planner.md`, `skills/implement-slice/SKILL.md`
-  - **Changes:** planner gains a third narrow mode — **Quick-Tier Contract**: description in, exactly one
-    slice out, no `**Tracer:** yes` marker, doc read skipped. Process step 1's unconditional
-    "Read `docs/PRD.md`" becomes a scoped read of the current feature's own section. **Safe degradation (W9):
-    when no section number is supplied, Grep for the heading and Read only that section — never the whole
-    file, never a stall.** New step: read `docs/digest-index.md` if present, select 2–4 rows, read only those;
-    absent index → proceed. `tools:` untouched. implement-slice: Pre-flight Check 4 skipped when
-    `## Tier: quick`; `test-writer` delegation states the QA-absence carve-out verbatim before the request
-    (C3); the quick tracer notice prints exactly `tracer gate inactive — tier: quick, single-slice plan is
-    exempt from the tracer requirement by design.`; legacy wording retained for absent/`full`.
-  - **Verify:**
-    ```
-    ! grep -qF 'Read `docs/PRD.md` — feature requirements' agents/planner.md \
-    && grep -qF "Quick-Tier Contract" agents/planner.md && grep -qF "digest-index" agents/planner.md \
-    && grep -qiF "does not supply the section number" agents/planner.md \
-    && grep -qF 'tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]' agents/planner.md \
-    && grep -qF "tracer gate inactive — tier: quick, single-slice plan is exempt from the tracer requirement by design." skills/implement-slice/SKILL.md \
-    && grep -qF "treating as pre-F3 plan" skills/implement-slice/SKILL.md \
-    && grep -qF "MUST NOT be treated as a missing input" skills/implement-slice/SKILL.md \
-    && node scripts/ci/validate-agents.js && node scripts/ci/validate-verification-upgrade.js \
-    && node scripts/ci/validate-skills.js
-    ```
-  - **Done when:** the old unqualified read phrasing is gone; both contracts, the fallback, both exact
-    notice strings and the carve-out are present; `validate-verification-upgrade.js` still exits 0.
-  - **Pre-review:** none
+### Wave 3 [complete] (5 slices, disjoint)
 
-- [x] **Slice 5 [DONE ad0bbb7]: merge-ready Tier Check preamble + gate carve-outs + `Gates: N/9` + digest write**
-  - **Wave:** 3 · **Use cases:** UC-5 (7–8), UC-16 + sub-flows; AC-5, AC-16, AC-25
-  - **Files:** `skills/merge-ready/SKILL.md`, `docs/digest-index.md` `[new]`
-  - **Changes:** unnumbered **Tier Check** preamble before Gate 0 (no renumbering): `full`/absent → 9 gates
-    unchanged; `quick` → run Gates 0,2,3,4 and report 1,5,6,7,8 as `SKIPPED (tier: quick)` with FR-4.8's
-    rationale. Gate 2/3 quick delegations state the absence carve-out verbatim before the review request (C3).
-    Finalization trigger re-read as "all gates that were not `SKIPPED` report PASS" (Gates 5/8 keep `N/A`).
-    Write/refresh `Gates: N/9` in the scratchpad via **Edit** after each terminal gate. Gate 7's `doc-updater`
-    delegation, full tier only, appends/refreshes one digest row keyed on section number.
-  - **Verify:**
-    ```
-    grep -qF "SKIPPED (tier: quick)" skills/merge-ready/SKILL.md \
-    && grep -qF "MUST NOT be reported as a finding" skills/merge-ready/SKILL.md \
-    && grep -qF "Gates: N/9" skills/merge-ready/SKILL.md \
-    && grep -qiF "all gates that were not" skills/merge-ready/SKILL.md \
-    && grep -qF "digest-index.md" skills/merge-ready/SKILL.md \
-    && test -f docs/digest-index.md && grep -qF "| Section | Title | Summary" docs/digest-index.md \
-    && node scripts/ci/validate-skills.js && node scripts/ci/validate-verification-upgrade.js
-    ```
-  - **Done when:** preamble, exact SKIPPED label, verbatim carve-out before the request, `Gates: N/9`
-    instruction, re-read trigger and digest duty all present; the digest file exists with its header.
-  - **Pre-review:** security (RECOMMENDED — a wrong tier read silently skips 5 gates)
+- [x] **Slice 5 [DONE 1ddd8a4]: `/implement-slice` capture + per-slice debugger trigger** (FR-2.1/2.2, **1.7**, 8.5, C3, C8)
+  - **Wave:** 3 · **Use cases:** UC-1, UC-2, UC-4; AC-1, AC-5, AC-12 · **Files:** `skills/implement-slice/SKILL.md`
+  - **Changes:** capture step after the commit step; Trigger 1's three heuristics; Trigger 2 tally line
+    `Deviation rule fires this feature: rule1=<n> ...` via **Edit**, read back from file, threshold 2+,
+    Rule 1/2 counting identically. Full 8-field schema, `Rule:` minted within **D1**.
+    **FR-1.7 category rules in full (critic W8 — previously owned by no slice):** `security` when the
+    gate is Gate 3 or `Pattern:` hits `auth`/`payment`/`billing`/`secret` as a path segment or
+    `.github/workflows/`, `install.sh`, `.claude/settings.json`; `data-integrity` on a `migration`
+    segment or a data-mutation/financial path; else `general`. **C3 dedup scan MANDATORY** before
+    minting a slug. Lazy creation via `Write` of a new file then `Edit`.
+    **Wave-subagent carve-out:** track both the tally **and** the `Slice <N> build-runner attempts: N/3`
+    counter in-context, self-invoke `debugger` at `2/3`, and report `(category, count)` pairs,
+    corrections **and the attempts count** in the result. Standalone path persists the counter.
+    C8 inline fallback when nested spawn is unavailable.
+  - **Verify:** `grep -qF 'Deviation rule fires this feature: rule1=' skills/implement-slice/SKILL.md &&
+    grep -q 'build-runner attempts:' skills/implement-slice/SKILL.md &&
+    grep -q '2/3' skills/implement-slice/SKILL.md && grep -qi 'inline' skills/implement-slice/SKILL.md &&
+    grep -q 'data-integrity' skills/implement-slice/SKILL.md &&
+    grep -q 'migration' skills/implement-slice/SKILL.md && node scripts/ci/validate-skills.js`
+  - **Done when:** all greps pass and the carve-out names both counters · **Pre-review:** none
 
-### Wave 4 [complete]
+- [x] **Slice 6 [DONE 9e49ad6]: `/merge-ready` capture, consolidation arithmetic, Gate 4/5 trigger** (FR-2.3, 3, 4, 1.6, **1.7**, 8.4, C2, C8)
+  - **Wave:** 3 · **Use cases:** UC-3, 5, 6, 7, 8, 17, 18; AC-4, AC-8–11 · **Files:** `skills/merge-ready/SKILL.md`
+  - **Changes:** "Post-Gate Instinct Capture" strictly between the gate loop and Finalization,
+    **unconditional on outcome**; FR-1.5a dedup and FR-1.7 categories restated (capture fires here too).
+    "Consolidate Instincts" alongside Finalization, gated by wording identical to the changelog step,
+    in order: counter +1 via Edit → elevation (≥2 security/data-integrity, ≥3 general) → **C2 verbatim**
+    (formula recomputes ONLY at a new-occurrence event and overwrites any decayed value) → confirming
+    re-stamp after the increment → decay (−0.05, floor 0.3) → retirement (`counter − Last confirmed at
+    ≥ 10` → **delete, never archive**) → 50-entry merge. Gate 4/5 attempts counters, `debugger` at
+    `2/3`, `UNDIAGNOSED` non-blocking, C8 inline fallback.
+  - **Verify:** `grep -q 'Post-Gate Instinct Capture' skills/merge-ready/SKILL.md &&
+    grep -q 'Consolidate Instincts' skills/merge-ready/SKILL.md &&
+    grep -qF 'min(0.9, 0.3' skills/merge-ready/SKILL.md && grep -q '0.05' skills/merge-ready/SKILL.md &&
+    grep -q 'Gate 4 attempts:' skills/merge-ready/SKILL.md &&
+    grep -q 'Gate 5 attempts:' skills/merge-ready/SKILL.md &&
+    grep -qi 'inline' skills/merge-ready/SKILL.md && grep -q 'data-integrity' skills/merge-ready/SKILL.md &&
+    awk '/Post-Gate Instinct Capture/{c=NR} /## Finalization: Changelog Entry/{f=NR} END{exit !(c && f && c<f)}' skills/merge-ready/SKILL.md &&
+    node scripts/ci/validate-skills.js`
+  - **Done when:** all greps + the awk ordering check pass · **Pre-review:** architect (recommended —
+    C2 precedence and stamp timing are where prose drift silently corrupts the arithmetic)
 
-- [x] **Slice 6 [DONE 800087a]: Override skills `/sdlc-fast` + `/sdlc-quick` + Pipeline Commands + README rows**
-  - **Wave:** 4 · **Use cases:** UC-9 + sub-flows; AC-6, AC-21 (skills half), AC-28
-  - **Files:** `skills/sdlc-fast/SKILL.md` `[new]`, `skills/sdlc-quick/SKILL.md` `[new]`, `src/claude.md`, `README.md`
-  - **Changes:** `sdlc-fast` `allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent` — **`Agent` granted
-    deliberately (C2)**; no-subagent enforced by instruction in the body; bypasses FR-1, runs FR-3 directly;
-    restates FR-2 escalation; literal-token-only activation. `sdlc-quick` `allowed-tools` byte-identical to
-    `develop-feature`'s; runs FR-4 directly with the `no-changelog` token. `src/claude.md` Pipeline Commands
-    gains both, marked override-only. README skill count 5→7 plus both rows.
-  - **Verify:**
-    ```
-    test "$(ls skills/*/SKILL.md | wc -l | tr -d ' ')" = 7 \
-    && grep -qE '^allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent$' skills/sdlc-fast/SKILL.md \
-    && test "$(grep '^allowed-tools:' skills/sdlc-quick/SKILL.md)" = "$(grep '^allowed-tools:' skills/develop-feature/SKILL.md)" \
-    && grep -qF "/sdlc-fast" src/claude.md && grep -qF "/sdlc-quick" src/claude.md \
-    && grep -qF "no-changelog" skills/sdlc-quick/SKILL.md && grep -qF "/sdlc-quick" README.md \
-    && node scripts/ci/validate-skills.js && node scripts/ci/validate-verification-upgrade.js
-    ```
-  - **Done when:** skill count is exactly 7; `sdlc-fast`'s allowed-tools line matches exactly incl. `Agent`;
-    `sdlc-quick`'s matches `develop-feature`'s byte-for-byte; validators exit 0.
-  - **Pre-review:** none
+- [x] **Slice 7 [DONE f8ba989]: `/develop-feature` wave result contract + aggregation** (FR-2.4, 7.0/C5, 7.1)
+  - **Wave:** 3 · **Use cases:** UC-15, UC-16; AC-6 · **Files:** `skills/develop-feature/SKILL.md`
+  - **Changes:** sixth CRITICAL rule (do NOT write the store). Result contract extended beyond
+    PASS/FAIL to require `(category, count)` deviation pairs, detected corrections, **and the final
+    `Slice <N> build-runner attempts: N/3` count** (critic W10 — otherwise AC-5's trigger has no durable
+    input on the parallel path). Post-wave fold into the tally **including the reconciliation clause
+    verbatim** — two fires of the same rule in one slice count exactly as two across siblings, and
+    earlier waves carry forward; persist each reported attempts count.
+  - **Verify:** `grep -qF '(category, count)' skills/develop-feature/SKILL.md &&
+    grep -q 'build-runner attempts' skills/develop-feature/SKILL.md &&
+    grep -qi 'instincts.md' skills/develop-feature/SKILL.md && node scripts/ci/validate-skills.js &&
+    node scripts/ci/validate-triage-parity.js`
+  - **Done when:** greps pass; triage-parity still exits 0 · **Pre-review:** none
 
-- [x] **Slice 7 [DONE 4a6d4c8]: `effort:` across all 14 agents + validator support + falsify fixtures**
-  - **Wave:** 4 · **Use cases:** UC-10-A2; AC-12, NFR-6
-  - **Files:** all 14 `agents/*.md`, `scripts/ci/validate-agents.js`,
-    `tests/fixtures/ci/bad-agent-effort/agents/bad-effort.md` `[new]`,
-    `tests/fixtures/ci/bad-agent-effort-missing/agents/missing-effort.md` `[new]`
-  - **Changes:** one `effort:` line per agent — **low**: build-runner, doc-updater, prd-writer;
-    **medium**: ba-analyst, code-reviewer, e2e-runner, qa-planner, refactor-cleaner, test-writer;
-    **high**: architect, planner, security-auditor, plan-critic, verifier. `model:` untouched.
-    `validate-agents.js`: `REQUIRED_FIELDS` gains `'effort'`, plus `VALID_EFFORT_LEVELS` = low|medium|high.
-    Field lands on all 14 in the same commit as the requirement. CI wiring for the fixtures is Slice 8's.
-  - **Verify:**
-    ```
-    test "$(grep -l '^effort: low$' agents/*.md | wc -l | tr -d ' ')" = 3 \
-    && test "$(grep -l '^effort: medium$' agents/*.md | wc -l | tr -d ' ')" = 6 \
-    && test "$(grep -l '^effort: high$' agents/*.md | wc -l | tr -d ' ')" = 5 \
-    && grep -qF 'effort: high' agents/verifier.md && grep -qF 'model: sonnet' agents/verifier.md \
-    && node scripts/ci/validate-agents.js \
-    && node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-effort --min 1 --expect-failure "is not a known level" \
-    && node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-effort-missing --min 1 --expect-failure "effort" \
-    && node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1 --expect-failure "frontmatter fence" \
-    && node scripts/ci/validate-verification-upgrade.js
-    ```
-  - **Done when:** the split is exactly 3/6/5; the validator passes the real tree and fails each fixture on
-    its named substring; the pre-existing bad-agent fixture is proven not rotted by the new required field.
-  - **Pre-review:** none
+- [x] **Slice 8 [DONE a3e9e49]: fixture-manifest validator generalisation + 51-entry migration** (FR-9.1–9.4, 9.6, 9.7, id-grammar fix)
+  - **Wave:** 3 · **Use cases:** UC-20, UC-22; AC-7 (mechanism)
+  - **Files:** `scripts/ci/validate-fixture-manifest.js`, `tests/fixtures/manifest.json`
+  - **Changes:** replace hardcoded `QA_DOC` with discovery over `docs/qa/*_test_cases.md`; required
+    `qaDoc` field; bijection scoped per `(qaDoc, id)`; dangling-qaDoc its own error; wholesale-
+    unregistered-document check; document-count floor of 10, `--min`-adjustable.
+    **BLOCKING id-grammar fix — verified empirically:** `/^TC-\d+\.\d+$/` matches `TC-12.1` but **not**
+    `TC-FR6.2a-1`, so F5's own three `TC-FR*` FIXTURE cases are invisible and AC-7 unsatisfiable. Use
+    `/^TC-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*(?:-\d+)?$/` in both the extraction and format checks.
+    Migrate all 51 entries with `qaDoc`; `_source_qa_doc` → `_source_qa_docs`. Registration of the two
+    new documents is Slice 10 — so this slice's honest end state is "the validator now detects the gap".
+  - **Verify:** `node scripts/ci/validate-fixture-manifest.js --expect-failure "adaptive-tier-routing" &&
+    [ "$(grep -c '"qaDoc"' tests/fixtures/manifest.json)" = "51" ] &&
+    grep -q '"_source_qa_docs"' tests/fixtures/manifest.json &&
+    ! grep -q '"_source_qa_doc":' tests/fixtures/manifest.json`
+  - **Done when:** the real-tree run fails **by document name** on today's actual gap — the defect FR-9
+    exists to close — and the migration greps pass · **Pre-review:** none
 
-### Wave 5 [complete]
+- [x] **Slice 9 [DONE 2fe784f]: agent-count and documentation surface** (FR-10.1–10.4)
+  - **Wave:** 3 · **Use cases:** none dedicated; AC-13, AC-14
+  - **Files:** `README.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `src/claude.md`
+  - **Changes:** README line 5 → 15; "## The 14 Agents" → 15 + `debugger` row; **all four further live
+    model-profile counts (critic INFO 15)** at ~307/338(×2)/340 → 15 / "14-of-15"; Self-Improvement
+    description updated. Both `.claude-plugin/*.json` descriptions → 15. `src/claude.md` gains the
+    Agency Roles `| Debugger |` row and a "Cross-Session Learning" subsection.
+    **README's historical v3.x-upgrade note stays untouched.** `validate-agents.js` untouched (floor 13).
+  - **Verify:** `[ "$(ls agents/*.md|wc -l|tr -d ' ')" = "15" ] && grep -q '15 specialized' README.md &&
+    grep -q '## The 15 Agents' README.md && ! grep -q '14 specialized' README.md &&
+    ! grep -q 'all 14' README.md && ! grep -q '13-of-14' README.md &&
+    grep -q '15 specialized' .claude-plugin/plugin.json &&
+    grep -q '15 specialized' .claude-plugin/marketplace.json &&
+    grep -qF '| Debugger | ' src/claude.md && grep -qi 'Cross-Session Learning' src/claude.md &&
+    node scripts/ci/validate-version-consistency.js && node scripts/ci/validate-triage-parity.js`
+  - **Done when:** the negative greps prove no live "14"/"all 14"/"13-of-14" survives · **Pre-review:** none
 
-- [x] **Slice 8 [DONE 2face79]: CI drift check — shared table, validator with `--assert-baseline`, fixtures, ALL CI wiring**
-  - **Wave:** 5 · **Use cases:** UC-11, UC-14 (read side); AC-9, AC-10
-  - **Files:** `scripts/ci/lib/model-profiles.js` `[new]`, `scripts/ci/validate-model-profile.js` `[new]`,
-    six `tests/fixtures/ci/model-profile/*` trees `[new]`, `.github/workflows/ci.yml`, `docs/PRD.md`
-  - **Changes:** shared zero-dep table module; validator on `core.run` resolving the profile from
-    `.sdlc-model-profile` (absent → `quality`; unrecognized → its own named failure, never silently
-    defaulted); per-file `model:` comparison reporting file/found/expected; FR-10.3 **text-parse** (never
-    execute) of `install.sh`'s case arms, byte-compared to the JS table, run iff `<root>/install.sh` exists.
-    **New `--assert-baseline` (B4): any `.sdlc-model-profile` present at the validated root fails by name** —
-    this closes the hole where a contributor commits both a rewritten tree and a matching receipt and CI
-    blesses it. Six fixtures incl. `committed-receipt` (internally consistent, passes plainly, fails only
-    under the flag — proving the guard is load-bearing). `ci.yml` is this slice's sole ownership and wires
-    every new step **including Slice 7's two effort falsifies**. PRD FR-9/FR-10 amended.
-  - **Verify:**
-    ```
-    node scripts/ci/validate-model-profile.js && node scripts/ci/validate-model-profile.js --assert-baseline \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/no-receipt-fable --min 1 --expect-failure "agents/architect.md: model 'fable', expected 'opus'" \
-    && node scripts/ci/validate-agents.js --root tests/fixtures/ci/model-profile/no-receipt-fable --min 1 \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/stale-file --min 1 --expect-failure "agents/build-runner.md: model 'sonnet', expected 'haiku'" \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/install-table-mismatch --min 1 --expect-failure "balanced:plan-critic" \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/inherit-wildcard --min 1 \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/bad-receipt --min 1 --expect-failure "unrecognized profile 'fable'" \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/committed-receipt --min 1 \
-    && node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/committed-receipt --min 1 --assert-baseline --expect-failure "must never be committed" \
-    && node scripts/ci/validate-model-profile.js --root "$(mktemp -d)" --expect-failure "matches too few files" \
-    && grep -qF -- '--assert-baseline' .github/workflows/ci.yml \
-    && grep -qF 'bad-agent-effort' .github/workflows/ci.yml \
-    && grep -qF -- '--assert-baseline' docs/PRD.md
-    ```
-  - **Done when:** the validator passes the real receiptless tree both plain and with the flag, fails every
-    fixture on its named substring, `committed-receipt` passes plainly but fails under the flag, and CI
-    wires all steps including the effort falsifies.
-  - **Pre-review:** security (`.github/workflows/` is an FR-1.7 sensitive path)
+### Wave 4 [complete] (2 slices, disjoint)
 
-- [x] **Slice 9 [DONE abf3ed7]: Statusline — spike, renderer, template wiring, scaffold copy**
-  - **Wave:** 5 · **Use cases:** UC-17, UC-18 + sub-flows; AC-17..AC-20
-  - **Files:** `templates/statusline.js` `[new]`, `templates/settings.json`, `install.sh`,
-    `tests/fixtures/statusline/{stdin-full.json,active,no-plan,all-done,corrupt}` `[new]`
-  - **Changes:** Step 0 = FR-13.4 spike capturing real statusline stdin JSON field names, recorded in the
-    renderer's header. Renderer: zero-dependency Node builtins only; five segments
-    `<feature> | wave W slice N/M | gates G/9 | $cost | <context bar>`; wave/slice omitted when no plan or
-    all slices DONE (**keyed on plan absence, never a tier read** — a non-escalated fast run never writes a
-    scratchpad, so `## Tier: fast` never exists); gates omitted without a `Gates: N/9` line; bar =
-    `(max − reserve − used)/(max − reserve)` floored at 0, reserve subtracted from BOTH terms; whole body in
-    an error boundary that still prints a non-empty line on any failure. Not a hook — no `hooks.json` entry.
-    `templates/settings.json` gains the statusLine command; `install.sh --init-project` copies the file
-    (a `cp`, never an execution; any `node` mention stays in comments so the CI grep stays empty).
-  - **Verify:**
-    ```
-    node --check templates/statusline.js \
-    && (cd tests/fixtures/statusline/active && node ../../../../templates/statusline.js < ../stdin-full.json) | grep -qF "wave 2 slice 1/2" \
-    && (cd tests/fixtures/statusline/active && node ../../../../templates/statusline.js < ../stdin-full.json) | grep -qF "gates 4/9" \
-    && O="$( (cd tests/fixtures/statusline/no-plan && node ../../../../templates/statusline.js < ../stdin-full.json) )" \
-       && test -n "$O" && ! echo "$O" | grep -qE "wave|gates" \
-    && O="$( (cd tests/fixtures/statusline/corrupt && node ../../../../templates/statusline.js < ../stdin-full.json) )" \
-       && test -n "$O" && echo "$O" | grep -qF '$' \
-    && test -z "$(grep -oE "require\('[^']+'\)" templates/statusline.js | grep -vE "'(fs|path|os|process)'")" \
-    && grep -qF '"statusLine"' templates/settings.json \
-    && grep -qF 'statusline.js' install.sh && bash -n install.sh \
-    && test -z "$(grep -nE '(^|[^a-zA-Z])(node|jq)([^a-zA-Z]|$)' install.sh | grep -v '^[0-9]*: *#')" \
-    && test -z "$(grep -rF 'statusline' hooks/ skills/ agents/ src/ 2>/dev/null)" \
-    && test "$(ls hooks/handlers/*.js | wc -l | tr -d ' ')" = 9
-    ```
-  - **Done when:** all fixture renders match, omission is never `0/0`, a corrupt scratchpad still yields a
-    non-empty cost-bearing line, the spike finding is in the header, and the reverse-dependency grep is empty.
-  - **Pre-review:** none
+- [x] **Slice 10 [DONE 280d7d4]: manifest registration + committed fixture inputs** (FR-9.5 real-tree closure, 9.7 completion)
+  - **Wave:** 4 · **Use cases:** UC-20, UC-21; AC-7 (positive half)
+  - **Files:** `tests/fixtures/manifest.json`, `tests/fixtures/agents/planner/instincts/` [new],
+    `tests/fixtures/agents/debugger/` [new]
+  - **Changes:** register every FIXTURE case in `adaptive-tier-routing` (10) and `self-improvement-loop`
+    (14: TC-12.1, 12.3–12.6, 13.1, 13.2, 17.3, 19.1, 19.2, 19.4, FR6.2a-1, FR6.2a-2, FR6.5-1) with
+    `qaDoc`; commit the fixture inputs; `fixture: null` + `note` only where an input genuinely cannot
+    exist yet. Update per-document `_counts`.
+  - **Verify:** `node scripts/ci/validate-fixture-manifest.js &&
+    [ "$(grep -c 'adaptive-tier-routing' tests/fixtures/manifest.json)" -ge 10 ] &&
+    grep -q 'self-improvement-loop_test_cases.md' tests/fixtures/manifest.json`
+  - **Done when:** AC-7's positive half — validator exits 0 with all 10 documents discovered and every
+    FIXTURE case registered; `grep -c adaptive` no longer 0 · **Pre-review:** none
+
+- [x] **Slice 11 [DONE be2bd26]: seeded-bad fixtures + prose-discipline validator + CI wiring** (FR-9.8, critic W11, gap 8)
+  - **Wave:** 4 · **Use cases:** UC-21, UC-22; AC-7 (negative half)
+  - **Files:** three new `tests/fixtures/ci/fixture-manifest/bad-*` trees,
+    `bad-missing-fixture`'s manifest, `scripts/ci/validate-instinct-discipline.js` [new],
+    `tests/fixtures/ci/instinct-discipline/bad-weakened/` [new], `.github/workflows/ci.yml`
+  - **Changes:** seeded-bad fixtures — dangling `qaDoc`, cross-document mismatch, wholesale-unregistered
+    document (the reproduced HEAD bug); add `qaDoc` to `bad-missing-fixture` so it still fails for its
+    own reason. **New `validate-instinct-discipline.js` — the mechanical check on the higher-risk prose
+    path (critic W11):** asserts `agents/planner.md` carries the FR-6.2a clause unweakened (D1's
+    allowlist, the 200 limit, "single line", "excluded silently"), and that **both** capture surfaces
+    carry the C3 dedup clause; failure names the file and the missing clause. Rationale: every other
+    mechanical control sits on the *lower*-risk path; a security pre-review reads prose once and cannot
+    stop it rotting later. CI: `--min 1` on the existing `bad-missing-fixture` run (single-doc root vs
+    the new 10-doc floor), the three new seeded runs, and the discipline validator's three runs.
+  - **Verify:** `node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-missing-fixture --min 1 --expect-failure "fixture path does not exist" &&
+    node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-dangling-qadoc --min 1 --expect-failure "nonexistent-feature_test_cases.md" &&
+    node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-cross-doc-mismatch --min 1 --expect-failure "have no manifest entry" &&
+    node scripts/ci/validate-fixture-manifest.js --root tests/fixtures/ci/fixture-manifest/bad-unregistered-doc --min 1 --expect-failure "no manifest entry" &&
+    node scripts/ci/validate-instinct-discipline.js &&
+    node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened --min 1 --expect-failure "FR-6.2a" &&
+    grep -q 'validate-instinct-discipline' .github/workflows/ci.yml &&
+    grep -q 'bad-dangling-qadoc' .github/workflows/ci.yml`
+  - **Done when:** every seeded root fails by name; the discipline validator passes the real tree and
+    fails `bad-weakened`; CI greps pass · **Pre-review:** security (recommended — `ci.yml` is a
+    sensitive path; validator-run additions only)
 
 | Wave | Slices | Files (union) — literal | Rationale |
 |---|---|---|---|
-| 1 | 1 | `install.sh`, `README.md`, `.gitignore`, `docs/PRD.md` | Tracer alone — the one executable end-to-end mechanism, isolated so its copy-confined profile runs cannot race sibling `agents/*.md` edits |
-| 2 | 2 | `skills/develop-feature/SKILL.md`, `src/claude.md`, `templates/rules/security.md` | Alone because Slice 3 reopens `develop-feature` next wave |
-| 3 | 3,4,5 | `skills/develop-feature/SKILL.md`, `skills/bootstrap-feature/SKILL.md`, `docs/PRD.md`, `agents/planner.md`, `skills/implement-slice/SKILL.md`, `skills/merge-ready/SKILL.md`, `docs/digest-index.md` | Tier-aware receiving ends, pairwise disjoint; S4's fallback dissolves the S3↔S4 ordering hazard |
-| 4 | 6,7 | `skills/sdlc-fast/SKILL.md`, `skills/sdlc-quick/SKILL.md`, `src/claude.md`, `README.md`, all 14 `agents/*.md`, `scripts/ci/validate-agents.js`, `tests/fixtures/ci/bad-agent-effort/agents/bad-effort.md`, `tests/fixtures/ci/bad-agent-effort-missing/agents/missing-effort.md` | Overrides need Wave 3's escalation text; `effort:` reopens `agents/planner.md` after S4 |
-| 5 | 8,9 | `scripts/ci/lib/model-profiles.js`, `scripts/ci/validate-model-profile.js`, six `tests/fixtures/ci/model-profile/*` trees, `.github/workflows/ci.yml`, `docs/PRD.md`, `templates/statusline.js`, `templates/settings.json`, `install.sh`, five `tests/fixtures/statusline/*` | Validator needs S1's table and S7's `effort:`; statusline reopens `install.sh` in a different wave from S1 |
+| 1 | 1 | `hooks/handlers/session-start-spine.js`, `templates/instincts.md`, `tests/hooks/test-instincts-injection.js` | Tracer alone; executable end-to-end; pins the schema |
+| 2 | 2,3,4 | isolation-guard, shrink-guard, `hooks/hooks.json`, the two guard tests; `agents/debugger.md`, `scripts/ci/lib/model-profiles.js`, `install.sh`, `templates/.gitignore`; `agents/planner.md`, `skills/bootstrap-feature/SKILL.md` | Disjoint; depend only on Wave 1's template. D2 covers the 3↔4 `validate-agents` coupling |
+| 3 | 5,6,7,8,9 | `skills/implement-slice/SKILL.md`; `skills/merge-ready/SKILL.md`; `skills/develop-feature/SKILL.md`; `scripts/ci/validate-fixture-manifest.js`, `tests/fixtures/manifest.json`; `README.md`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `src/claude.md` | Disjoint; 5/6 reference `debugger`, 9 needs 15 agents. D2 covers skills (5/6/7) and triage-parity (7/9) |
+| 4 | 10,11 | `tests/fixtures/manifest.json`, `tests/fixtures/agents/planner/instincts/`, `tests/fixtures/agents/debugger/`; `tests/fixtures/ci/fixture-manifest/bad-dangling-qadoc/`, `.../bad-cross-doc-mismatch/`, `.../bad-unregistered-doc/`, `.../bad-missing-fixture/tests/fixtures/manifest.json`, `scripts/ci/validate-instinct-discipline.js`, `tests/fixtures/ci/instinct-discipline/bad-weakened/`, `.github/workflows/ci.yml` | Disjoint; 10 needs Slice 8's validator, 11 needs its error wording and Slices 4/5/6's clause text |
 
-Cross-wave repeats are sequential: `install.sh` W1→W5 · `README.md` W1→W4 · `docs/PRD.md` W1→W3→W5 ·
-`src/claude.md` W2→W4 · `develop-feature` W2→W3 · `agents/planner.md` W3→W4.
-**Actual-write audit:** the only `Verify:` that mutates files is Slice 1's, confined to a throwaway copy.
+`tests/fixtures/manifest.json` appears in Waves 3 and 4 — sequential, valid. No same-wave slice pair
+shares a file. Every dependency points to an earlier wave.
 
-## Named deferral
+## Risks
 
-`scripts/ci/validate-fixture-manifest.js` hardcodes the F3 QA doc and enforces a bijection, so F4's 10
-FIXTURE TCs can neither be registered nor left registered-but-unchecked without generalizing it to
-multiple QA docs — cross-feature infrastructure no F4 requirement schedules. **Deferred to F5.** Nothing
-CI-automatable in F4 depends on it.
+- **Self-reinforcing loop** — store → every session's context → model behaviour → captures back.
+  Mechanical mitigations are hook-side (6 entries, ≥0.7, D1, shared cap, conditional framing), the two
+  guards, and now Slice 11's discipline validator. Honest residual: D1 constrains characters, not
+  semantics; `Confidence:` is attacker-settable; neither is a security boundary.
+- **Repository-controlled store, two channels** — injection (Slice 1) and the strictly-worse planner
+  attachment (Slice 4), both mandatory security pre-review.
+- **`debugger`** — `Bash` + single-path `Write`, auto-invoked on attacker-influenceable failure output.
+- **Sensitive paths** — `install.sh` (Slice 3), `.github/workflows/ci.yml` (Slice 11).
+- **Prose-enforced arithmetic** remains prose by PRD design; STATIC greps pin the numbers and Slice 11
+  pins the two highest-value clauses.
 
-## Implementation notes
+## PRD gaps (9) — resolved or recorded
 
-- **Tracer executed for real** — `install.sh --profile budget` against a throwaway copy changed exactly
-  8 files, and a deliberately seeded `model: sonnet` line in a file *body* survived byte-identical,
-  proving the awk fence-counter is frontmatter-bounded rather than a naive `s/^model:/`.
-- Two spikes reported honestly as **UNDETERMINED** rather than invented: FR-7.6 (does a running session
-  re-read agent frontmatter or snapshot it?) and FR-13.4 (statusline stdin token-usage field names).
-  Both record what would settle them. The statusline degrades to `ctx: unknown`, never a fabricated bar.
-- **Defect found and fixed:** `.gitignore`'s `.sdlc-model-profile` had no path anchor, so it silently
-  ignored that filename at any depth — including fixture roots that need it as content. Caught by
-  re-verifying from a clean `git clone` rather than local disk state. Now anchored to `/`.
+1. id-grammar rejects `TC-FR*` — **resolved Slice 8** · 2. FR-8.5 counter vs PROTECTED scratchpad —
+**resolved Slices 5+7** · 3. mid-wave corrections cannot reach a subagent — recorded, 2 TCs
+unexercisable · 4. FR-8.2 "append" with no `Edit` — **resolved Slice 3** · 5. debugger profile values —
+decided in-plan, pre-review verifies · 6. §11.6's stale QA-doc row — **resolved Gate 7** · 7. AC-15
+already satisfied at HEAD · 8. `hooks.json` description — **resolved Slice 2 with a grep** ·
+9. FR-5.8 was a dangling number (§11's FR-5 stopped at 5.7) — **resolved Gate 7**: §11.3 now carries an
+FR-5.8 heading holding the stated-limitation text that Design Decision 5 and QA TC-11.7 both cite; the
+behaviour was already implemented in Slice 1
 
-## Merge-ready gate results
+## Known transient — CLOSED
 
-Gate 0 PASS · Gate 1 PASS · Gate 2 code review **PASS** (1 MAJOR + 2 MINOR fixed) ·
-Gate 3 security **PASS** (1 MEDIUM + 3 LOW fixed) · Gate 4 PASS (54 CI steps, 16 hook test files) ·
-Gate 5 N/A · **Gate 6 `PRESENT_BEHAVIOR_UNVERIFIED`** (14 gaps) · Gate 7 PASS · Gate 8 N/A
-
-**Gate 6's decisive finding:** the branch had never been pushed, so no CI run existed for any F4
-commit — criterion (c)'s named-entrant rule correctly refused to credit validators nothing had
-entered. It also corrected a false premise in its own delegation prompt. Pushing closed that gap
-(run 31961651378, 54 asset steps, all four jobs green); the verdict stands because the substantive
-gaps remain: no committed repeatable check for `install.sh --profile` end-to-end, the statusline
-executed by nothing committed with an unverified stdin contract, both spikes open, and the routing
-behaviour itself only observable in a live multi-turn run.
-
-**Defects caught at merge-ready and fixed:** both triage copies claimed a CI parity check that did
-not exist (now built — `validate-triage-parity.js`); the model-table drift check silently skipped
-unparseable case arms, so a reformatted arm could diverge while CI stayed green (proven real, then
-closed bidirectionally); unguarded `mktemp` under `set -e` could bypass temp cleanup; `## Tier:` had
-no branch for an unrecognized value (now fails closed to all 9 gates).
+`validate-verification-upgrade.js`'s agent-count check was RED between Wave 2 and Wave 3: Slice 3
+bumped `install.sh` to 15 while README and both `.claude-plugin/*.json` still read 14. Slice 9 closed
+it. Worth carrying forward: the plan split one consistency check across two waves, which guaranteed a
+red window — a planning smell to catch at plan-critic time, not at merge.
 
 ## Blockers
 
 - none
 
-## Completed
+## Completed (v4.0 roadmap)
 
-- F1 (§6) 6e0c55e · F2a (§7) cbe586d · F2b (§8) 9cffb22 · F3 (§9) 2c7272d · defect fixes 19b29ce
-- All pushed, GitHub CI green (4 jobs, asset job 39 steps)
+- F1 (§6) `6e0c55e` · F2a (§7) `cbe586d` · F2b (§8) `9cffb22` · F3 (§9) `2c7272d` ·
+  defect fixes `19b29ce` · F4 (§10) `9172301` — all merged, pushed, CI green (54 asset steps, 10 validators)

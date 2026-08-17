@@ -14,7 +14,7 @@
  * extracted triples against `TABLE` below.
  *
  * The `quality` column equals the shipped baseline (FR-8.2) — 4 `opus`
- * roles (architect, plan-critic, planner, security-auditor), 10 `sonnet`
+ * roles (architect, plan-critic, planner, security-auditor), 11 `sonnet`
  * roles (the rest) — which is what lets an absent `.sdlc-model-profile`
  * receipt (FR-9.3) be validated identically to a receipt reading `quality`.
  */
@@ -29,6 +29,7 @@ const TABLE = {
   'ba-analyst': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
   'build-runner': { quality: 'sonnet', balanced: 'haiku', budget: 'haiku', inherit: 'inherit' },
   'code-reviewer': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
+  'debugger': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
   'doc-updater': { quality: 'sonnet', balanced: 'haiku', budget: 'haiku', inherit: 'inherit' },
   'e2e-runner': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
   'prd-writer': { quality: 'sonnet', balanced: 'haiku', budget: 'haiku', inherit: 'inherit' },
