@@ -44,7 +44,6 @@
       "Bash(git commit*)",
       "Edit(.claude/scratchpad.md)",
       "Write(.claude/scratchpad.md)",
-
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -54,16 +53,13 @@
       "Bash(git checkout -b:*)",
       "Bash(git switch -c:*)",
       "Bash(git rev-parse:*)",
-
       "Bash(npm test:*)",
       "Bash(npm run test:*)",
       "Bash(npm run build:*)",
       "Bash(npm run check:*)",
       "Bash(npm run typecheck:*)",
       "Bash(npm run lint:*)",
-
       "Bash(date -u:*)",
-
       "Edit(**)",
       "Write(**)"
     ],
@@ -78,7 +74,6 @@
       "Write(~/.claude/sdlc-trusted-projects)",
       "Edit(.git/**)",
       "Write(.git/**)",
-
       "Read(.env)",
       "Read(.env.*)",
       "Read(~/.ssh/**)",
@@ -87,7 +82,6 @@
       "Edit(.env.*)",
       "Write(.env)",
       "Write(.env.*)",
-
       "Bash(sudo:*)",
       "Bash(rm -rf /:*)",
       "Bash(rm -fr /:*)",
@@ -96,7 +90,6 @@
       "Bash(rm -rf $HOME:*)",
       "Bash(rm -rf ..:*)",
       "Bash(rm -rf ../:*)",
-
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push --force-with-lease:*)",
@@ -104,13 +97,11 @@
       "Bash(git filter-branch:*)",
       "Bash(git reset --hard:*)",
       "Bash(git config core.hooksPath:*)",
-
       "Bash(curl:*)",
       "Bash(wget:*)",
       "Bash(nc:*)",
       "Bash(ncat:*)",
       "Bash(scp:*)",
-
       "Bash(bash -c:*)",
       "Bash(sh -c:*)",
       "Bash(zsh -c:*)",
@@ -122,5 +113,8 @@
       "Bash(perl -e:*)",
       "Bash(ruby -e:*)"
     ]
+  },
+  "enabledPlugins": {
+    "claude-code-sdlc@claude-code-sdlc": true
   }
 }

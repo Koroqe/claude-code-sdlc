@@ -1320,11 +1320,41 @@ install_plugin() {
   claude plugin enable "$PLUGIN_REF" > /dev/null 2>&1 || true
 
   if claude plugin list 2>/dev/null | grep -q "$PLUGIN_MARKETPLACE"; then
-    log_ok "plugin ${PLUGIN_REF} installed and enabled"
-    log_info "Open a new session, then run /agents to confirm 15 agents resolve."
+    log_ok "plugin ${PLUGIN_REF} installed (scope: user)"
   else
     log_warn "the plugin did not install. Run it directly to see the reason:"
     echo "    claude plugin install ${PLUGIN_REF}"
+    return 0
+  fi
+
+  # Measured on Claude Code 2.1.9: a user-scope enable reports success and
+  # writes enabledPlugins to ~/.claude/settings.json, but the plugin still does
+  # not load — 0 of 15 agents resolve. The same plugin enabled at PROJECT scope
+  # loads all 15. So user scope is attempted (it is the right long-term home,
+  # and costs nothing if a later version honours it) and project scope is what
+  # actually turns it on today. Re-check on upgrade; drop the notice when a
+  # user-scope enable is observed to work.
+  claude plugin enable "$PLUGIN_REF" > /dev/null 2>&1 || true
+
+  echo ""
+  log_info "To activate it in a project (required on Claude Code 2.1.x):"
+  echo "    cd your-project && claude plugin install ${PLUGIN_REF} --scope project"
+  log_info "That writes .claude/settings.json, merging with anything already there."
+}
+
+# Turn the plugin on for the project being scaffolded. Uses the CLI rather than
+# editing JSON by hand: this script must not depend on node or jq, and the CLI
+# merges into an existing .claude/settings.json instead of clobbering it.
+enable_plugin_for_project() {
+  if [ "$NO_PLUGIN" = true ] || ! command -v claude > /dev/null 2>&1; then
+    return 0
+  fi
+  claude plugin install "$PLUGIN_REF" --scope project > /dev/null 2>&1 || true
+  if [ -f ".claude/settings.json" ] && grep -q 'enabledPlugins' ".claude/settings.json"; then
+    log_ok "plugin enabled for this project (.claude/settings.json)"
+  else
+    log_warn "could not enable the plugin for this project. Run:"
+    echo "    claude plugin install ${PLUGIN_REF} --scope project"
   fi
 }
 
@@ -1433,11 +1463,14 @@ print_footer() {
   echo -e "${BOLD}  Installation complete!${NC}"
   echo -e "${BOLD}============================================${NC}"
   echo ""
-  echo "  The memory layer is installed. To get the agents and skills,"
-  echo "  install the plugin from a Claude Code session:"
+  echo "  Both layers are installed: the memory layer here, and the plugin"
+  echo "  (agents, skills, hooks) via the claude plugin CLI."
   echo ""
-  echo "    /plugin marketplace add <path-or-repo>"
-  echo "    /plugin install ${PLUGIN_NAME}@${PLUGIN_NAME}"
+  echo "  On Claude Code 2.1.x, turn it on for each project you use it in:"
+  echo ""
+  echo "    cd your-project && claude plugin install ${PLUGIN_REF} --scope project"
+  echo ""
+  echo "  Then open a new session and run /agents to confirm 15 agents."
   echo ""
   echo "  Then describe a feature and the pipeline will automatically:"
   echo "    1. Document requirements (PRD)"
@@ -1604,6 +1637,7 @@ main() {
 
   if [ "$INIT_PROJECT" = true ]; then
     scaffold_project
+    enable_plugin_for_project
   fi
 
   cleanup_source_dir

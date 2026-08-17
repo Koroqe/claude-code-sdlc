@@ -39,36 +39,93 @@ Claude Code out of the box:
 
 ## Install
 
-This harness ships in two parts, and **both are required**: a Claude Code plugin (agents + skills) and a memory layer installed by `install.sh` (`~/.claude/claude.md` and `~/.claude/rules/*.md`).
+**Step 1 — one command, once per machine:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash
 ```
 
-Or locally:
+**Step 2 — one command, once per project:**
 
 ```bash
-git clone https://github.com/Koroqe/claude-code-sdlc.git
-cd claude-code-sdlc
-bash install.sh --yes
+cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --scope project
 ```
 
-Then, inside a Claude Code session, install the plugin itself:
+Open a new Claude Code session and run `/agents`. You should see 15 agents.
+
+New project? `bash install.sh --init-project` does step 2 for you, along with scaffolding
+`.claude/`, `docs/` and `CHANGELOG.md`.
+
+### Why step 2 exists
+
+On Claude Code **2.1.x**, enabling a plugin at user scope does not work. `claude plugin enable`
+reports success and writes `enabledPlugins` into `~/.claude/settings.json`, but the plugin still does
+not load — measured on 2.1.9, **0 of 15 agents resolve**. The identical plugin enabled at *project*
+scope loads **all 15**. Step 2 is that project-scope enable. It writes `.claude/settings.json`,
+merging with whatever is already there rather than replacing it.
+
+Step 1 still performs the user-scope install, so when a future version honours it, step 2 becomes
+redundant rather than wrong.
+
+### Alternatives to step 1
+
+From inside a session:
 
 ```
-/plugin marketplace add <path-or-repo>
+/plugin marketplace add Koroqe/claude-code-sdlc
 /plugin install claude-code-sdlc@claude-code-sdlc
 ```
 
-**Installing the plugin alone is not sufficient.** `bash install.sh` is still required — it is the only thing that installs the memory layer (`~/.claude/claude.md` and `~/.claude/rules/*.md`), because plugins have no user-memory component type. Skip it and the autonomous pipeline never engages for unprefixed natural-language feature requests, even though the plugin's agents and skills are otherwise fully installed and invocable.
-
-This split is deliberate, not an installer that forgot to do its job: Claude Code auto-loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as user memory on every session — the only channel the mandatory, always-on pipeline instruction can travel through — while the plugin system has no equivalent mechanism, so the executable agents and skills move to the plugin and the memory layer stays on `install.sh`.
-
-Scaffold a new project:
+Or clone and install locally — same result as the curl one-liner:
 
 ```bash
-cd your-project && bash install.sh --init-project
+git clone https://github.com/Koroqe/claude-code-sdlc.git
+cd claude-code-sdlc && bash install.sh --yes
 ```
+
+Either of these gives you the plugin but **not** the memory layer. See below for what that costs.
+
+### Two layers, and why they install differently
+
+| Layer | What it holds | How it installs |
+|---|---|---|
+| Plugin | 15 agents, 7 skills, hooks | `claude plugin install` |
+| Memory | `~/.claude/claude.md`, `~/.claude/rules/*.md` | copied by `install.sh` |
+
+Claude Code loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as **user memory** on every
+session. That is the only channel an always-on instruction can travel through, and the plugin
+manifest has no `instructions`, `memory`, or `context` field — so the memory layer cannot ship inside
+the plugin. That limit is Claude Code's, not a shortcut this project took.
+
+It does not have to mean two things for *you* to run, though: `claude plugin ...` are ordinary CLI
+subcommands, so `install.sh` drives them itself after copying the memory layer. That is what makes
+step 1 a single command.
+
+**Plugin without the memory layer** is a legitimate way to use this — the agents and skills are fully
+invocable. What you lose is automatic engagement: the pipeline no longer starts from a plain English
+feature request, so you call `/develop-feature` explicitly every time.
+
+`install.sh` is fail-open about all of this. If `claude` is not on your PATH it still installs the
+memory layer and prints the commands to finish with later. Pass `--no-plugin` to skip the plugin step
+deliberately.
+
+### Agents are namespaced
+
+Plugin agents resolve as `claude-code-sdlc:<name>` — `claude-code-sdlc:planner`,
+`claude-code-sdlc:verifier`, and so on. Skills work the same way, though the bare form
+(`/develop-feature`) resolves too as long as no other installed plugin defines that name.
+
+### Uninstall
+
+```bash
+bash install.sh --dry-run --uninstall   # review first
+bash install.sh --uninstall
+claude plugin uninstall claude-code-sdlc@claude-code-sdlc
+```
+
+Removal is manifest-driven — it deletes only files this harness installed, never a glob, so your own
+agents in `~/.claude/agents/` survive. A timestamped backup is taken first, and
+`bash install.sh --restore <backup-dir>` puts it back.
 
 ---
 
