@@ -100,6 +100,17 @@ r = write(big, 'docs/PRD.md', 20, { SDLC_DISABLED_HOOKS: 'pre:write:shrink-guard
 c.ok('the kill switch disables the guard', !denied(r));
 c.ok('and is silent', !(r.json && r.json.systemMessage));
 
+// --- TC-FR7.4-1: .claude/instincts.md joins the curated list (FR-7.4) ----
+// Zero-collision by construction: every mutation this feature specifies
+// against an existing store is an Edit, and this guard fires on Write only.
+const instincts = project('instincts', { '.claude/instincts.md': 60 });
+r = write(instincts, '.claude/instincts.md', 10);
+c.ok('TC-FR7.4-1: a shrinking Write to .claude/instincts.md is refused', denied(r));
+c.contains('TC-FR7.4-1: reason names the path', reason(r), '.claude/instincts.md');
+c.contains('TC-FR7.4-1: reason states the old size', reason(r), '60');
+c.contains('TC-FR7.4-1: reason states the new size', reason(r), '10');
+c.contains('TC-FR7.4-1: reason states the threshold', reason(r), '40');
+
 // --- a symlinked target is refused rather than followed ------------------
 const victim = path.join(scratch, 'victim.md');
 fs.writeFileSync(victim, Array.from({ length: 500 }, () => 'x').join('\n'));

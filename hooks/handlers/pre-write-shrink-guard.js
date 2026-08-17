@@ -33,6 +33,7 @@ function isCurated(relative) {
   // default, so `changelog.md` is the same file as `CHANGELOG.md`.
   const r = relative.split(path.sep).join('/').toLowerCase();
   if (r === '.claude/scratchpad.md') return true;
+  if (r === '.claude/instincts.md') return true;
   if (r === 'docs/prd.md') return true;
   if (r === 'changelog.md') return true;
   if (/^docs\/use-cases\/[^/]+$/.test(r)) return true;
