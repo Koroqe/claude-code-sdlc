@@ -1,6 +1,6 @@
 ## Feature: Self-Improvement Loop (v4.0 roadmap F5)
 ## Branch: feat/self-improvement-loop-v4
-## Status: quality-gates — all 11 slices committed across 4 waves; Gates 0-4 PASS, 6-7 pending
+## Status: complete — all 11 slices committed; Gates 0-7 PASS (Gate 6 verdict PRESENT_BEHAVIOR_UNVERIFIED, recorded as written); changelog written
 ## Tier: full
 
 ## Docs
@@ -14,7 +14,7 @@
 ## Deliverables checklist
 
 - [x] PRD §11 · [x] Use cases · [x] Architecture review · [x] QA test cases
-- [x] Slices 1–11 (all committed) · [ ] CHANGELOG.md entry — written once at `/merge-ready` Finalization
+- [x] Slices 1–11 (all committed) · [x] CHANGELOG.md entry — 2026-08-17 03:04 UTC
 
 ## D1 — Shared Rule-text validation (ONE definition, both consumers)
 

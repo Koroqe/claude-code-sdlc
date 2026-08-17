@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-17
+
+### Self-Improvement Loop — 03:04 UTC
+**Summary:** The toolkit now remembers its own mistakes. When a correction or a repeated failure happens, it is written down, and the lesson is brought back automatically the next time similar work starts — instead of being forgotten the moment the immediate problem is handled.
+**Details:** Corrections and repeated failures are captured at points the process already passes through, scored by confidence, and promoted to prevention rules once they recur. Rules are re-read at the start of the next session and attached to the plan for matching work; stale ones fade and retire on their own, so the list stays short and relevant. A dedicated debugging role is now brought in automatically when the same check fails twice, before retries are exhausted.
+**Technical details:** Adds a project-local, git-tracked knowledge store with four orchestrator-only writing contexts and a fixed elevation, decay and retirement policy. Injection into session context is capped and confidence-filtered, and treats the store as untrusted repository content: only one short validated line per entry ever reaches the model, never free-form text. The stated limit is documented rather than overstated — the validation constrains characters, not meaning. Adds one agent (fifteen total) and one continuous-integration check guarding the prose-only rules. No screens, endpoints, schema, or deployment changes.
+
 ## 2026-08-16
 
 ### Adaptive Tier Routing — 17:29 UTC
