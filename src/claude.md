@@ -24,6 +24,7 @@ This workflow mirrors a professional software development team:
 | Tech Writer | `doc-updater` | Documentation accuracy + `CHANGELOG.md` maintenance |
 | Senior Developer | `refactor-cleaner` | Post-implementation cleanup |
 | Plan Critic | `plan-critic` | Adversarial plan review — BLOCKER/WARNING/INFO findings before implementation begins |
+| Debugger | `debugger` | Scientific-method bug hunt with persistent state — auto-invoked on a repeated gate or slice-verify failure, before the retry budget is spent |
 
 ### Triage (Phase 0) — Unprefixed-Request Path
 
@@ -134,6 +135,18 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 - `/sdlc-quick <description>` — **Override-only.** Bypasses Triage (Phase 0) above entirely and runs Quick Tier Execution (FR-4) directly against the supplied description; FR-2.2 escalation still applies once running. Never invoked by the pipeline itself, never required for a run to complete.
 
 **Neither override activates from vocabulary.** Both are literal-token-only (FR-6.3): a request's prose containing a word like "quick," "fast," "small," or "trivial" does NOT activate either skill — it is still classified by Triage (Phase 0) above unmodified. This section's own unprefixed-request path has no skill invocation at all, so there is no literal token to check here in the first place — `/sdlc-fast`/`/sdlc-quick` are structurally unavailable from an unprefixed request; the two skill files are their sole entry point.
+
+### Cross-Session Learning
+
+The pipeline carries corrections and repeated failures forward across features and across projects, instead of discarding them the moment the immediate event is handled.
+
+**What the store holds.** A project-local `.claude/instincts.md` (scaffolded empty from `templates/instincts.md`, tracked in git as curated project knowledge like `.claude/scratchpad.md` — not gitignored the way `debugger`'s transient `.claude/debug/` is) holds three sections: `## Meta` (a single `Feature counter`, incremented once per successful `/merge-ready` Finalization), `## Prevention Rules` (elevated instincts, always read in full), and `## Instincts Log` (un-elevated captures, read under a bound). Every entry is a `### <slug>` heading carrying `Confidence:` (`0.3`-`0.9`), `Category:` (`security`, `data-integrity`, or `general`), `Pattern:` (the file path/glob it concerns), `Rule:` (a single-line ALWAYS/NEVER/WHEN heuristic), `Trigger:`, `Occurrences:` (with the feature slugs it recurred in), `Last confirmed at:`, and `Retires at:`.
+
+**The three capture triggers.** (1) **User Correction** — during `/implement-slice`, after the commit step: explicit rejection language, the developer supplying replacement code/approach directly, or a reference back to a prior state. (2) **Repeated Deviation Rule** — during `/implement-slice`, when a per-feature tally of `src/rules/error-recovery.md` Rule 1-4 fires reaches 2+ for the same rule; `/develop-feature` aggregates this tally across a wave's sibling slices post-wave, since an individual subagent can't see what its siblings hit. (3) **Gate Auto-Fix / Gate Retry Exhausted** — during `/merge-ready`'s Post-Gate Instinct Capture step, unconditional on the MERGE READY/NOT MERGE READY outcome, for any gate that needed an auto-fix or exhausted its retry budget.
+
+**Elevation, decay, retirement.** All three run at `/merge-ready`'s Consolidate Instincts step, gated identically to the changelog write — only on a MERGE READY outcome. *Elevation:* an `## Instincts Log` entry moves to `## Prevention Rules` once `Occurrences:` reaches 2 (`security`/`data-integrity`) or 3 (`general`). *Decay:* a `## Prevention Rules` entry with no new occurrence and no `planner`-application confirmation since the previous Finalization loses `0.05` confidence, floored at `0.3`. *Retirement:* any entry, either section, not reconfirmed within the trailing 10 completed features is deleted outright — never archived.
+
+**Who reads it, who writes it.** Reads: `session:start:spine` injects up to 6 `Prevention Rules` entries with `Confidence: ≥0.7` into the next session's context, framed explicitly as untrusted data describing a pattern to watch for, never an instruction to execute; `planner`, during `/bootstrap-feature` Step 5, reads all `Prevention Rules` unfiltered by confidence (capped at the top 20) and attaches matching rules to slices via a `Prevention:` sub-field, without gaining `Write`/`Edit`. Writes: `/implement-slice` (Triggers 1-2) and `/merge-ready` (Trigger 3 plus Consolidate Instincts) are the only writers; the orchestrator alone performs wave-level aggregation and confirmation writes, and parallel-wave subagents are refused direct writes to the store by `pre:agent:isolation-guard`, the same mechanical backstop already protecting the scratchpad and changelog.
 
 ### What Plan Mode Plans MUST Contain
 
