@@ -1232,6 +1232,23 @@ install_user_config() {
 # ----------------------------------------------------------------------------
 # Project scaffold
 # ----------------------------------------------------------------------------
+# Copy a template into the project, refusing to follow a symlinked destination.
+# `cp` writes THROUGH a symlink to whatever it points at, so a hostile repo
+# committing `.claude/settings.json -> ~/.ssh/authorized_keys` would have this
+# scaffold clobber that target the moment someone ran --init-project inside the
+# clone. Refuse and keep going: a skipped template is a visible inconvenience,
+# an overwritten file outside the project is not recoverable.
+# Pure POSIX test, no node/jq — install.sh's zone of the three-Node-zones rule.
+scaffold_cp() {
+  scaffold_cp_dst="$2"
+  if [ -L "$scaffold_cp_dst" ]; then
+    log_warn "$scaffold_cp_dst is a symlink — refusing to write through it (skipped)"
+    return 0
+  fi
+  cp -- "$1" "$scaffold_cp_dst"
+  log_ok "$3"
+}
+
 scaffold_project() {
   echo ""
   log_info "Scaffolding project template in $(pwd)/.claude/"
@@ -1248,43 +1265,37 @@ scaffold_project() {
 
   mkdir -p .claude/rules docs/qa docs/use-cases
 
-  cp -- "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md"
-  log_ok ".claude/CLAUDE.md (template — fill in your project details)"
+  scaffold_cp "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md" ".claude/CLAUDE.md (template — fill in your project details)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md"
-  log_ok ".claude/rules/architecture.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md" ".claude/rules/architecture.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md"
-  log_ok ".claude/rules/security.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md" ".claude/rules/security.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md"
-  log_ok ".claude/rules/testing.md (template)"
+  scaffold_cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md" ".claude/rules/testing.md (template)"
 
-  cp -- "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md"
-  log_ok ".claude/scratchpad.md"
+  scaffold_cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md" ".claude/scratchpad.md"
 
-  cp -- "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json"
-  log_ok ".claude/settings.json"
+  scaffold_cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json" ".claude/settings.json"
 
   # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
   # invoked directly by Claude Code's own statusLine mechanism (the command
   # templates/settings.json just installed above), never by this installer -
   # this script itself still never invokes `node` or `jq`.
-  cp -- "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js"
-  log_ok ".claude/statusline.js (statusline renderer template)"
+  scaffold_cp "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js" ".claude/statusline.js (statusline renderer template)"
 
-  cp -- "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md"
-  log_ok "CHANGELOG.md"
+  scaffold_cp "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md" "CHANGELOG.md"
 
   # FR-1.1: skip-if-exists, identical in shape to the CHANGELOG.md/scratchpad.md
   # provisioning above — never overwrites a project's own accumulated instincts.
   if [ -f ".claude/instincts.md" ]; then
     log_ok ".claude/instincts.md (already exists — skipped)"
   else
-    cp -- "$SCRIPT_DIR/templates/instincts.md" ".claude/instincts.md"
-    log_ok ".claude/instincts.md"
+    scaffold_cp "$SCRIPT_DIR/templates/instincts.md" ".claude/instincts.md" ".claude/instincts.md"
   fi
 
+  if [ -L "docs/PRD.md" ]; then
+    log_warn "docs/PRD.md is a symlink — refusing to write through it (skipped)"
+  else
   cat > "docs/PRD.md" << 'EOF'
 # Product Requirements Document
 
@@ -1305,6 +1316,7 @@ TODO: High-level description of the product.
 <!-- New feature sections will be appended here by the prd-writer agent -->
 EOF
   log_ok "docs/PRD.md (template)"
+  fi
 
   touch docs/qa/.gitkeep
   log_ok "docs/qa/"
