@@ -69,10 +69,20 @@ function logPath(dir) {
 }
 
 // 4. Fail-open: an unwritable location must not disturb the session.
+//    Uses a regular FILE as the cwd, so creating `.claude/debug` beneath it
+//    fails with ENOTDIR. Portable by construction — an earlier version pointed
+//    at /proc/nonexistent, which is merely absent on macOS but a live kernel
+//    filesystem on Linux, where the probe process was killed rather than
+//    exiting and CI reported a null exit code.
 {
-  const r = probe({ compact_trigger: 'auto' }, '/proc/nonexistent-sdlc');
+  const base = tempDir('sdlc-precompact-');
+  const notADir = path.join(base, 'this-is-a-file');
+  fs.writeFileSync(notADir, 'x');
+  const r = probe({ compact_trigger: 'auto' }, notADir);
   c.equal('exits 0 when the log location cannot be created', r.code, 0);
   c.ok('still does not block compaction', !/"continue"\s*:\s*false/.test(r.stdout));
+  c.ok('writes nothing when the path is unusable', !fs.existsSync(logPath(notADir)));
+  rimraf(base);
 }
 
 c.finish();
