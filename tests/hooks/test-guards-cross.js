@@ -154,7 +154,9 @@ for (const file of walk(path.join(REPO_ROOT, 'hooks'), []).filter((f) => f.endsW
 }
 
 // --- asset budget ---------------------------------------------------------
-c.equal('nine handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 9);
+// Ten since pre:compact:probe joined. The roadmap's ceiling is 12 hooks;
+// this assertion exists so growth toward it is a decision, not a drift.
+c.equal('ten handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 10);
 c.ok('no package.json under hooks/', !fs.existsSync(path.join(REPO_ROOT, 'hooks', 'package.json')));
 const hooksJson = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8');
 c.ok('the deferred gateguard is not registered', hooksJson.indexOf('gateguard') === -1);

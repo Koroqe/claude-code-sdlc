@@ -3,7 +3,7 @@
     "Hook configuration for the claude-code-sdlc plugin.",
     "",
     "Claude Code loads this automatically when the plugin is installed.",
-    "NEVER copy its contents into settings.json — plugin hooks auto-load, and",
+    "NEVER copy its contents into settings.json \u2014 plugin hooks auto-load, and",
     "duplicating them there makes every hook fire twice.",
     "",
     "Every handler is invoked through hooks/lib/run-hook.js. There is no inline",
@@ -126,6 +126,19 @@
             "description": "Checks the shape of a changelog entry written this response, and that it is not a duplicate under today.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:changelog-guard",
             "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "id": "pre:compact:probe",
+            "type": "command",
+            "description": "Diagnostic probe: records the PreCompact payload to .claude/debug/precompact-payload.jsonl so the compaction feature can be built against an observed schema. Makes no decision and never blocks compaction \u2014 refusing to compact would exhaust context instead, turning a recoverable summarisation into a dead end.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:compact:probe",
+            "timeout": 10
           }
         ]
       }

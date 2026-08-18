@@ -60,6 +60,14 @@ var DEFAULT_PROFILE = 'standard';
 
 /* id -> { handler, timeoutMs, profiles } */
 var HOOKS = {
+  // Diagnostic only. Records what PreCompact carries so the compaction
+  // feature can be designed against an observed schema rather than a
+  // documented one. Never blocks, never injects.
+  'pre:compact:probe': {
+    handler: 'pre-compact-probe.js',
+    timeoutMs: 5000,
+    profiles: ['minimal', 'standard', 'strict']
+  },
   'session:start:spine': {
     handler: 'session-start-spine.js',
     timeoutMs: 5000,
