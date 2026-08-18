@@ -661,7 +661,61 @@ backup_existing() {
   mv -- "$staging" "$candidate"
   BACKUP_DIR="$candidate"
   log_warn "Existing config backed up to $BACKUP_DIR"
+
+  prune_old_backups
 }
+
+# Keep the most recent backups and delete the rest.
+#
+# Every install, uninstall and restore takes a timestamped backup, so a machine
+# that has been through a few upgrade cycles accumulates them without bound —
+# the original v4.0 audit counted 10 stale `backup-*` directories, and the
+# development of this very feature pushed that past 25. Each one is a full copy
+# of the memory layer, so the cost is real and the value of the oldest is nil.
+#
+# Deliberately conservative about what it will delete:
+#   - only directories directly under $CLAUDE_DIR,
+#   - only those matching this installer's own `backup-YYYYMMDD-HHMMSS` shape,
+#     so a directory a user named `backup-notes` is never touched,
+#   - never the one just created, which is always the newest.
+# Retention is overridable, and setting it to 0 disables pruning entirely.
+prune_old_backups() {
+  local keep removed d name kept
+  keep="${SDLC_KEEP_BACKUPS:-5}"
+
+  case "$keep" in
+    ''|*[!0-9]*) return 0 ;;   # non-numeric override: do nothing rather than guess
+    0) return 0 ;;             # explicit opt-out
+  esac
+
+  # Filter to OUR backups first, then apply the retention count. Counting
+  # before filtering was a real bug: a user directory called `backup-notes`
+  # matches the `backup-*` glob, consumed a retention slot, and left one fewer
+  # real backup than requested. With several such directories it would have
+  # pruned every genuine backup while reporting success.
+  kept=0
+  removed=0
+  for d in $(ls -1dt "$CLAUDE_DIR"/backup-* 2>/dev/null); do
+    [ -d "$d" ] || continue
+    name="$(basename -- "$d")"
+    case "$name" in
+      backup-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]|backup-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9]*)
+        : ;;                   # ours
+      *) continue ;;           # not ours — never counted, never deleted
+    esac
+    if [ "$kept" -lt "$keep" ]; then
+      kept=$((kept + 1))
+      continue
+    fi
+    rm -rf -- "$d"
+    removed=$((removed + 1))
+  done
+
+  if [ "$removed" -gt 0 ]; then
+    log_info "Pruned $removed old backup(s), keeping the $keep most recent (SDLC_KEEP_BACKUPS to change)."
+  fi
+}
+
 
 sweep_stale_staging() {
   local d

@@ -167,7 +167,14 @@ claude plugin uninstall claude-code-sdlc@claude-code-sdlc
 
 Removal is manifest-driven — it deletes only files this harness installed, never a glob, so your own
 agents in `~/.claude/agents/` survive. A timestamped backup is taken first, and
-`bash install.sh --restore <backup-dir>` puts it back.
+`bash install.sh --restore <backup-dir>` puts it back — verified to round-trip byte-for-byte with
+`diff -r`.
+
+Backups are pruned to the **5 most recent** on each install, since every install, uninstall and
+restore takes one and they are full copies of the memory layer. Only this installer's own
+`backup-YYYYMMDD-HHMMSS` directories are ever removed; anything else under `~/.claude/` that happens
+to start with `backup-` is left alone. Set `SDLC_KEEP_BACKUPS` to change the count, or `0` to disable
+pruning.
 
 ---
 
