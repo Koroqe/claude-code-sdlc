@@ -128,6 +128,67 @@ if (refusals.length) hardFailures += 1;
 c.equal('the whole slice ran without a single false refusal', hardFailures, 0);
 
 // =========================================================================
+// Surfaces added AFTER this test was written (F4's fast tier, F5's instinct
+// store). The original replay covers a classic full-tier slice, so a guard
+// that stalls one of the newer paths would not have shown up here.
+// =========================================================================
+
+// A fast-tier run: one edit, verify, commit, and its own changelog write. It
+// performs no scratchpad write at all (FR-3.5) and no subagent call, so the
+// shapes differ from the full-tier sequence above.
+const fastSteps = [
+  ['fast: read the single target file', { hook_event_name: 'PostToolUse', tool_name: 'Read', tool_input: { file_path: path.join(root, 'src/service.ts') } }],
+  ['fast: edit the one file', { hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: path.join(root, 'src/service.ts'), old_string: 'svc = 2', new_string: 'svc = 3' } }],
+  ['fast: run the declared verify command', { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'npm run typecheck' } }],
+  ['fast: commit conventionally', { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "fix(ui): correct the expiry copy"' } }],
+];
+for (const [label, input] of fastSteps) {
+  const refs = everyGuard(input);
+  c.equal('allowed: ' + label, refs.length, 0,
+    refs.map(([id, why]) => id + ': ' + String(why).slice(0, 120)).join(' | '));
+}
+
+// The instinct store is orchestrator-only. The orchestrator writing it must be
+// allowed — this is a capture trigger firing on a normal run, not an edge case.
+{
+  const growing = Array.from({ length: 80 }, (_, i) => 'line ' + i).join('\n') + '\n';
+  fs.writeFileSync(path.join(root, '.claude/instincts.md'), growing);
+  // Read before write, exactly as the pipeline does: merge-ready reads the
+  // store before consolidating it, and debugger's persistence is defined as
+  // Read-then-Write precisely because it holds no Edit. Omitting this step
+  // made the first version of this case unrealistic — read-guard refused it,
+  // correctly, for a sequence the pipeline never actually performs.
+  everyGuard({
+    hook_event_name: 'PostToolUse', tool_name: 'Read',
+    tool_input: { file_path: path.join(root, '.claude/instincts.md') },
+  });
+  const refs = everyGuard({
+    hook_event_name: 'PreToolUse', tool_name: 'Write',
+    tool_input: { file_path: path.join(root, '.claude/instincts.md'), content: growing + 'line 80\n' },
+  });
+  c.equal('allowed: orchestrator writes the instinct store', refs.length, 0,
+    refs.map(([id, why]) => id + ': ' + String(why).slice(0, 140)).join(' | '));
+}
+
+// ...while a wave subagent writing it must be refused, with a remedy that
+// resolves without a human. A refusal with no way forward is the failure this
+// whole test exists to prevent.
+{
+  const asSubagent = {
+    hook_event_name: 'PreToolUse', tool_name: 'Write', agent_id: 'sub-1',
+    tool_input: { file_path: path.join(root, '.claude/instincts.md'), content: 'x\n' },
+  };
+  const r = hook('pre:agent:isolation-guard', asSubagent);
+  c.equal('a subagent writing the instinct store is refused', decisionOf(r), 'deny');
+  c.ok('and the refusal names the orchestrator as the writer',
+    /orchestrat/i.test(reasonOf(r)));
+  const asOrchestrator = Object.assign({}, asSubagent);
+  delete asOrchestrator.agent_id;
+  c.equal('following the remedy — the orchestrator writes instead — resolves it',
+    decisionOf(hook('pre:agent:isolation-guard', asOrchestrator)), '');
+}
+
+// =========================================================================
 // Every genuine refusal must be self-resolvable — no human required.
 // =========================================================================
 
