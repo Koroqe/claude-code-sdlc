@@ -159,7 +159,10 @@ for (const file of walk(path.join(REPO_ROOT, 'hooks'), []).filter((f) => f.endsW
 c.equal('ten handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 10);
 c.ok('no package.json under hooks/', !fs.existsSync(path.join(REPO_ROOT, 'hooks', 'package.json')));
 const hooksJson = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8');
-c.ok('the deferred gateguard is not registered', hooksJson.indexOf('gateguard') === -1);
+// Retired, not deferred — see docs/findings/gateguard-retirement.md. The
+// roadmap's own rule fired at F5: unmeasured by then means removed, so this
+// assertion now states a decision rather than implying pending work.
+c.ok('the retired gateguard is not registered', hooksJson.indexOf('gateguard') === -1);
 
 // --- a malfunctioning guard ALLOWS, for every guard ----------------------
 // This is the direction that matters: for a guard, fail-open means allow.

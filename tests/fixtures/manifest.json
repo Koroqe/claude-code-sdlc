@@ -1,5 +1,5 @@
 {
-  "_purpose": "Machine-readable map from every FIXTURE-class test case across the discovered docs/qa/*_test_cases.md documents to the committed input it needs. A FIXTURE case means: invoke the named agent (via the Agent tool) against the committed `fixture` path and check the output against `expect`. Each entry names the QA document it belongs to via `qaDoc` (case IDs are reused independently across documents, so `(qaDoc, id)` — not `id` alone — is the unit of identity). This manifest does NOT execute any case — scripts/ci/validate-fixture-manifest.js only proves each case's committed input still exists, is wired to a real agent definition, and that every discovered document with FIXTURE cases has at least one manifest entry pointing at it. Running a FIXTURE case still requires a human, or a future eval harness, to actually invoke the agent and read what comes back.",
+  "_purpose": "Machine-readable map from every FIXTURE-class test case across the discovered docs/qa/*_test_cases.md documents to the committed input it needs. A FIXTURE case means: invoke the named agent (via the Agent tool) against the committed `fixture` path and check the output against `expect`. Each entry names the QA document it belongs to via `qaDoc` (case IDs are reused independently across documents, so `(qaDoc, id)` \u2014 not `id` alone \u2014 is the unit of identity). This manifest does NOT execute any case \u2014 scripts/ci/validate-fixture-manifest.js only proves each case's committed input still exists, is wired to a real agent definition, and that every discovered document with FIXTURE cases has at least one manifest entry pointing at it. Running a FIXTURE case still requires a human, or a future eval harness, to actually invoke the agent and read what comes back.",
   "_source_qa_docs": [
     "docs/qa/adaptive-tier-routing_test_cases.md",
     "docs/qa/blocking-guards_test_cases.md",
@@ -166,7 +166,7 @@
       "agent": "verifier",
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/verifier/markers/src/not_implemented_error.py",
-      "expect": "raise NotImplementedError classifies BLOCKER even with a same-line issue reference — no downgrade path exists"
+      "expect": "raise NotImplementedError classifies BLOCKER even with a same-line issue reference \u2014 no downgrade path exists"
     },
     {
       "id": "TC-4.11",
@@ -208,7 +208,7 @@
       "agent": "verifier",
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/verifier/markers/src/tbd-ref-elsewhere.js",
-      "expect": "an issue reference elsewhere in the file, not on the marker's own line, does NOT downgrade it — still BLOCKER"
+      "expect": "an issue reference elsewhere in the file, not on the marker's own line, does NOT downgrade it \u2014 still BLOCKER"
     },
     {
       "id": "TC-4.17",
@@ -222,7 +222,7 @@
       "agent": "verifier",
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/verifier/markers/tests/widgets.test.ts",
-      "expect": "a TODO inside a *.test.ts file is excluded from the Level 2 scan entirely — zero findings"
+      "expect": "a TODO inside a *.test.ts file is excluded from the Level 2 scan entirely \u2014 zero findings"
     },
     {
       "id": "TC-5.1",
@@ -236,9 +236,8 @@
       "id": "TC-5.2",
       "agent": "verifier",
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
-      "fixture": null,
-      "expect": "a second verifier run for the same feature overwrites the same report path rather than creating a second/duplicate file",
-      "note": "the QA doc's precondition needs a docs/verification/<slug>.md that already exists from a prior run, plus a distinct 'updated fixture state' for the rerun. Neither a pre-existing report nor a second-run project variant is committed anywhere under tests/fixtures/ — this case genuinely has no committed input today."
+      "fixture": "tests/fixtures/agents/verifier/rerun-existing-report/",
+      "expect": "a second verifier run for the same feature overwrites the same report path rather than creating a second/duplicate file"
     },
     {
       "id": "TC-5.7",
@@ -246,7 +245,7 @@
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/verifier/present-unverified/",
       "expect": "generated_at is used verbatim from the supplied delegation prompt, never recomputed or estimated",
-      "note": "the QA doc's own Steps column says 'against any fixture' — no case-specific project is named, so this reuses an existing committed fixture as the invocation target. The delegation-prompt text under test (the generated_at/feature values) is supplied at invocation time and is not itself a committed file."
+      "note": "the QA doc's own Steps column says 'against any fixture' \u2014 no case-specific project is named, so this reuses an existing committed fixture as the invocation target. The delegation-prompt text under test (the generated_at/feature values) is supplied at invocation time and is not itself a committed file."
     },
     {
       "id": "TC-5.8",
@@ -254,7 +253,7 @@
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/verifier/present-unverified/",
       "expect": "with no timestamp supplied, generated_at is omitted and generated_at_note explains the omission, never an invented value",
-      "note": "same reasoning as TC-5.7 — the QA doc says 'against any fixture'; no case-specific committed project exists or is required."
+      "note": "same reasoning as TC-5.7 \u2014 the QA doc says 'against any fixture'; no case-specific committed project exists or is required."
     },
     {
       "id": "TC-6.7",
@@ -336,7 +335,7 @@
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/code-reviewer/boundary-80/",
       "expect": "a finding engineered to sit at the maximally ambiguous confidence boundary is omitted, per the literal '>' (not '>=') reading",
-      "note": "QA doc's own caveat: this is a best-effort behavioural probe, not a hard numeric guarantee — an LLM's self-reported confidence cannot be forced to output exactly 80."
+      "note": "QA doc's own caveat: this is a best-effort behavioural probe, not a hard numeric guarantee \u2014 an LLM's self-reported confidence cannot be forced to output exactly 80."
     },
     {
       "id": "TC-7.8",
@@ -355,7 +354,7 @@
       "qaDoc": "docs/qa/verification-review-upgrade_test_cases.md",
       "fixture": "tests/fixtures/agents/code-reviewer/low-confidence-naming/",
       "expect": "canonical negative/false-positive index entry: a plausible-sounding, low-confidence finding is correctly suppressed and does not stall an unattended run",
-      "note": "the QA doc states this case verbatim as 'Same fixture and result as TC-7.1' — it is a cross-reference, not a separate committed fixture."
+      "note": "the QA doc states this case verbatim as 'Same fixture and result as TC-7.1' \u2014 it is a cross-reference, not a separate committed fixture."
     },
     {
       "id": "TC-8.1",
@@ -420,81 +419,71 @@
       "id": "TC-5.2",
       "agent": "planner",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "planner's Quick-Tier Contract, given a plain description and no PRD/use-cases/QA/architecture-review input, returns exactly one marker-free slice in the standard Files:/Changes:/Verify:/Done when: format, with zero Write/Edit tool calls",
-      "note": "no committed fixture exists yet for planner's Quick-Tier Contract mode. Committing one is outside this slice's exclusive file scope (tests/fixtures/manifest.json, tests/fixtures/agents/planner/instincts/, tests/fixtures/agents/debugger/ only, per F5 Slice 10) and is left for a follow-up slice touching tests/fixtures/agents/planner/ more broadly. Distinct from tests/fixtures/manifest.json's other TC-5.2 entry (qaDoc: verification-review-upgrade_test_cases.md) — the same id is reused independently across documents, which is exactly why the bijection is scoped by (qaDoc, id) pairs."
+      "fixture": "tests/fixtures/agents/planner/quick-tier-contract/",
+      "expect": "planner's Quick-Tier Contract, given a plain description and no PRD/use-cases/QA/architecture-review input, returns exactly one marker-free slice in the standard Files:/Changes:/Verify:/Done when: format, with zero Write/Edit tool calls"
     },
     {
       "id": "TC-5.5",
       "agent": "code-reviewer",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "code-reviewer, given the quick-tier PRD/use-case/QA-absence carve-out plus a clean diff, does NOT flag the missing-QA-doc checklist item",
-      "note": "no committed delegation-prompt fixture exists yet for this carve-out scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/code-reviewer/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/code-reviewer/carveout-present/",
+      "expect": "code-reviewer, given the quick-tier PRD/use-case/QA-absence carve-out plus a clean diff, does NOT flag the missing-QA-doc checklist item"
     },
     {
       "id": "TC-5.6",
       "agent": "security-auditor",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "security-auditor, given the identical quick-tier carve-out, does NOT flag the same PRD/use-case/QA absence",
-      "note": "no committed delegation-prompt fixture exists yet for this carve-out scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/security-auditor/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/security-auditor/carveout-present/",
+      "expect": "security-auditor, given the identical quick-tier carve-out, does NOT flag the same PRD/use-case/QA absence"
     },
     {
       "id": "TC-5.7",
       "agent": "code-reviewer",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "defect-proof: absent the carve-out, code-reviewer DOES flag the missing docs/qa/ test cases, proving the carve-out (TC-5.4/5.5) is load-bearing, not incidental",
-      "note": "no committed delegation-prompt fixture exists yet for this negative-control scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/code-reviewer/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/code-reviewer/carveout-removed/",
+      "expect": "defect-proof: absent the carve-out, code-reviewer DOES flag the missing docs/qa/ test cases, proving the carve-out (TC-5.4/5.5) is load-bearing, not incidental"
     },
     {
       "id": "TC-5.9",
       "agent": "test-writer",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "test-writer, given the quick-tier carve-out and a slice's Verify:/Done when: fields but no QA file, derives tests from those fields rather than reporting a missing input",
-      "note": "no committed delegation-prompt fixture exists yet for this carve-out scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/test-writer/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/build-runner/carveout-slice/",
+      "expect": "test-writer, given the quick-tier carve-out and a slice's Verify:/Done when: fields but no QA file, derives tests from those fields rather than reporting a missing input"
     },
     {
       "id": "TC-15.1",
       "agent": "planner",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "a planner invocation for a new full-tier feature, with docs/digest-index.md holding 9 rows, reads a bounded set (2-4 prior rows in full) via its own Read tool-call trace — never all 9",
-      "note": "no committed digest-index.md + delegation-prompt fixture exists yet for this bounded-read scenario, and asserting it requires auditing planner's own Read tool-call trace, not only its returned text. Out of this slice's exclusive file scope (tests/fixtures/agents/planner/ outside instincts/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/planner/digest-nine-rows/",
+      "expect": "a planner invocation for a new full-tier feature, with docs/digest-index.md holding 9 rows, reads a bounded set (2-4 prior rows in full) via its own Read tool-call trace \u2014 never all 9"
     },
     {
       "id": "TC-15.2",
       "agent": "planner",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "the first full-tier feature in a fresh project (no digest-index.md yet) proceeds with 0 prior-feature reads and does not stall — required negative/false-positive case",
-      "note": "no committed fixture exists yet for this absent-digest scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/planner/ outside instincts/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/planner/digest-absent/",
+      "expect": "the first full-tier feature in a fresh project (no digest-index.md yet) proceeds with 0 prior-feature reads and does not stall \u2014 required negative/false-positive case"
     },
     {
       "id": "TC-15.3",
       "agent": "planner",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "a stale digest-index.md Summary can mislead which row is selected, but once selected, planner's Read pulls the current on-disk content of the referenced file, never the stale Summary text",
-      "note": "no committed digest-index.md + stale-vs-current-file-pair fixture exists yet for this scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/planner/ outside instincts/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/planner/digest-stale-row/",
+      "expect": "a stale digest-index.md Summary can mislead which row is selected, but once selected, planner's Read pulls the current on-disk content of the referenced file, never the stale Summary text"
     },
     {
       "id": "TC-16.1",
       "agent": "doc-updater",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "Gate 7's delegation to doc-updater, for a first-time full-tier feature completion, appends exactly one new row to docs/digest-index.md",
-      "note": "no committed digest-index.md + finalized-docs delegation fixture exists yet for this scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/doc-updater/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/doc-updater/digest-append/",
+      "expect": "Gate 7's delegation to doc-updater, for a first-time full-tier feature completion, appends exactly one new row to docs/digest-index.md"
     },
     {
       "id": "TC-16.2",
       "agent": "doc-updater",
       "qaDoc": "docs/qa/adaptive-tier-routing_test_cases.md",
-      "fixture": null,
-      "expect": "re-running Gate 7 for the same feature refreshes the existing digest-index.md row in place, not duplicating it",
-      "note": "no committed digest-index.md fixture (pre-seeded with an existing row) exists yet for this rerun scenario. Out of this slice's exclusive file scope (tests/fixtures/agents/doc-updater/ is not among the three paths this slice owns) — left for a follow-up slice."
+      "fixture": "tests/fixtures/agents/doc-updater/digest-refresh/",
+      "expect": "re-running Gate 7 for the same feature refreshes the existing digest-index.md row in place, not duplicating it"
     },
     {
       "id": "TC-12.1",
@@ -522,29 +511,29 @@
       "agent": "planner",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/planner/instincts/no-matching-pattern/",
-      "expect": "no rule matches the feature's Files: lists — Prevention: is omitted entirely from every slice, never emitted empty"
+      "expect": "no rule matches the feature's Files: lists \u2014 Prevention: is omitted entirely from every slice, never emitted empty"
     },
     {
       "id": "TC-12.6",
       "agent": "planner",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/planner/instincts/no-store-present/",
-      "expect": "an absent .claude/instincts.md during planning does not stall planner — returns a complete plan with zero Prevention: fields"
+      "expect": "an absent .claude/instincts.md during planning does not stall planner \u2014 returns a complete plan with zero Prevention: fields"
     },
     {
       "id": "TC-13.1",
       "agent": "planner",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/planner/instincts/marketing-newsletter-no-match/",
-      "expect": "Prevention Rules exist but none apply to this feature — the field is omitted entirely everywhere in the plan, and no confirming Edit occurs since nothing was attached",
-      "note": "distinct from tests/fixtures/manifest.json's other TC-13.1 entry (qaDoc: verification-review-upgrade_test_cases.md) — the same id is reused independently across documents, which is exactly why the bijection is scoped by (qaDoc, id) pairs."
+      "expect": "Prevention Rules exist but none apply to this feature \u2014 the field is omitted entirely everywhere in the plan, and no confirming Edit occurs since nothing was attached",
+      "note": "distinct from tests/fixtures/manifest.json's other TC-13.1 entry (qaDoc: verification-review-upgrade_test_cases.md) \u2014 the same id is reused independently across documents, which is exactly why the bijection is scoped by (qaDoc, id) pairs."
     },
     {
       "id": "TC-13.2",
       "agent": "planner",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/planner/instincts/empty-prevention-section/",
-      "expect": "an entirely empty Prevention Rules section (present, zero entries) reaches the identical outcome as a populated-but-non-matching store — zero Prevention: fields"
+      "expect": "an entirely empty Prevention Rules section (present, zero entries) reaches the identical outcome as a populated-but-non-matching store \u2014 zero Prevention: fields"
     },
     {
       "id": "TC-17.3",
@@ -572,7 +561,7 @@
       "agent": "debugger",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/debugger/two-features-no-collision/",
-      "expect": "two different features' debug files never collide — each invocation only ever reads/writes the .claude/debug/<slug>.md path keyed to the feature slug it was given"
+      "expect": "two different features' debug files never collide \u2014 each invocation only ever reads/writes the .claude/debug/<slug>.md path keyed to the feature slug it was given"
     },
     {
       "id": "TC-FR6.2a-1",
@@ -593,7 +582,7 @@
       "agent": "planner",
       "qaDoc": "docs/qa/self-improvement-loop_test_cases.md",
       "fixture": "tests/fixtures/agents/planner/instincts/top20-cap-boundary/",
-      "expect": "given 25 Prevention Rules entries, planner attaches only from the top 20 by Confidence (ties: Last confirmed at, then file order) — a matching rule ranked 21st or lower is never attached"
+      "expect": "given 25 Prevention Rules entries, planner attaches only from the top 20 by Confidence (ties: Last confirmed at, then file order) \u2014 a matching rule ranked 21st or lower is never attached"
     }
   ]
 }
