@@ -142,6 +142,19 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "id": "subagent:stop:wave-record",
+            "type": "command",
+            "description": "Reads a finished wave subagent's transcript (agent_transcript_path) and records the commands it ran, whether any tool result errored, the files it wrote and its closing summary, to .claude/debug/wave-results/. Post-wave collection cross-checks the subagent's self-report against this. Never blocks \u2014 forcing continuation on a misparsed transcript would stall an unattended run.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook subagent:stop:wave-record",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

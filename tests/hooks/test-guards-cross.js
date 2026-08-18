@@ -154,9 +154,10 @@ for (const file of walk(path.join(REPO_ROOT, 'hooks'), []).filter((f) => f.endsW
 }
 
 // --- asset budget ---------------------------------------------------------
-// Ten since pre:compact:probe joined. The roadmap's ceiling is 12 hooks;
-// this assertion exists so growth toward it is a decision, not a drift.
-c.equal('ten handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 10);
+// Eleven since subagent:stop:wave-record joined. The ceiling is 12 hooks, and
+// retiring gateguard is what freed the slot this one occupies — growth toward
+// the cap stays a decision, never a drift.
+c.equal('eleven handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 11);
 c.ok('no package.json under hooks/', !fs.existsSync(path.join(REPO_ROOT, 'hooks', 'package.json')));
 const hooksJson = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8');
 // Retired, not deferred — see docs/findings/gateguard-retirement.md. The

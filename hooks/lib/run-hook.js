@@ -60,6 +60,14 @@ var DEFAULT_PROFILE = 'standard';
 
 /* id -> { handler, timeoutMs, profiles } */
 var HOOKS = {
+  // Reads a finished wave subagent's own transcript and records what it
+  // actually did, so post-wave collection can cross-check the subagent's
+  // self-report instead of trusting it. Never blocks.
+  'subagent:stop:wave-record': {
+    handler: 'subagent-stop-wave-record.js',
+    timeoutMs: 5000,
+    profiles: ['minimal', 'standard', 'strict']
+  },
   // Diagnostic only. Records what PreCompact carries so the compaction
   // feature can be designed against an observed schema rather than a
   // documented one. Never blocks, never injects.
