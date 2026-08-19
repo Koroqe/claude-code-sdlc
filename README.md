@@ -51,7 +51,8 @@ Claude Code out of the box:
 - **Context integrity** — mandatory re-read before edit, scratchpad persistence, chunked reads for large files
 - **Rename safety** — 7-step protocol covering barrel files, dynamic imports, re-exports, typecheck verification
 - **Mid-slice typecheck** — runs after every 3 file edits when a slice touches 4+ files
-- **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time
+- **Parallel execution waves** — independent slices execute simultaneously via wave-based parallelism, cutting wall-clock implementation time, with each slice's outcome read from its own transcript rather than taken from its self-report
+- **Automatic triage** — a typo does not pay for a PRD: every request is routed to a fast, quick or full tier before any edit, ambiguity always resolving upward, escalation one-way
 - **9 quality gates** — git hygiene, docs completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy, UI/UX
 - **Cross-session learning** — corrections, repeated deviation-rule fires, and gate auto-fixes graduate into a project-scoped instinct store (`.claude/instincts.md`) that's injected into future sessions and attached to matching plan slices, so the same mistake isn't relearned every feature
 
@@ -212,6 +213,29 @@ PLAN MODE -----> Explore codebase, design approach, Plan Critic review
 MERGE READY
 ```
 
+### Not every change gets the full pipeline
+
+A one-line fix should not need a PRD. When the harness has only one gear, developers bypass it — and
+bypassing is how autonomy actually dies. So every request is triaged first, automatically, and the
+tier and the reason are stated before any file is touched.
+
+| Tier | When | What runs |
+|---|---|---|
+| `fast` | One file, and a typo, comment, copy string, single literal or version bump | Direct edit, no subagents, no documents. Still verifies, commits, and writes a changelog entry. |
+| `quick` | 1–3 files, one bounded and already-understood change | One planner pass, one slice, TDD, a reduced gate set. No PRD, use cases or QA. |
+| `full` | Everything else | The complete pipeline above. |
+
+Two rules keep this honest:
+
+- **Ambiguity resolves upward.** Anything that does not clearly qualify as `fast` or `quick` is
+  `full`. `full` is the default, never a positive verdict.
+- **Escalation is one-way.** A `fast` change that turns out to touch more files, or any file under a
+  sensitive path (`auth`, `payment`, `billing`, `secret`, `migration`, workflows, installer),
+  re-routes upward mid-run and says so. It never routes back down.
+
+`/sdlc-fast` and `/sdlc-quick` override the verdict. They activate only on the literal command — a
+request that merely *says* "quick" or "trivial" is still triaged normally.
+
 ---
 
 ## The 15 Agents
@@ -229,7 +253,7 @@ MERGE READY
 | `e2e-runner` | End-to-end tests from use-case scenarios |
 | `code-reviewer` | Quality, security, architecture compliance |
 | `build-runner` | Typecheck, tests, build verification |
-| `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow |
+| `verifier` | Goal-backward checks: file existence, stubs, wiring, data flow — reporting `VERIFIED`, `PRESENT_BEHAVIOR_UNVERIFIED`, `FAILED` or `UNCERTAIN`, so "wired" is never rounded up to "works" |
 | `doc-updater` | Keeps documentation accurate after changes |
 | `refactor-cleaner` | Post-implementation cleanup with rename safety |
 | `debugger` | Scientific-method bug hunt with persistent state — auto-invoked on a repeated gate or slice-verify failure, before the retry budget is spent |
@@ -300,6 +324,10 @@ Claude automatically:
 | Code compiles but feature is disconnected | 4-level goal-backward verification: existence, stubs, wiring, data flow |
 | Agents silently downgrade scope | Plan Critic scans for hedging language against PRD requirements |
 | Sequential execution wastes time on independent slices | Wave-based parallelism: planner groups slices by file overlap, develop-feature spawns parallel subagents per wave |
+| A subagent grades its own homework | `subagent:stop:wave-record` reads the subagent's transcript; where record and self-report disagree, the record wins |
+| Process rules are prose a model may ignore | 6 blocking guards mechanize them: branch protection, AI attribution, read-before-edit, config weakening, curated-state truncation, subagent write isolation |
+| The same mistake is relearned every feature | Corrections and repeated failures graduate into a project instinct store, injected at session start and attached to matching plan slices |
+| One gear, so small fixes bypass the pipeline entirely | Automatic triage into fast / quick / full, ambiguity resolving upward |
 
 ---
 
@@ -322,25 +350,69 @@ Creates:
 
 ## Hooks
 
-The plugin registers three hooks. None of them blocks: every one exits 0
-whatever happens, so a malfunctioning hook cannot halt an unattended run.
+The plugin registers **11 hooks across 12 registrations** (`pre:edit:read-guard` listens on two
+events). They split into two kinds, and the difference matters.
 
-One honest limitation. That guarantee covers the hook *deciding* anything and
-every asynchronous failure — a throw, a rejected promise, a missing handler, a
-Node too old, an unserialisable result. It cannot cover a handler that blocks
-the thread synchronously, because a JavaScript timer cannot interrupt
-synchronous code. The backstop for that case is the `timeout` on each entry in
-`hooks/hooks.json`, which Claude Code enforces by killing the process from
-outside.
+**Observers never block.** They watch, record, and inject.
 
 | Hook | Fires | Does |
 |------|-------|------|
-| `session:start:spine` | Session start | Injects the current feature, branch, wave and slice from the scratchpad, so a resumed or compacted session re-enters the loop at the right point instead of asking. Reports memory-layer version drift. |
+| `session:start:spine` | Session start | Injects the current feature, branch, wave and slice from the scratchpad, plus active prevention rules, so a resumed or compacted session re-enters the loop at the right point instead of asking. Reports memory-layer version drift. |
 | `post:edit:accumulate` | After each Edit/Write | Records the edited path. |
 | `stop:typecheck-format` | End of a response | Runs the project's declared format and typecheck commands **once** over everything edited, instead of once per edit. |
+| `subagent:stop:wave-record` | A parallel-wave subagent finishes | Reads that subagent's **own transcript** and records what it actually ran, what errored, and what it wrote. |
+| `pre:compact:probe` | Before compaction | Records the `PreCompact` payload and nothing else. A diagnostic, not a mechanism — see below. |
 
-Cost is about 21 ms per tool call, of which ~1.5 ms is the hook itself — the
-rest is Node process startup. See
+**Guards block by decision.** Each mechanizes a rule that used to be prose in a prompt, and each
+carries a named escape.
+
+| Guard | Fires on | Refuses | Escape |
+|---|---|---|---|
+| `pre:bash:git-guard` | `Bash` | Commits on `main`/`master`, `--no-verify`, AI attribution in the message, non-conforming commit type/scope, unrequested `push` | `SDLC_ALLOW_GIT_GUARD=1` |
+| `pre:edit:read-guard` | `Edit`/`Write` | Editing a file not read this session — the rule most likely to lapse silently after compaction | `SDLC_ALLOW_UNREAD_EDIT=1` |
+| `pre:write:shrink-guard` | `Write` | Whole-file writes that collapse curated state (scratchpad, PRD, use cases, QA, changelog, instincts) below 40% of its length | `SDLC_ALLOW_SHRINK=1` |
+| `pre:edit:config-protection` | `Edit`/`Write` | Weakening tsconfig/eslint/biome/prettier/jest configs, `@ts-nocheck`, blanket `eslint-disable` — the usual way an unattended run turns a red build green dishonestly | `SDLC_ALLOW_CONFIG_EDIT=1` |
+| `pre:agent:isolation-guard` | `Edit`/`Write` inside a subagent | Parallel-wave subagents writing the scratchpad, changelog or instinct store | `SDLC_ALLOW_SUBAGENT_WRITE=1` |
+| `stop:changelog-guard` | End of a response | A changelog edit with a malformed entry, or a duplicate name under today's date | `SDLC_ALLOW_CHANGELOG_SHAPE=1` |
+
+A refusal is never a dead end. It returns a concrete remedy, which the 4-tier deviation rules
+classify and act on — auto-fix, auto-add, auto-resolve, or escalate. The escape is printed in the
+refusal message itself, deliberately, so a stuck run can resolve itself without waiting for a human.
+
+### Wave results are verified, not trusted
+
+Parallel slices used to report their own outcome: whether the `Verify:` command passed, which
+deviation rules fired, whether they stayed inside their declared files. That is the same agent
+grading its own work, and a subagent that never ran its verify command has no way to know it didn't.
+
+`subagent:stop:wave-record` reads the subagent's transcript from disk and records what actually
+happened. `/develop-feature` cross-checks every self-report against it. **Where the record and the
+self-report disagree, the record wins.**
+
+### Compaction is probed, not handled
+
+`pre:compact:probe` records what `PreCompact` actually carries and does nothing else — no decision,
+no injected context, no message.
+
+It deliberately does **not** block compaction, though the API allows it. Refusing to compact does not
+save a long run; it exhausts the context window instead, turning a recoverable summarisation into a
+dead end.
+
+Until a real session compacts with the plugin loaded, the event's schema is unverified and nothing is
+built on it. See [docs/findings/compaction-probe.md](docs/findings/compaction-probe.md) for what was
+measured and what is still unknown.
+
+### Fail-open, and the one honest limitation
+
+A hook may block only by *deciding* to. A malfunctioning one exits 0 — a throw, a rejected promise, a
+missing handler, a Node too old, an unserialisable result all leave the tool call untouched.
+
+That guarantee cannot cover a handler that blocks the thread synchronously, because a JavaScript
+timer cannot interrupt synchronous code. The backstop for that case is the `timeout` on each entry in
+`hooks/hooks.json`, which Claude Code enforces by killing the process from outside.
+
+Cost is about 21 ms per tool call, of which ~1.5 ms is the hook itself — the rest is Node process
+startup. See
 [docs/implementation-records/hook-infrastructure_latency.md](docs/implementation-records/hook-infrastructure_latency.md).
 
 ### Running project commands is opt-in, per project
@@ -377,12 +449,49 @@ SDLC_EXEC_PROJECT_COMMANDS=0               # never run project-declared commands
 project-declared command. An unrecognised profile falls back to `standard`
 rather than failing, so a typo cannot silently change what is enforced.
 
+Per-guard escapes (`SDLC_ALLOW_GIT_GUARD`, `SDLC_ALLOW_UNREAD_EDIT`, `SDLC_ALLOW_SHRINK`,
+`SDLC_ALLOW_CONFIG_EDIT`, `SDLC_ALLOW_SUBAGENT_WRITE`, `SDLC_ALLOW_CHANGELOG_SHAPE`) are listed in
+the guard table above. A bypass is always reported rather than applied silently — a guard you cannot
+tell fired is worse than no guard.
+
 **Never copy `hooks/hooks.json` into `settings.json`.** Plugin hooks load
 automatically; duplicating them there makes every hook fire twice.
 
-To check whether hooks are registered, run `claude plugin validate .` — and in
-a project with a scratchpad, a session start that injects no state is the
-symptom of a plugin that isn't installed.
+### Checking the hooks are actually live
+
+Open a **new** session in a project that has a `.claude/scratchpad.md` and look for an injected
+`[sdlc:session-spine]` block. From a shell:
+
+```bash
+claude -p "Does your context contain a block beginning [sdlc:session-spine]? Answer yes or no."
+```
+
+Two traps worth knowing:
+
+- **`claude plugin validate .` is not this check.** It validates the *marketplace manifest* and
+  passes whether or not a single hook is registered.
+- **Enabling the plugin does not affect sessions that are already open.** Hooks are loaded at session
+  start. A session opened before step 2 ran keeps running with no hooks at all, and nothing warns
+  you. Open a new session after enabling.
+
+## How the harness checks itself
+
+A harness that enforces quality has to be held to it. This repo ships **15 CI validators** and
+**19 hook test files**, run by GitHub Actions across four jobs on every push.
+
+The rule that matters: **every validator must fail on a deliberately broken asset, not merely pass on
+a good one.** Each has seeded fixtures pinned to an exact expected problem count, so a check cannot
+quietly stop checking. That rule exists because the opposite kept happening here — `claude plugin
+validate .` was documented as verifying the plugin manifest when it reads the marketplace one, and a
+"passing" install test turned out to be running a near-neighbour of the documented command.
+
+What the validators cover: agent, skill and hook frontmatter; the plugin manifest's real accepted
+shape; no personal paths in shipped files; unicode safety; version-string consistency; model-profile
+drift from hand-edited frontmatter; instinct-store arithmetic; the fixture manifest behind every QA
+document; that documented README commands actually exist and work; and that no agent is instructed to
+do something the tools it was granted cannot do.
+
+---
 
 ## Customization
 
