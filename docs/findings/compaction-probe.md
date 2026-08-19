@@ -71,3 +71,48 @@ feature can be designed against it. Specifically still unverified:
 Until a payload is on disk, treat all three as unknown. Two documented claims about the plugin and
 install surface were already found wrong during this work, so the standing rule holds: do not build
 on an unverified schema.
+
+## 6. First live `/compact` attempt — no capture, and why
+
+A real interactive `/compact` was run in this repository on 2026-08-19. **Nothing was captured.**
+`.claude/debug/` was never created, here or anywhere else on the machine.
+
+The probe is not at fault. Fed a `PreCompact` payload directly through the installed plugin's own
+wrapper, it exits 0, returns `{"continue":true}`, and writes the record with the full payload:
+
+```bash
+echo '{"session_id":"…","cwd":"…","hook_event_name":"PreCompact","trigger":"manual"}' \
+  | node "$PLUGIN/hooks/lib/run-hook.js" --hook pre:compact:probe
+```
+
+The cause is that **no plugin hook was live in that session at all**. Confirmed by a second,
+independent check: `git commit` was run on `main` with a clean tree, and it reached git untouched —
+`pre:bash:git-guard` would have refused it. So `PreCompact` was not being singled out; nothing was
+firing.
+
+The reason is session age. Hooks are resolved when a session starts:
+
+| | |
+|---|---|
+| Session began | 2026-08-14 15:51 UTC |
+| Plugin enabled for this project (`.claude/settings.json`) | 2026-08-18 13:27 UTC |
+
+The session predated its own plugin by four days, so it ran with no hooks and no warning. A fresh
+headless session in the same directory injects the spine block normally — verified the same day —
+so project-scope enablement itself is working.
+
+### The rule this establishes
+
+**Enabling a plugin does not retrofit hooks into a session that is already open.** This is the same
+"looks installed, does nothing" trap as the user-scope enablement defect, one layer down, and it is
+silent in exactly the same way: no error, no missing-agent symptom, just guards that never fire.
+
+Consequence for the probe: it can only capture from a session started **after** the plugin was
+enabled. That has not happened yet, so everything in §5 stays unverified.
+
+### Also invalid on macOS
+
+Two attempted verifications in this round used `timeout <n> claude …` and both silently produced
+nothing — `timeout` is not present on macOS (it is `gtimeout`, from coreutils). The commands failed
+with `command not found` and were briefly misread as "the check found nothing." Empty output from a
+harness command is not evidence; confirm the command ran.

@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-19
+
+### Documentation Refresh — 12:58 UTC
+**Summary:** The setup guide now matches what the toolkit actually does — including its safety checks and its automatic sizing of work, neither of which it mentioned.
+**Details:** The documentation had fallen behind the build. It described three background checks when eleven now run, and it never explained that every request is automatically sized before any work starts. Both are documented now, along with how each safety check can be waived when it gets in the way. Two pieces of advice that looked like verification but tested nothing were corrected — including a command that inspects a different file than the one it was said to check.
+**Technical details:** Documents the full guard set with its per-guard escape switches, the automatic request-tiering behaviour, transcript-based verification of parallel work, and the deliberate decision not to intervene in context compaction. Replaces a stated liveness check that passed regardless of actual state with one that observes real injected output, and records that enabling the toolkit has no effect on sessions already open. Documentation only — no screens, endpoints, schema, or deployment changes.
+
 ## 2026-08-17
 
 ### Self-Improvement Loop — 03:04 UTC
