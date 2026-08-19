@@ -19,8 +19,13 @@ curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/instal
 cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --scope project
 ```
 
-Then open a **new** session and run `/agents`. You should see 15 agents prefixed
-`claude-code-sdlc:`. If you see none, you skipped step 2 — see [Install](#install).
+Then confirm it landed:
+
+```bash
+claude plugin list   # expect claude-code-sdlc — Scope: project, Status: enabled
+```
+
+Nothing listed for this directory means step 2 did not take — see [Install](#install).
 
 > **Step 2 is not optional and is easy to miss.** On Claude Code 2.1.x a plugin enabled at user
 > scope silently does not load: `claude plugin enable` reports success, writes the setting, and
@@ -76,9 +81,21 @@ cd your-project && claude plugin install claude-code-sdlc@claude-code-sdlc --sco
 > does nothing. Step 1 installs the plugin; step 2 is what makes it load. You must repeat step 2 in
 > **every** project — the memory layer from step 1 is global, the plugin activation is not.
 
-**Verify — open a new session** (the agent list is fixed at session start, so your current session
-will not show them) **and run `/agents`.** Expect 15 entries prefixed `claude-code-sdlc:`. Seeing
-none means step 2 has not taken effect in this directory.
+**Verify:**
+
+```bash
+claude plugin list
+```
+
+Expect an entry for `claude-code-sdlc@claude-code-sdlc` with `Scope: project` and
+`Status: ✔ enabled`. Nothing listed for this directory means step 2 has not taken effect.
+
+Then **open a new session** — plugin assets are resolved at session start, so a session that was
+already open when you enabled the plugin keeps running without it, silently. See
+[If it isn't working](#if-it-isnt-working).
+
+> `/agents` also lists them, but it is an interactive terminal wizard: it does not render in the
+> VS Code extension or any non-TTY frontend, so it is not the check to rely on.
 
 Starting a new project? `bash install.sh --init-project` performs step 2 for you, along with
 scaffolding `.claude/`, `docs/` and `CHANGELOG.md`.
@@ -146,7 +163,9 @@ Plugin agents resolve as `claude-code-sdlc:<name>` — `claude-code-sdlc:planner
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `/agents` shows no `claude-code-sdlc:` agents | step 2 not run in this project | `claude plugin install claude-code-sdlc@claude-code-sdlc --scope project`, then open a new session |
+| `claude plugin list` shows nothing for this directory | step 2 not run in this project | `claude plugin install claude-code-sdlc@claude-code-sdlc --scope project`, then open a new session |
+| Plugin listed and enabled, but no agents, skills or guards work | the session was open before you enabled it | close it and open a new one — assets resolve at session start and are never retrofitted |
+| `/agents` prints nothing or errors | it is a terminal-only wizard | use `claude plugin list` instead; it works in every frontend |
 | Agents appear in one project but not another | step 2 is per-project | run step 2 in the other project too |
 | `claude plugin list` says `enabled`, agents still missing | you are in a different directory than the one enabled, or the session predates the change | check `.claude/settings.json` exists there; open a new session |
 | Agents load, but a plain English request doesn't start the pipeline | memory layer missing (plugin installed on its own) | run step 1 |
@@ -157,6 +176,29 @@ A quick check that step 2 landed:
 ```bash
 cat .claude/settings.json   # expect an "enabledPlugins" entry
 ```
+
+### Updating
+
+```bash
+claude plugin marketplace update claude-code-sdlc
+claude plugin update claude-code-sdlc@claude-code-sdlc                    # user scope
+cd your-project && claude plugin update claude-code-sdlc@claude-code-sdlc --scope project
+curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash -s -- --yes
+```
+
+Then **restart your session.** `claude plugin update` says so itself.
+
+Three things make this less obvious than it looks, all measured on 2.1.9:
+
+- **Scopes update independently.** A plain `claude plugin update` updates the *user*-scope copy only.
+  Every project enabled at project scope needs its own `--scope project` run, and `claude plugin
+  list` will show them sitting at the old version until you do.
+- **The version number is what gates delivery.** `claude plugin update` compares the version the
+  marketplace advertises, not the commit behind it. A release that ships code without bumping that
+  number reports *"already at the latest version"* and installs nothing.
+- **Restarting is not optional.** Plugin assets — agents, skills and every hook — are resolved when a
+  session starts. An open session keeps running the old copy, or no copy, with no error and no
+  missing-agent symptom.
 
 ### Uninstall
 
