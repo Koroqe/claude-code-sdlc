@@ -23,6 +23,29 @@ npm run test     # Run tests
 npm run check    # TypeScript type checking (if applicable)
 ```
 
+## Release
+
+<!-- OPTIONAL. Delete this section entirely if this project publishes nothing.
+
+     /merge-ready reads this section to decide whether to publish after a
+     feature passes its gates. With no section here it is a visible no-op and
+     never invents a process.
+
+     If you DO publish, the ordering matters more than the commands. Consumers
+     receive whatever your distribution channel ADVERTISES — a package version,
+     an image tag, a manifest field. Bump that first, verify it landed, then
+     publish. Merging is not shipping: a merge that leaves the advertised
+     version unchanged reaches nobody while every check stays green.
+
+     Name the field that actually gates delivery — it is often not the one that
+     looks canonical — and how to confirm consumers can now receive it.
+-->
+
+1. Bump: <the version field consumers' tooling compares against>
+2. Verify: <command proving the bump landed in every source>
+3. Publish: <command>
+4. Confirm: <command showing what consumers now receive>
+
 ## Project Structure
 
 ```
