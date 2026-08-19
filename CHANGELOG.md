@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-19
 
+### Release Discipline — 14:01 UTC
+**Summary:** Finishing a feature now includes actually delivering it, and the build refuses to let work merge that users would never receive.
+**Details:** Merging is not shipping. Work can be merged, reviewed and green while the number that decides what users receive never moves, so nobody gets it. A check now compares that number against the last published release and fails the build when shipped files have changed without it, and the release step itself became part of the standard finish-a-feature routine instead of something to remember.
+**Technical details:** Adds a sixteenth continuous-integration check asserting release freshness rather than internal agreement — four version strings can match each other perfectly and all be stale. It compares the advertised version against the matching release tag and fails when delivered paths changed since, while deliberately ignoring documentation and test changes so the number keeps its meaning. Seeded as real repositories in the build, proving both that it catches the case and that it does not fire on undelivered changes. The quality-gate routine gains a release step that no-ops visibly for projects that publish nothing. No screens, endpoints, schema, or deployment changes.
+
 ### Update Path Repaired — 13:25 UTC
 **Summary:** Anyone already running the toolkit could not receive updates. It now reaches them, and the gap that caused it is checked automatically from here on.
 **Details:** Existing installs were pinned. The update command compares the version the catalogue advertises, not the code behind it, and that number had not moved in ten releases' worth of work — so it reported everyone up to date and installed nothing. The number now moves, and an automated check covers the file it lives in, which was the one version file nothing was watching.

@@ -16,8 +16,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # fetch-depth: 0 is load-bearing, not incidental. The release-readiness
+      # check compares HEAD against the release tag, and a shallow clone has
+      # neither the tags nor the history to do it — it would produce an empty
+      # diff and pass vacuously. The validator refuses to run shallow rather
+      # than allow that, so this must stay.
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Guarantees a Node runtime is present and is at or above the floor the
       # shared wrapper asserts. Without this step a missing Node would surface
@@ -50,6 +57,15 @@ jobs:
 
       - name: Validate version consistency
         run: node scripts/ci/validate-version-consistency.js
+
+      # Consistency is not freshness. Four version strings can agree with each
+      # other perfectly while every one of them is stale — which is exactly
+      # what happened: ten commits shipped against an unmoved 4.0.0, and
+      # `claude plugin update` told every existing install it was already up
+      # to date. This asserts the advertised version is not one that has
+      # already been published.
+      - name: Validate release readiness
+        run: node scripts/ci/validate-release-readiness.js
 
       # Freezes the load-bearing literal strings of the verification upgrade:
       # the four verdicts, the deny-by-default write scope, the exact
@@ -162,6 +178,45 @@ jobs:
 
       - name: Falsify — unicode validator catches invisible and homoglyph characters
         run: node scripts/ci/validate-unicode-safety.js --root tests/fixtures/ci/bad-unicode --min 0 --expect-failure "zero-width character" --expect-problems 2
+
+      # Seeded as a real git repository, because the assertion is about git
+      # state: a tag, and a delivered file changed after it. A static file
+      # fixture could not express that, and faking it would test the fake.
+      - name: Falsify — release validator catches shipping past a published tag
+        run: |
+          T="$(mktemp -d)"
+          cd "$T"
+          git init -q .
+          git config user.email ci@example.com
+          git config user.name ci
+          mkdir -p .claude-plugin hooks/handlers
+          printf '{"name":"x","plugins":[{"name":"x","source":"./","version":"1.0.0"}]}' > .claude-plugin/marketplace.json
+          echo v1 > hooks/handlers/a.js
+          git add -A && git commit -qm init && git tag v1.0.0
+          echo v2 > hooks/handlers/a.js
+          git add -A && git commit -qm "ship without bumping"
+          cd "$GITHUB_WORKSPACE"
+          node scripts/ci/validate-release-readiness.js --root "$T" --expect-failure "already published" --expect-problems 1
+
+      # The mirror of the case above: a docs-only change after a tag must NOT
+      # fail. A check that demands a version bump for a typo fix trains people
+      # to bump meaninglessly, and a number that always moves says nothing.
+      - name: Falsify — release validator ignores undelivered changes
+        run: |
+          T="$(mktemp -d)"
+          cd "$T"
+          git init -q .
+          git config user.email ci@example.com
+          git config user.name ci
+          mkdir -p .claude-plugin hooks docs
+          printf '{"name":"x","plugins":[{"name":"x","source":"./","version":"1.0.0"}]}' > .claude-plugin/marketplace.json
+          echo v1 > hooks/a.js
+          echo d > docs/readme.md
+          git add -A && git commit -qm init && git tag v1.0.0
+          echo changed > docs/readme.md
+          git add -A && git commit -qm docs
+          cd "$GITHUB_WORKSPACE"
+          node scripts/ci/validate-release-readiness.js --root "$T"
 
       - name: Falsify — version validator catches disagreeing versions
         run: node scripts/ci/validate-version-consistency.js --root tests/fixtures/ci/bad-version --expect-failure "version strings disagree" --expect-problems 1
@@ -321,6 +376,9 @@ jobs:
 
       - name: Anti-vacuity — unicode validator fails on an empty tree
         run: node scripts/ci/validate-unicode-safety.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 4
+
+      - name: Anti-vacuity — release validator fails on an empty tree
+        run: node scripts/ci/validate-release-readiness.js --root "$(mktemp -d)" --expect-failure "no advertised plugin version" --expect-problems 1
 
       - name: Anti-vacuity — version validator fails on an empty tree
         run: node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 5

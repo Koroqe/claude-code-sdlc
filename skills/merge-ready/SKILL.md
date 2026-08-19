@@ -540,3 +540,57 @@ of it is worse than losing an ordinary document.
 the expected heading/field shape), surface it as a **WARNING** and continue with the remaining entries —
 identically to Finalization's changelog-write failure handling above, a consolidation failure does NOT
 fail the merge; the merge remains MERGE READY.
+
+## Finalization: Release
+
+This step runs at the same Finalization point as the changelog entry above, immediately after it, and
+is gated identically: **only on a MERGE READY outcome**, never on NOT MERGE READY.
+
+**Why this step exists — merging is not shipping.**
+
+For anything distributed, consumers receive whatever the distribution channel *advertises*. If the
+advertised identity does not move, the merge reaches nobody, and every surface reports success. This
+harness learned it the expensive way and the record is worth keeping: ten commits of agents, skills
+and hooks merged to `main` while `.claude-plugin/marketplace.json` still advertised `4.0.0`, so
+`claude plugin update` told every existing install *"already at the latest version"* and delivered
+none of it. Nothing was red. The code was merged, CI was green, the version strings were perfectly
+consistent with each other — and consistency is not freshness.
+
+Note also what would NOT have fixed it: cutting a git tag. A tag is documentation of a release. The
+advertised version is the release. Tagging a stale version produces a repository that looks published
+and an install base that receives nothing.
+
+**Steps:**
+
+1. **Determine whether this project publishes anything at all.** Read the project-root `CLAUDE.md`
+   for a `## Release` section — the same declaration convention `## Commands` already uses for
+   typecheck and format. If there is no such section, this step is a **visible no-op**: state
+   `no release procedure declared — skipping` and stop. Never infer, invent, or improvise a release
+   process for a project that has not declared one.
+
+2. **Bump the advertised version FIRST, before anything else.** Identify the field the distribution
+   channel actually reads — it is frequently *not* the one that looks canonical — and bump it,
+   together with every other version source the project keeps in sync, in a single commit. Derive the
+   number from the change itself: a fix is a patch bump, new capability is a minor bump, a change to
+   how consumers invoke or configure the project is a major bump. Never guess, and never reuse a
+   number that has already been published.
+
+3. **Verify the bump landed in every source.** If the project declares a version-consistency check,
+   run it now rather than trusting the edit.
+
+4. **Then publish**, following the declared procedure, with release notes derived from the changelog
+   entry written immediately above — the same feature name, the same Summary, expanded with the
+   Details.
+
+5. **Confirm delivery, not merely publication.** If the project declares a command that reports what
+   consumers would now receive, run it and state the observed version. A publish step that was not
+   observed to change anything is reported as unconfirmed, never as done.
+
+**Ordering is not optional.** Bump, then verify, then publish. Publishing before the bump produces
+exactly the failure this step exists to prevent, with the added cost that the release now looks
+finished.
+
+**Failure handling:** identical to the changelog-write and Consolidate Instincts handling above — a
+failure here is a **WARNING** and does NOT fail the merge; the result remains MERGE READY. But the
+report MUST name what did not ship and the exact command a human needs to run to finish it. A release
+step that fails quietly is worse than one that never ran, because the merge report reads as complete.
