@@ -48,6 +48,21 @@ const SOURCES = [
       return typeof parsed.version === 'string' ? parsed.version : null;
     },
   },
+  {
+    // The marketplace entry carries its own copy, and it is the one that
+    // decides whether an installed copy is stale: `claude plugin update`
+    // compares against the advertised marketplace version, not the commit. A
+    // repo that ships ten commits without touching this number leaves every
+    // existing install pinned, and the update command reports "already at the
+    // latest version" while changing nothing. Measured on 2.1.9.
+    label: '.claude-plugin/marketplace.json plugin version',
+    file: '.claude-plugin/marketplace.json',
+    extract: (text) => {
+      const parsed = JSON.parse(text);
+      const entry = Array.isArray(parsed.plugins) ? parsed.plugins[0] : null;
+      return entry && typeof entry.version === 'string' ? entry.version : null;
+    },
+  },
 ];
 
 core.run('validate-version-consistency', (v, args) => {

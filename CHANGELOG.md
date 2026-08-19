@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-19
 
+### Update Path Repaired — 13:25 UTC
+**Summary:** Anyone already running the toolkit could not receive updates. It now reaches them, and the gap that caused it is checked automatically from here on.
+**Details:** Existing installs were pinned. The update command compares the version the catalogue advertises, not the code behind it, and that number had not moved in ten releases' worth of work — so it reported everyone up to date and installed nothing. The number now moves, and an automated check covers the file it lives in, which was the one version file nothing was watching.
+**Technical details:** Releases the accumulated work as 4.1.0. The catalogue entry carries its own version field, separate from the plugin manifest, and it is the one the update check reads; it was not covered by the existing consistency check, so it silently fell behind. It is now a fourth checked source, with a seeded failing fixture proving the check catches the drift rather than merely passing. No screens, endpoints, schema, or deployment changes.
+
 ### Documentation Refresh — 12:58 UTC
 **Summary:** The setup guide now matches what the toolkit actually does — including its safety checks and its automatic sizing of work, neither of which it mentioned.
 **Details:** The documentation had fallen behind the build. It described three background checks when eleven now run, and it never explained that every request is automatically sized before any work starts. Both are documented now, along with how each safety check can be waived when it gets in the way. Two pieces of advice that looked like verification but tested nothing were corrected — including a command that inspects a different file than the one it was said to check.

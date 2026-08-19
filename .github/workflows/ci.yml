@@ -323,7 +323,7 @@ jobs:
         run: node scripts/ci/validate-unicode-safety.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 4
 
       - name: Anti-vacuity — version validator fails on an empty tree
-        run: node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 4
+        run: node scripts/ci/validate-version-consistency.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 5
 
       - name: Anti-vacuity — verification-upgrade validator fails on an empty tree
         run: node scripts/ci/validate-verification-upgrade.js --root "$(mktemp -d)" --expect-failure "matches too few files" --expect-problems 1
