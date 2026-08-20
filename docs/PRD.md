@@ -2482,3 +2482,102 @@ None. This project has no API.
 12. **Recommended (not mandatory) `security-auditor` pre-review — `debugger`'s `Bash` + scoped `Write` grant (FR-8.1).** `Bash` itself is not a novel capability (`architect`, `build-runner`, `code-reviewer`, `security-auditor` already have it); the `Write` grant is novel for this agent but follows `agents/verifier.md`'s already-reviewed deny-by-default pattern verbatim. RECOMMENDED rather than REQUIRED on that basis — a defect here could let `debugger` write outside its intended scope, but the wording pattern it inherits has already been through the security review Section 9 Dependency 12 performed for `verifier`.
 13. **Mandatory `security-auditor` pre-review — session-start injection of project-owned content (FR-5).** This is the single most sensitive channel in the harness: `additionalContext` reaches every future session's model context automatically, with no human reading it first. This slice REQUIRES `security-auditor` review before merge, scheduled as a pre-review during `/bootstrap-feature`, to confirm FR-5.3's per-entry extraction cannot be induced (via a crafted `Rule:` line, or a crafted heading) into carrying anything beyond a short, regex-validated fact, and that the existing `session-start-spine.js` threat-model comment is updated to reflect the second read source, not merely the mechanism.
 14. **Note: the same `Feature counter` value is read by both FR-1.6 (occurrence/retirement accounting) and, if a project ever wants one, a future harness-health report** — no such report exists today, and none is added by this feature; recorded only so a future feature reusing the counter does not have to reinvent what "one feature" means for this harness.
+
+## 12. Stale Project-Scope Plugin Install Detection
+
+**Status:** [DRAFT]
+**Date:** 2026-08-20
+**Priority:** Medium
+**Related:** Section 7 (`hooks/handlers/session-start-spine.js` is the same handler this feature extends; NFR-2 there fixes the hook budget at ≤12 ids with zero slack, which is why this feature adds no new hook id and instead extends `session:start:spine`'s existing version-drift check); Section 11 FR-5 (the injected-context discipline this feature must follow verbatim: a short, regex-validated, single-line fact per source, never free-form prose, with the identical fail-open and sanitize-before-injection treatment FR-5.3/FR-5.8 already established for Prevention Rule lines).
+
+### 12.1 Description
+
+`session:start:spine` already compares the installed memory layer's version (`~/.claude/.sdlc-receipt`) against the loaded plugin's own `plugin.json` version and injects a `version drift: ...` line when they disagree (`driftLine()` in `hooks/handlers/session-start-spine.js`). That check has no visibility into a different, and separately observed, failure: Claude Code plugin installs are scoped independently — a user-scope install and a project-scope install of the same plugin coexist in `~/.claude/plugins/installed_plugins.json`, and `claude plugin update` updates only the scope it is pointed at. A project can therefore carry a project-scope install of `claude-code-sdlc` that is stale enough to fail to load at all, while the session is actually running the live user-scope install and nothing surfaces the mismatch.
+
+This was not a hypothetical: on 2026-08-20 this repository itself carried a non-loading project-scope `4.1.0` install alongside a live user-scope `4.4.0`, undetected until manually noticed. Two other real projects (`booka`, `Restaba`) currently sit on broken project-scope versions (`4.0.0` / `4.1.0`) that fail to load on current Claude Code. This feature closes that gap by extending the spine's existing drift check to also read the plugin install registry and flag a stale project-scope sibling of the plugin actually loaded for the current session.
+
+### 12.2 User Story
+
+As a developer working across several projects with `claude-code-sdlc` installed at both user and project scope, I want the session-start context to warn me when this project's own project-scope install has drifted from the version actually loaded, and to give me the exact command to fix it, so that I do not run an unattended pipeline for days against a plugin version that silently failed to load.
+
+### 12.3 Functional Requirements
+
+#### FR-1: Registry Read
+
+1. **FR-1.1 (location, capped read):** `driftLine()` (or a sibling function called from the same site) reads `~/.claude/plugins/installed_plugins.json` using the existing `readCapped`/`MAX_BYTES` mechanism already in `hooks/handlers/session-start-spine.js` — no new read primitive is introduced. `homeDir` is the same `process.env.HOME || process.env.USERPROFILE` value the existing drift check already resolves.
+2. **FR-1.2 (absence and malformed input, silent):** a missing file, a file that fails `JSON.parse`, or a parsed value that fails shape validation is treated identically to today's "no receipt" case — the check contributes nothing and no line is emitted. No error is thrown, logged, or surfaced. Shape validation requires: `plugins` is a plain, non-array object (`typeof plugins === 'object' && plugins !== null && !Array.isArray(plugins)`); the value at the plugin's registry key (FR-1.3) is an array; and, per entry in that array, `scope`, `projectPath`, and `version` (where present) are each a string (FR-1.4 governs skipping entries that fail this). The top-level `version` key, if present, is NOT validated or pinned to any specific value (in particular, code and tests MUST NOT require `version === 2`) — this check inspects only the `plugins` shape described above, so a future bump to the registry's top-level envelope version does not silently disable it.
+3. **FR-1.3 (registry key):** the plugin's entries are looked up under the fixed key `claude-code-sdlc@claude-code-sdlc` in `plugins`. A registry that does not contain this key contributes nothing (FR-1.2's silent-absence treatment applies).
+4. **FR-1.4 (entry shape):** each entry under that key is an object that MAY carry `scope`, `projectPath`, `installPath`, and `version` fields (per the registry format observed in `~/.claude/plugins/installed_plugins.json`). An entry missing `scope`, `projectPath`, or `version`, or where any of those three is not a string, is skipped — it does not participate in FR-2's matching and never causes the check to throw.
+
+#### FR-2: Project-Scope Match
+
+1. **FR-2.1 (candidate filter):** only entries with `scope === 'project'` are considered; `scope === 'user'` (and any other scope value) entries are ignored by this check — the existing `driftLine()` behavior already covers the loaded plugin regardless of its own scope.
+2. **FR-2.2 (path match, v1 scope):** among project-scope candidates, an entry matches the current session when its `projectPath`, resolved via `fs.realpathSync` (falling back, on a resolution failure, to a normalized comparison that strips a single trailing path separator) equals the current project directory (`cwd`, resolved through the identical `fs.realpathSync`/fallback treatment). Exact-realpath match, robust only to a trailing-slash difference, is the accepted v1 scope decision — no prefix, glob, or symlink-aware matching beyond `realpathSync`'s own resolution is required. A `realpathSync` failure on either side (path does not exist, permission error) is treated as no match for that entry, not an error.
+3. **FR-2.3 (at most one line):** if more than one project-scope entry matches the current project directory, the first matching entry encountered in registry order is used; this check never emits more than one warning line regardless of how many project-scope entries match.
+
+#### FR-3: Version Comparison and Injected Line
+
+1. **FR-3.1 (comparison basis):** the matched entry's `version` field is compared against the loaded-plugin version, which MUST be derived by a single dedicated helper — e.g. `loadedPluginVersion(pluginRoot)` — reading `CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json`. This helper is called exactly once from the handler's entry point (not from inside `driftLine()`), and the resulting value is passed as a parameter into BOTH the existing memory-layer drift check and this new stale-install check. This is a required refactor, not an optional convenience: the current implementation derives the loaded version inline inside `driftLine()`, after that function's early return on a missing `~/.claude/.sdlc-receipt`, which leaves the value undefined for any receipt-less, plugin-only install — precisely the population most likely to be carrying a stale project-scope install and therefore most in need of this check. Without hoisting the derivation to the entry point, FR-3 cannot be satisfied for that population.
+2. **FR-3.2 (validation before comparison):** the matched entry's `version` is sanitized through `sanitize.sanitizeField` (bounded length, matching the treatment `driftLine()` already applies to `installed`/`pluginVersion`) and validated against the existing `VERSION_RE`. A value that fails `VERSION_RE` after sanitizing contributes nothing (FR-1.2's silent treatment).
+3. **FR-3.3 (equal versions, no line):** when the matched entry's version equals `pluginVersion`, no line is emitted — matching the existing `installed === pluginVersion` no-op branch in `driftLine()`.
+4. **FR-3.4 (the warning line, exact shape):** when the matched entry's version differs from `pluginVersion`, exactly one additional line is appended to the spine's assembled context body: `stale project-scope install: project-scope N, loaded M — run \`claude plugin update claude-code-sdlc@claude-code-sdlc --scope project\`` where `N` is the matched entry's sanitized version and `M` is `pluginVersion`. The fix command is emitted verbatim and unconditionally — it never varies per project, since the scope flag and plugin identifier are both fixed.
+5. **FR-3.5 (independent of, and additive to, the existing drift line):** this line is computed and appended independently of whether `driftLine()` itself produced output — a session can see neither line, either line alone, or both in the same context block, depending on which of the two independent mismatches (memory-layer-vs-plugin, project-scope-install-vs-loaded-plugin) is actually present.
+6. **FR-3.6 (shared budget, shared sourcing):** the new line is assembled into the same `body` array and passes through the same `sanitize.capBlock(body, cap)` call the existing drift line and every other typed field already share — no second, independent character budget. `sources` (the attribution list joined into the leading `[sdlc:session-spine]` sentence) gains `'the project-scope install registry'` when, and only when, this line was actually emitted, mirroring the existing conditional-attribution pattern already used for `drift` and `ruleLines`.
+
+#### FR-4: Security and Injected-Context Discipline
+
+1. **FR-4.1 (untrusted input):** `~/.claude/plugins/installed_plugins.json` is machine-local state written by the Claude Code CLI, not repository-controlled content — but every field this check surfaces into `additionalContext` (`projectPath` used only for comparison, never injected; `version`, which IS injected) is still passed through `sanitize.sanitizeField` and `VERSION_RE` before being included, identically to how `driftLine()` already treats `installed` and `pluginVersion`. No raw registry field is ever interpolated into the injected line without that treatment.
+2. **FR-4.2 (no free-form text injected):** the only registry-derived values that reach the injected line are the two version strings, each independently validated against `VERSION_RE` — matching Section 11 FR-5.3's discipline of extracting only a narrow, regex-constrained fact per source, never a narrative field.
+
+### 12.4 Non-Functional Requirements
+
+1. **NFR-1 (fail open, unconditionally):** a missing, unreadable, empty, or malformed `installed_plugins.json`, a missing `HOME`/`USERPROFILE`, or any exception raised while parsing or matching MUST result in this check contributing nothing — never a thrown error, never a blocked or delayed `SessionStart`, and never a change to any other part of the spine's existing output. This mirrors the existing `driftLine()` function's own fail-open branches (malformed receipt, unparseable manifest, invalid `VERSION_RE` match) exactly. Fail-open MUST hold at the output level, not merely at the process level: the new registry-read/match/compare logic MUST be wrapped in its own `try/catch` that returns the empty string (or equivalent no-op) at its own call site, so that a throw anywhere in registry read, matching, or comparison can never propagate up and suppress the spine's existing, already-computed injected context. Relying solely on the run-hook wrapper's process-level fail-open does NOT satisfy this NFR, because that wrapper catches at the whole-hook boundary and would drop the entire `additionalContext` — including the unrelated, already-successful `driftLine()` output and Prevention Rule lines — rather than degrading only the one new check to a no-op.
+2. **NFR-2 (latency, concrete threshold):** `session:start:spine`'s measured latency, re-measured with `node tests/hooks/measure-latency.js` after this feature ships, MUST keep the handler's median at or below 30 ms. `docs/implementation-records/hook-infrastructure_latency.md` MUST be updated with the post-feature figure recorded by that re-measurement — the added work (one more capped local file read plus an in-memory JSON parse and string comparison, the same order of cost `driftLine()`'s existing receipt/manifest reads already carry) is expected to stay well within this threshold, but the threshold itself, not a reference to a prior unspecified budget, is the pass condition.
+3. **NFR-3 (no new hook id):** this is a modification to the existing `session:start:spine` handler and its existing registration in `hooks/hooks.json`. The hook budget (at its ≤12-id ceiling per the project's `CLAUDE.md` Working Rules) is unchanged by this feature.
+4. **NFR-4 (byte-identical when absent):** a project with no project-scope install of this plugin, or with a project-scope install whose version matches the loaded plugin, produces byte-identical `session:start:spine` output to today's behavior — this feature never adds output for a session where nothing is actually stale.
+
+### 12.5 Acceptance Criteria
+
+1. **AC-1:** a seeded `installed_plugins.json` containing a `project`-scope entry for `claude-code-sdlc@claude-code-sdlc` whose `projectPath` matches the current project directory (via `realpathSync`) and whose `version` is `4.1.0`, run alongside a loaded `plugin.json` version of `4.4.0`, produces exactly one injected line reading `stale project-scope install: project-scope 4.1.0, loaded 4.4.0 — run \`claude plugin update claude-code-sdlc@claude-code-sdlc --scope project\``.
+2. **AC-2:** the identical fixture but with `version: "4.4.0"` (matching the loaded plugin) produces zero lines from this check, and the rest of `session:start:spine`'s output is unchanged versus a run with no registry file present at all.
+3. **AC-3:** a missing `installed_plugins.json`, a file containing invalid JSON, a file whose top-level shape is an array instead of an object, and a file whose matched entry's `version` fails `VERSION_RE` each independently produce zero lines from this check and zero thrown errors, verified by asserting `sessionStartSpine()` returns its normal shape (or `null`, matching today's all-sources-empty behavior) in every case.
+4. **AC-4:** a registry containing only `user`-scope entries for the plugin, or only `project`-scope entries whose `projectPath` resolves to a different directory than `cwd`, produces zero lines from this check.
+5. **AC-5:** with both a memory-layer/plugin version drift (existing `driftLine()` behavior) and a stale project-scope install seeded simultaneously, `additionalContext` contains both lines, and `sources` names both `'the installed-vs-plugin version check'` and `'the project-scope install registry'` in the leading attribution sentence.
+6. **AC-6:** `hooks/hooks.json`'s distinct hook-id count is unchanged after this feature ships, verified by the existing handler-file count assertion at `tests/hooks/test-guards-cross.js:170` (`=== 12`) continuing to pass unmodified.
+7. **AC-7:** `tests/hooks/test-session-start-spine.js` gains test cases covering AC-1 through AC-5 above, following the file's existing fixture-and-assertion conventions (temp `HOME`, temp project directory, direct `module.exports` invocation), and the full validator/test sweep (`for v in scripts/ci/validate-*.js; do node "$v" || exit 1; done` and `for t in tests/hooks/test-*.js; do node "$t" || exit 1; done`) passes.
+8. **AC-8 (oversized registry file):** a seeded `installed_plugins.json` whose byte size exceeds the existing `readCapped`/`MAX_BYTES` cap, such that the capped read yields truncated, invalid JSON, produces zero lines from this check and zero thrown errors — verified identically to AC-3's assertion style (`sessionStartSpine()` returns its normal shape, or `null`, matching today's all-sources-empty behavior).
+9. **AC-9 (user-scope entry carrying a `projectPath`):** a seeded registry entry with `scope: 'user'` whose `projectPath` matches the current project directory (via `realpathSync`) is still rejected and produces zero lines from this check — proving FR-2.1's `scope === 'project'` filter is applied on its own, before any path comparison, and that a coincidentally matching `projectPath` on a user-scope entry cannot leak through.
+
+### 12.6 Affected Components
+
+#### Modified Files
+
+| File | Changes | Related Requirements |
+|---|---|---|
+| `hooks/handlers/session-start-spine.js` | New registry-read/match/compare logic reusing `readCapped`, `sanitize.sanitizeField`, and `VERSION_RE`; one additional conditionally-emitted line appended to the existing `body` array; `sources` attribution gains a third conditional entry; header comment updated to describe the second, independent stale-install check | FR-1, FR-2, FR-3, FR-4 |
+| `tests/hooks/test-session-start-spine.js` | New test cases for the stale-project-scope-install check (matched/stale, matched/current, absent registry, malformed registry, scope mismatch, path mismatch, combined-with-drift) | FR-1 through FR-4, all AC |
+
+#### Unchanged Files (verified no impact)
+
+| File | Reason |
+|---|---|
+| `hooks/hooks.json` | No new hook id or registration; `session:start:spine`'s existing entry is unchanged |
+| `hooks/handlers/pre-agent-isolation-guard.js` and every other hook handler | This feature touches only `session:start:spine`'s own function body |
+
+### 12.7 UI Changes
+
+Not applicable. This project is a collection of markdown prompt files, hook scripts, and CI validators with no user interface.
+
+### 12.8 Schema Changes
+
+None. This project has no database. `~/.claude/plugins/installed_plugins.json` is a machine-local file owned and written by the Claude Code CLI, read only, never written by this feature.
+
+### 12.9 Affected Endpoints
+
+None. This project has no API.
+
+### 12.10 Risks and Dependencies
+
+1. **Risk: path-matching false negatives across macOS `/tmp` vs `/private/tmp`-style prefix realities.** `fs.realpathSync` resolves both sides identically, which is exactly the mechanism this feature relies on to avoid a false negative from a symlinked temp-directory prefix — but a `projectPath` recorded before a filesystem-level rename or move will no longer match even after `realpathSync` resolution. Mitigation: accepted as a v1 scope limit (FR-2.2 states this explicitly); a false negative here degrades to today's silent behavior, never to a false positive.
+2. **Risk: registry format drift.** `installed_plugins.json`'s shape is Claude Code CLI-owned and undocumented; a future CLI version could change field names or nesting. Mitigation: FR-1.2's shape validation treats any unexpected top-level shape as absence, so a format change degrades this check to a silent no-op rather than a thrown error — consistent with NFR-1's fail-open requirement.
+3. **Dependency: Section 7 (`session:start:spine`'s existing `driftLine()` function, `readCapped`, and the hooks framework generally) must exist first.** This feature is a pure extension of an already-shipped handler and introduces no new infrastructure. Section 7 is `[SHIPPED]`.

@@ -1,19 +1,44 @@
 # Scratchpad
 
-## Feature: none active
+## Feature: stale-install-detection
 
-## Branch: main
+## Tier: full
 
-## Status: idle
+## Branch: feat/stale-install-detection
+
+## Status: implementing wave 1 slice 1/5
+
+## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
+
+## Plan
+
+Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-stale-install-detection.md`
+Feature: PRD §12. Docs: docs/use-cases/stale-install-detection_use_cases.md, docs/qa/stale-install-detection_test_cases.md (42 TCs). Critic: 3 loops, all BLOCKER/WARNING fixed.
+
+Deviation rule fires this feature: rule1=0 rule2=0 rule3=0 rule4=0
+
+### Wave 1
+- [ ] Slice 1 (Tracer): loadedPluginVersion() hoist + staleInstallLine() end-to-end + 4.5.0 bump (4 sources) + PRD FR-2.2/FR-1.4/AC-2 amendments via prd-writer. Files: session-start-spine.js, test-session-start-spine.js, marketplace.json, plugin.json, install.sh, README badge, docs/PRD.md. Pre-review: security + architect. [pending]
+
+### Wave 2
+- [ ] Slice 2: match semantics — scope-first, first-match-wins, step-1-first path order, silent no-line paths, byte-identity assertions; QA TC-6.3/6.4 mechanism wording + loaded-version de-hardcode. [pending]
+
+### Wave 3
+- [ ] Slice 3: shape validation, sanitize-then-validate, output-level fail-open — 14 SILENT + 2 EMIT fixtures, raw-registry helper, over-cap fixture. Pre-review: security. [pending]
+
+### Wave 4
+- [ ] Slice 4: drift-line coexistence, shared cap, structural helper proof, header third-trust-class rewrite (all three "seven" phrasings) + PRD §11 FR-5.6 supersession via prd-writer. Pre-review: architect. [pending]
+
+### Wave 5
+- [ ] Slice 5: measure-latency HOME pinning, latency doc update (with comparability caveat), README spine row, PRD §12 status flip + AC-1 de-hardcode via prd-writer. [pending]
 
 ## Blockers
 
-- **Live end-to-end run has never happened.** Every guard, validator and skill in v4.x is verified by
-  unit tests and unverified in a real `/develop-feature` run. The session it was all built in
-  predated its own plugin and loaded no hooks or agents at all. **This is the single largest
-  unverified claim in the project** and is now unblocked — see below.
+(none for this feature)
+
+Project-level notes carried over:
 - **Four behavioural findings were measured on Claude Code 2.1.9 and need re-measuring on 2.1.237.**
-  See `docs/findings/compaction-probe.md` §7 for the list and what changes if each is now fixed.
+  See `docs/findings/compaction-probe.md` §7.
 - **Compaction schema still uncaptured.** `pre:compact:probe` has never fired.
 
 ## Environment — changed 2026-08-20, read this before trusting old measurements
