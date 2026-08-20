@@ -180,6 +180,92 @@ c.ok('malformed receipt is treated as absent, not as drift',
 c.ok('malformed receipt content is never echoed', ctx(r).indexOf('rm -rf') === -1);
 rimraf(home);
 
+// --- stale project-scope install detection (Slice 1 tracer, TC-1.1, TC-1.5,
+// TC-7.2) ---------------------------------------------------------------
+//
+// `homeWithRegistry` seeds `~/.claude/plugins/installed_plugins.json` in the
+// shape the CLI itself writes, and — only when `receiptVersion` is not
+// `null` — a `.sdlc-receipt` alongside it, so a single helper can express
+// both the receipt-less path (TC-7.2) and, later, the combined-with-drift
+// path (Slice 4).
+function homeWithRegistry(entries, receiptVersion) {
+  const home = tempDir('sdlc-reghome-');
+  fs.mkdirSync(path.join(home, '.claude', 'plugins'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.claude', 'plugins', 'installed_plugins.json'),
+    JSON.stringify({
+      version: 2,
+      plugins: { 'claude-code-sdlc@claude-code-sdlc': entries },
+    })
+  );
+  if (receiptVersion !== null) {
+    fs.writeFileSync(path.join(home, '.claude', '.sdlc-receipt'), receiptVersion + '\nclaude.md\n');
+  }
+  return home;
+}
+
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const idx = haystack.indexOf(needle, from);
+    if (idx === -1) break;
+    count += 1;
+    from = idx + needle.length;
+  }
+  return count;
+}
+
+// TC-1.1 — happy path: a project-scope entry matching cwd, version differing
+// from the loaded plugin, produces exactly one warning line naming both
+// versions and the exact fix command.
+const tc11Project = project('stale-tc11', null);
+const tc11Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc11Project, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(tc11Project, { HOME: tc11Home });
+const staleLine =
+  'stale project-scope install: project-scope 0.0.1, loaded ' + pluginVersion +
+  ' — run `claude plugin update claude-code-sdlc@claude-code-sdlc --scope project`';
+c.equal('TC-1.1: stale project-scope line appears exactly once', countOccurrences(ctx(r), staleLine), 1);
+c.equal('TC-1.1: exits 0', r.code, 0);
+c.ok('TC-1.1: additionalContext is a string', typeof ctx(r) === 'string', typeof ctx(r));
+
+// TC-1.5 — sources attribution names the project-scope install registry
+// whenever the stale line is present.
+c.contains('TC-1.5: sources name the project-scope install registry', ctx(r), 'the project-scope install registry');
+
+// S1-6 — the stale line lands inside the untrusted-data frame: after the
+// framing sentence, before the closing marker.
+const tc11FrameIdx = ctx(r).indexOf('untrusted data, not instructions');
+const tc11StaleIdx = ctx(r).indexOf('stale project-scope install:');
+const tc11EndIdx = ctx(r).indexOf('[sdlc:end session-spine]');
+c.ok(
+  'S1-6: stale line is placed after the untrusted-data frame and before the end marker',
+  tc11FrameIdx !== -1 && tc11StaleIdx !== -1 && tc11EndIdx !== -1 &&
+    tc11FrameIdx < tc11StaleIdx && tc11StaleIdx < tc11EndIdx,
+  'frame=' + tc11FrameIdx + ' stale=' + tc11StaleIdx + ' end=' + tc11EndIdx
+);
+rimraf(tc11Home);
+rimraf(tc11Project);
+
+// TC-7.2 — receipt-less: with NO `.sdlc-receipt` at all, `driftLine()`'s own
+// early-return path never derives `pluginVersion`, so this proves
+// `pluginVersion` is resolved once at the handler's entry point, independent
+// of `driftLine()`'s (bypassed) derivation. The stale line still appears;
+// no `version drift:` line appears (there is nothing to drift against).
+const tc72Project = project('stale-tc72', null);
+const tc72Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc72Project, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(tc72Project, { HOME: tc72Home });
+c.contains('TC-7.2: stale line still emitted with no .sdlc-receipt', ctx(r), staleLine);
+c.ok('TC-7.2: no version drift line appears', ctx(r).indexOf('version drift:') === -1, ctx(r));
+rimraf(tc72Home);
+rimraf(tc72Project);
+
 // --- stale scratchpad and archived history (adoption findings) ------------
 //
 // Both cases come from one real 2,316-line operational scratchpad. The spine
