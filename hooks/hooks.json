@@ -3,7 +3,7 @@
     "Hook configuration for the claude-code-sdlc plugin.",
     "",
     "Claude Code loads this automatically when the plugin is installed.",
-    "NEVER copy its contents into settings.json \u2014 plugin hooks auto-load, and",
+    "NEVER copy its contents into settings.json — plugin hooks auto-load, and",
     "duplicating them there makes every hook fire twice.",
     "",
     "Every handler is invoked through hooks/lib/run-hook.js. There is no inline",
@@ -126,6 +126,13 @@
             "description": "Checks the shape of a changelog entry written this response, and that it is not a duplicate under today.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:changelog-guard",
             "timeout": 20
+          },
+          {
+            "id": "stop:gate-evidence",
+            "type": "command",
+            "description": "Blocks a MERGE READY verdict in a session where no subagent ever ran. Every other guard fires on an action taken; this is the only one that can fire on a step that was skipped, because an omission produces no tool call to intercept. Narrow by design: it asserts one unambiguous thing rather than guessing which gate mapped to which agent.",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:gate-evidence",
+            "timeout": 10
           }
         ]
       }
@@ -136,7 +143,7 @@
           {
             "id": "pre:compact:probe",
             "type": "command",
-            "description": "Diagnostic probe: records the PreCompact payload to .claude/debug/precompact-payload.jsonl so the compaction feature can be built against an observed schema. Makes no decision and never blocks compaction \u2014 refusing to compact would exhaust context instead, turning a recoverable summarisation into a dead end.",
+            "description": "Diagnostic probe: records the PreCompact payload to .claude/debug/precompact-payload.jsonl so the compaction feature can be built against an observed schema. Makes no decision and never blocks compaction — refusing to compact would exhaust context instead, turning a recoverable summarisation into a dead end.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:compact:probe",
             "timeout": 10
           }
@@ -149,7 +156,7 @@
           {
             "id": "subagent:stop:wave-record",
             "type": "command",
-            "description": "Reads a finished wave subagent's transcript (agent_transcript_path) and records the commands it ran, whether any tool result errored, the files it wrote and its closing summary, to .claude/debug/wave-results/. Post-wave collection cross-checks the subagent's self-report against this. Never blocks \u2014 forcing continuation on a misparsed transcript would stall an unattended run.",
+            "description": "Reads a finished wave subagent's transcript (agent_transcript_path) and records the commands it ran, whether any tool result errored, the files it wrote and its closing summary, to .claude/debug/wave-results/. Post-wave collection cross-checks the subagent's self-report against this. Never blocks — forcing continuation on a misparsed transcript would stall an unattended run.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook subagent:stop:wave-record",
             "timeout": 10
           }

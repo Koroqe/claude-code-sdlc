@@ -51,6 +51,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const sanitize = require('../lib/sanitize.js');
 
 const MAX_BYTES = 256 * 1024;
@@ -103,6 +104,33 @@ function readCapped(file, maxBytes) {
   }
 }
 
+/**
+ * The checked-out branch, or null when it cannot be established.
+ *
+ * This is the one field in the scratchpad that has an independent ground
+ * truth, and it is worth spending a subprocess on: a stale `## Branch:` line
+ * is not a harmless inaccuracy, it is the whole block being about some other
+ * piece of work. Measured on a real project, the spine reported
+ * `branch: feat/mnda-real-document` — a feature merged and closed days
+ * earlier — while the session was actually on `main`.
+ *
+ * Fail-open in every branch: no git, not a repo, detached HEAD or a timeout
+ * all return null, which leaves the previous behaviour exactly as it was.
+ */
+function gitBranch(cwd) {
+  try {
+    const out = execFileSync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).trim();
+    if (!out || out === 'HEAD') return null;
+    return BRANCH_RE.test(out) ? out : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 function matchLine(lines, re) {
   for (const line of lines) {
     if (line.length > MAX_LINE) continue;
@@ -113,7 +141,14 @@ function matchLine(lines, re) {
 }
 
 function extractState(text) {
-  const lines = text.split('\n');
+  // `## Archive` is where the scratchpad rules move completed work. Everything
+  // below it is history by definition, and scanning it produces confident
+  // nonsense: measured against a real 2,316-line operational scratchpad, the
+  // slice scan counted 17 slices out of long-finished features and reported
+  // "slice 1 of 17" as current state. Current state lives above the archive.
+  const all = text.split('\n');
+  const archiveAt = all.findIndex((l) => /^##\s*Archive\b/i.test(l));
+  const lines = archiveAt === -1 ? all : all.slice(0, archiveAt);
   const state = {};
 
   let m = matchLine(lines, /^##\s*Feature:\s*(.+)$/);
@@ -320,12 +355,33 @@ module.exports = function sessionStartSpine(input) {
   const parts = [];
   if (scratchpadText !== null) {
     const state = extractState(scratchpadText);
-    if (state.feature !== undefined) parts.push('feature: ' + state.feature);
-    if (state.branch !== undefined) parts.push('branch: ' + state.branch);
-    if (state.status !== undefined) parts.push('status: ' + state.status);
-    if (state.wave !== undefined) parts.push('wave: ' + state.wave);
-    if (state.slice !== undefined) {
-      parts.push('slice: ' + state.slice + (state.sliceTotal ? ' of ' + state.sliceTotal : ''));
+    const actualBranch = gitBranch(cwd);
+
+    // When the scratchpad names a branch that is not the one checked out, the
+    // block describes different work — every field in it is about that other
+    // branch. Reporting `slice 3 of 8` from it is worse than reporting
+    // nothing: it is specific, plausible, and wrong, and the reader has no
+    // way to tell. So report the branch git actually has, say the scratchpad
+    // is stale, and suppress the rest rather than dressing up the wrong
+    // feature as current state.
+    const stale =
+      actualBranch !== null &&
+      state.branch !== undefined &&
+      state.branch !== 'unparseable' &&
+      state.branch !== actualBranch;
+
+    if (stale) {
+      parts.push('branch: ' + actualBranch);
+      parts.push('scratchpad: stale — it describes ' + state.branch + ', not this branch');
+    } else {
+      if (state.feature !== undefined) parts.push('feature: ' + state.feature);
+      if (state.branch !== undefined) parts.push('branch: ' + state.branch);
+      else if (actualBranch !== null) parts.push('branch: ' + actualBranch);
+      if (state.status !== undefined) parts.push('status: ' + state.status);
+      if (state.wave !== undefined) parts.push('wave: ' + state.wave);
+      if (state.slice !== undefined) {
+        parts.push('slice: ' + state.slice + (state.sliceTotal ? ' of ' + state.sliceTotal : ''));
+      }
     }
   }
 

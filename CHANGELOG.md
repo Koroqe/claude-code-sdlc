@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-20
+
+### Evidence For Skipped Work — 14:10 UTC
+**Summary:** The toolkit can no longer report that all its quality checks passed when it never actually ran them.
+**Details:** Until now every automatic check reacted to something being done — a commit, an edit, a changed file. None could notice a step being skipped, because skipping leaves no trace to react to. A run could therefore announce that every quality check passed without having run any of them. That announcement is now refused unless the specialists were actually consulted, judged from the session's own record rather than its summary.
+**Technical details:** Adds the twelfth and final background check, reaching the self-imposed ceiling deliberately rather than by drift. It judges the claim rather than the action, using the session record's own marker for delegated work — evidence produced as a byproduct, not self-reported. Scope is intentionally narrow: it refuses only the final all-clear when no specialist ran at all, since finer attribution is not available and a check that misfires on correct work gets switched off. Also corrects stale project state being reported as current, and syncs the public repository description from a tracked file so it cannot drift again. No screens, endpoints, schema, or deployment changes.
+
 ## 2026-08-19
 
 ### Release Discipline — 14:01 UTC

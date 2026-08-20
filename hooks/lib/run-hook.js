@@ -120,6 +120,13 @@ var HOOKS = {
     handler: 'stop-changelog-guard.js',
     timeoutMs: 15000,
     profiles: ['standard', 'strict']
+  },
+  // Not in `minimal`: that profile is defined as observe-only, and this hook
+  // is the one guard that refuses a claim rather than a call.
+  'stop:gate-evidence': {
+    handler: 'stop-gate-evidence.js',
+    timeoutMs: 10000,
+    profiles: ['standard', 'strict']
   }
 };
 

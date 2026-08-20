@@ -5,7 +5,7 @@
 15 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.2.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.3.0-green.svg)]()
 
 ---
 
@@ -392,8 +392,9 @@ Creates:
 
 ## Hooks
 
-The plugin registers **11 hooks across 12 registrations** (`pre:edit:read-guard` listens on two
-events). They split into two kinds, and the difference matters.
+The plugin registers **12 hooks across 13 registrations** (`pre:edit:read-guard` listens on two
+events). That is the ceiling — a thirteenth hook has to be paid for by retiring one. They split into
+two kinds, and the difference matters.
 
 **Observers never block.** They watch, record, and inject.
 
@@ -416,6 +417,25 @@ carries a named escape.
 | `pre:edit:config-protection` | `Edit`/`Write` | Weakening tsconfig/eslint/biome/prettier/jest configs, `@ts-nocheck`, blanket `eslint-disable` — the usual way an unattended run turns a red build green dishonestly | `SDLC_ALLOW_CONFIG_EDIT=1` |
 | `pre:agent:isolation-guard` | `Edit`/`Write` inside a subagent | Parallel-wave subagents writing the scratchpad, changelog or instinct store | `SDLC_ALLOW_SUBAGENT_WRITE=1` |
 | `stop:changelog-guard` | End of a response | A changelog edit with a malformed entry, or a duplicate name under today's date | `SDLC_ALLOW_CHANGELOG_SHAPE=1` |
+| `stop:gate-evidence` | End of a response | A **MERGE READY** verdict in a session where no subagent ever ran | `SDLC_ALLOW_UNEVIDENCED_GATES=1` |
+
+### The one guard that fires on what *didn't* happen
+
+Every other check here fires on an **action taken** — an attempted commit, an attempted edit, a
+changed file. None of them can fire on a step that was **skipped**, because an omission produces no
+tool call to intercept. That leaves the most expensive unattended failure invisible: a run that
+reports `Gate 3: Security Audit — PASS` having never invoked `security-auditor`, and closes green.
+
+`stop:gate-evidence` polices the claim instead of the call. Its evidence is the session transcript
+itself — records carry `isSidechain: true` when they belong to a subagent, so an invocation is
+observable as a byproduct of happening, and cannot be forged by claiming harder. Anything the model
+writes about its own work would just be another self-report.
+
+It is deliberately narrow: it blocks a MERGE READY verdict when **no subagent ran at all**.
+`/merge-ready` delegates to six agents, so zero invocations is not a borderline reading. It does not
+try to match individual `Gate N: PASS` lines to individual agents — `SubagentStop` carries no
+`agent_type`, so that would mean guessing, and a guard that fires wrongly on honest work gets
+switched off and then protects nothing.
 
 A refusal is never a dead end. It returns a concrete remedy, which the 4-tier deviation rules
 classify and act on — auto-fix, auto-add, auto-resolve, or escalate. The escape is printed in the
@@ -492,7 +512,8 @@ project-declared command. An unrecognised profile falls back to `standard`
 rather than failing, so a typo cannot silently change what is enforced.
 
 Per-guard escapes (`SDLC_ALLOW_GIT_GUARD`, `SDLC_ALLOW_UNREAD_EDIT`, `SDLC_ALLOW_SHRINK`,
-`SDLC_ALLOW_CONFIG_EDIT`, `SDLC_ALLOW_SUBAGENT_WRITE`, `SDLC_ALLOW_CHANGELOG_SHAPE`) are listed in
+`SDLC_ALLOW_CONFIG_EDIT`, `SDLC_ALLOW_SUBAGENT_WRITE`, `SDLC_ALLOW_CHANGELOG_SHAPE`,
+`SDLC_ALLOW_UNEVIDENCED_GATES`) are listed in
 the guard table above. A bypass is always reported rather than applied silently — a guard you cannot
 tell fired is worse than no guard.
 

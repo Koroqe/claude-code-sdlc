@@ -582,7 +582,14 @@ and an install base that receives nothing.
    entry written immediately above — the same feature name, the same Summary, expanded with the
    Details.
 
-5. **Confirm delivery, not merely publication.** If the project declares a command that reports what
+5. **Sync any outward-facing surface that lives outside the repository.** A project's public
+   description, catalogue listing, docs site or package-registry metadata is not a file in the tree,
+   so no grep, validator or review can observe it drifting — it goes stale silently and stays stale
+   for versions. If the declared release procedure names a command for these, run it. Prefer surfaces
+   *derived* from a tracked file over ones re-typed by hand: a second copy of the same sentence is a
+   drift trap, and the one outside the repository is the copy nobody will check.
+
+6. **Confirm delivery, not merely publication.** If the project declares a command that reports what
    consumers would now receive, run it and state the observed version. A publish step that was not
    observed to change anything is reported as unconfirmed, never as done.
 

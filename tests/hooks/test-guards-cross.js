@@ -154,10 +154,21 @@ for (const file of walk(path.join(REPO_ROOT, 'hooks'), []).filter((f) => f.endsW
 }
 
 // --- asset budget ---------------------------------------------------------
-// Eleven since subagent:stop:wave-record joined. The ceiling is 12 hooks, and
-// retiring gateguard is what freed the slot this one occupies — growth toward
-// the cap stays a decision, never a drift.
-c.equal('eleven handlers ship', fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 11);
+// TWELVE OF TWELVE. The ceiling is 12 hook ids and this is the last one:
+// stop:gate-evidence took the final slot, spent deliberately on the only guard
+// that can fire on a step that was SKIPPED rather than one that was taken.
+//
+// There is no slot left. The next hook must be paid for by retiring one, which
+// is the rule working as intended rather than a problem to route around —
+// both projects this harness borrowed from sprawled until they needed a router
+// skill to navigate themselves.
+//
+// Ids, not registrations: pre:edit:read-guard listens on two events (its
+// PostToolUse recorder half and its PreToolUse refusing half), so the file
+// count here is the honest measure of distinct hooks and the roadmap counted
+// it the same way.
+c.equal('twelve handlers ship — the ceiling, with no slot left',
+  fs.readdirSync(HANDLERS).filter((f) => f.endsWith('.js')).length, 12);
 c.ok('no package.json under hooks/', !fs.existsSync(path.join(REPO_ROOT, 'hooks', 'package.json')));
 const hooksJson = fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8');
 // Retired, not deferred — see docs/findings/gateguard-retirement.md. The
