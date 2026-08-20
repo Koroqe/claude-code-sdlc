@@ -216,6 +216,17 @@ function countOccurrences(haystack, needle) {
   return count;
 }
 
+// The first line in `text` starting with `prefix`, or null. Used by the
+// byte-identity checks (TC-6.7) to pull out one line's exact text for
+// cross-run comparison.
+function extractLine(text, prefix) {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.indexOf(prefix) === 0) return line;
+  }
+  return null;
+}
+
 // TC-1.1 — happy path: a project-scope entry matching cwd, version differing
 // from the loaded plugin, produces exactly one warning line naming both
 // versions and the exact fix command.
@@ -957,6 +968,161 @@ const hostileVersion = '#'.repeat(20) + '\n```\n' + 'x'.repeat(5000);
   rimraf(h);
   rimraf(f);
 }
+
+// --- Slice 4: coexistence with the drift line, shared cap, structural
+// helper proof, and header threat-model correction (TC-1.2, TC-1.4, TC-6.6,
+// TC-6.7, TC-7.1) -----------------------------------------------------------
+
+// TC-6.6 / TC-1.2 — both checks disagree simultaneously: the memory-layer
+// drift line and the project-scope stale-install line both appear, and the
+// leading attribution sentence names the drift source before the registry
+// source (TC-1.2's ordering requirement).
+const tc66Project = project('stale-tc66', null);
+const tc66Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc66Project, installPath: '/x', version: '0.0.1' }],
+  '1.2.3'
+);
+r = spine(tc66Project, { HOME: tc66Home });
+const tc66Ctx = ctx(r);
+c.contains('TC-6.6: version drift line present', tc66Ctx, 'version drift:');
+c.contains('TC-6.6: stale project-scope install line present', tc66Ctx, buildStaleLine('0.0.1'));
+
+const tc66DriftSourceIdx = tc66Ctx.indexOf('the installed-vs-plugin version check');
+const tc66StaleSourceIdx = tc66Ctx.indexOf('the project-scope install registry');
+c.ok(
+  'TC-1.2: attribution sentence names the version-check source before the registry source',
+  tc66DriftSourceIdx !== -1 && tc66StaleSourceIdx !== -1 && tc66DriftSourceIdx < tc66StaleSourceIdx,
+  'drift-source=' + tc66DriftSourceIdx + ' registry-source=' + tc66StaleSourceIdx
+);
+
+const tc66DriftBodyIdx = tc66Ctx.indexOf('version drift:');
+const tc66StaleBodyIdx = tc66Ctx.indexOf('stale project-scope install:');
+c.ok(
+  'TC-6.6: the drift line appears before the stale line in the body',
+  tc66DriftBodyIdx !== -1 && tc66StaleBodyIdx !== -1 && tc66DriftBodyIdx < tc66StaleBodyIdx,
+  'drift=' + tc66DriftBodyIdx + ' stale=' + tc66StaleBodyIdx
+);
+
+// Captured for TC-6.7's byte-identity comparison below, before this fixture
+// is torn down.
+const tc66DriftLine = extractLine(tc66Ctx, 'version drift:');
+const tc66StaleLine = extractLine(tc66Ctx, 'stale project-scope install:');
+
+// TC-6.7(a) — receipt only, registry removed: the drift line's own text is
+// byte-identical to its form in the combined TC-6.6 run (independent
+// computation, not reconciled with the registry's presence).
+const tc67aHome = homeWith('1.2.3');
+r = spine(tc66Project, { HOME: tc67aHome });
+const tc67aDriftLine = extractLine(ctx(r), 'version drift:');
+c.equal(
+  'TC-6.7a: drift line is byte-identical whether or not the registry is also present',
+  tc67aDriftLine, tc66DriftLine
+);
+rimraf(tc67aHome);
+
+// TC-6.7(b) — registry only, receipt removed: the stale line's own text is
+// byte-identical to its form in the combined TC-6.6 run.
+const tc67bHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc66Project, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(tc66Project, { HOME: tc67bHome });
+const tc67bStaleLine = extractLine(ctx(r), 'stale project-scope install:');
+c.equal(
+  'TC-6.7b: stale line is byte-identical whether or not the drift receipt is also present',
+  tc67bStaleLine, tc66StaleLine
+);
+rimraf(tc67bHome);
+
+// TC-1.4 — the new line shares the SAME capBlock budget as every other
+// line; there is no second, independent cap. A small
+// SDLC_SESSION_CONTEXT_MAX_CHARS on the combined (drift + stale) fixture
+// must truncate via the existing capBlock marker.
+r = spine(tc66Project, { HOME: tc66Home, SDLC_SESSION_CONTEXT_MAX_CHARS: '200' });
+const tc14Ctx = ctx(r);
+c.ok(
+  'TC-1.4: the lowered cap is honoured (output length <= 200)',
+  tc14Ctx.length <= 200, String(tc14Ctx.length)
+);
+c.ok(
+  'TC-1.4: truncation uses the existing capBlock marker, not a second budget',
+  tc14Ctx.indexOf('[truncated]') !== -1, tc14Ctx
+);
+c.ok(
+  'TC-1.4: the truncated block ends with capBlock\'s exact marker',
+  tc14Ctx.slice(-'\n[truncated]'.length) === '\n[truncated]',
+  JSON.stringify(tc14Ctx.slice(-20))
+);
+rimraf(tc66Home);
+rimraf(tc66Project);
+
+// TC-7.1 — pluginVersion is derived by a single dedicated helper, called
+// exactly once from the handler's entry point (inside module.exports), never
+// re-derived inside driftLine().
+const handlerSrc = fs.readFileSync(path.join(HANDLERS, 'session-start-spine.js'), 'utf8');
+
+const moduleExportsIdx = handlerSrc.indexOf('module.exports');
+c.ok('TC-7.1: module.exports found in the handler source', moduleExportsIdx !== -1);
+const moduleExportsSlice = handlerSrc.slice(moduleExportsIdx);
+c.equal(
+  'TC-7.1: exactly one loadedPluginVersion( call expression inside module.exports',
+  countOccurrences(moduleExportsSlice, 'loadedPluginVersion('), 1
+);
+
+const driftFnMarker = 'function driftLine';
+const driftFnIdx = handlerSrc.indexOf(driftFnMarker);
+c.ok('TC-7.1: function driftLine found in the handler source', driftFnIdx !== -1);
+const afterDriftStart = driftFnIdx + driftFnMarker.length;
+const nextFnRelIdx = handlerSrc.indexOf('function ', afterDriftStart);
+const driftFnBody = nextFnRelIdx === -1
+  ? handlerSrc.slice(afterDriftStart)
+  : handlerSrc.slice(afterDriftStart, nextFnRelIdx);
+c.ok(
+  'TC-7.1: driftLine\'s body contains no .claude-plugin manifest read',
+  driftFnBody.indexOf('.claude-plugin') === -1, driftFnBody
+);
+
+// --- Header threat-model correction (architect must-fix, S3-4 carry-forward)
+// -----------------------------------------------------------------------
+//
+// These SHOULD FAIL right now: the header rewrite is this slice's pending
+// implementation, not yet done. They pin the Done-when criteria for that
+// rewrite so it cannot land "half-applied" (per the architect's own note).
+
+// (a) The superseded "seven typed constructs" framing must be fully gone —
+// all three occurrences (SEVEN TYPED CONSTRUCTS, "not a seventh scalar
+// field", "those seven"), not just the first.
+c.equal(
+  'Header: zero case-insensitive occurrences of "seven" in the handler source',
+  countOccurrences(handlerSrc.toLowerCase(), 'seven'), 0
+);
+
+// (b) The header comment must name the registry as a distinct, third trust
+// class — machine-local, CLI-owned state, distinct from the two
+// repository-controlled sources. Scanned over the leading doc-comment block
+// ONLY (up to the first `*/`), not a fixed line count: unrelated inline code
+// below the header (`REGISTRY_KEY`'s comment, the `VERSION_RE` declaration)
+// coincidentally contains these substrings, and an assertion satisfiable by
+// incidental code proves nothing about the threat-model prose.
+const headerRegion = handlerSrc.slice(0, handlerSrc.indexOf('*/'));
+c.ok(
+  'Header: the registry is named as a distinct trust class ("machine-local") in the doc comment',
+  headerRegion.indexOf('machine-local') !== -1, headerRegion.slice(0, 200)
+);
+
+// (c) Per the architect's must-fix: the line-based-extraction guarantee
+// sentence must be scoped to the two markdown sources only (a JSON string
+// can carry a literal newline); the registry needs its own basis sentence,
+// naming VERSION_RE as what actually constrains it.
+c.ok(
+  'Header: the registry gets its own basis sentence naming VERSION_RE in the doc comment',
+  headerRegion.indexOf('VERSION_RE') !== -1, headerRegion.slice(0, 200)
+);
+c.ok(
+  'Header: the line-based guarantee is scoped to the markdown sources',
+  headerRegion.indexOf('For the two markdown sources, extraction is line-based') !== -1,
+  headerRegion.slice(0, 200)
+);
 
 // --- stale scratchpad and archived history (adoption findings) ------------
 //

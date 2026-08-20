@@ -6,7 +6,7 @@
 
 ## Branch: feat/stale-install-detection
 
-## Status: implementing wave 3 slice 3/5
+## Status: implementing wave 4 slice 4/5
 
 ## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
 
@@ -26,8 +26,9 @@ Slice 1 build-runner attempts: 1/3
 - [x] Slice 2: match semantics — 75 checks green (was 34); all 14 new fixture groups passed against Slice 1's implementation (zero handler diff — semantics already correct); QA TC-6.3/6.4 mechanism wording + loaded-version de-hardcode — 34640c4. Verify PASSED, sweep 16/16 + 20/20.
 Slice 2 build-runner attempts: 1/3
 
-### Wave 3
-- [ ] Slice 3: shape validation, sanitize-then-validate, output-level fail-open — 14 SILENT + 2 EMIT fixtures, raw-registry helper, over-cap fixture. Pre-review: security. [pending]
+### Wave 3 [COMPLETE]
+- [x] Slice 3: fail-open proofs — 14 SILENT + 2 EMIT + S3-1/2/3 fixtures, 181 checks green, test-only (guards shipped in tracer per S1-1) — 13f7974. Sweep 16/16 + 20/20.
+Slice 3 build-runner attempts: 1/3
 
 ### Wave 4
 - [ ] Slice 4: drift-line coexistence, shared cap, structural helper proof, header third-trust-class rewrite (all three "seven" phrasings) + PRD §11 FR-5.6 supersession via prd-writer. Pre-review: architect. [pending]

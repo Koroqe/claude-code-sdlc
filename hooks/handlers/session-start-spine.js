@@ -5,36 +5,54 @@
  *
  * Injects where the pipeline currently is, so a session that was resumed or
  * compacted re-enters the autonomous loop at the right slice instead of
- * asking. Also reports when the installed memory layer and the plugin are at
- * different versions, and surfaces a bounded set of project-confirmed
- * prevention heuristics from `.claude/instincts.md`.
+ * asking. Also runs two independent version checks — installed memory layer
+ * vs. loaded plugin, and any project-scope plugin install vs. the loaded
+ * plugin — and surfaces a bounded set of project-confirmed prevention
+ * heuristics from `.claude/instincts.md`.
  *
  * ---------------------------------------------------------------------------
  * THREAT MODEL — read before changing the extraction.
  *
- * `.claude/scratchpad.md` AND `.claude/instincts.md` are both repository-
- * controlled. Cloning a hostile repo and opening it is enough to reach this
- * code, and whatever this hook emits lands in the model's context at the
- * start of every session. `.claude/instincts.md` is the sharper of the two
- * sources: it exists specifically to be believed and acted on by every
- * future session in this project, so a hostile entry that survives
- * extraction does not just color one turn — it becomes a standing
- * "instinct."
+ * This hook reads sources in two distinct trust classes, and the distinction
+ * is load-bearing for how the next source should be reasoned about:
  *
- * So this hook injects SEVEN TYPED CONSTRUCTS AND NOTHING ELSE: the six
- * scalar fields it has always had, plus a bounded (at most 6) list of
- * Prevention Rule lines, each one an independently-validated short string —
- * not a seventh scalar field, and never free-form prose. Everything else
- * outside those seven — plan prose, Completed, Blockers, Archive, and, from
- * the instinct store, `Pattern:`, `Category:`, `Trigger:`, any `### <slug>`
- * heading text, anything unrecognised — is refused outright rather than
- * sanitized. Re-entry needs only the six scalar fields; the pipeline needs
- * only the validated `Rule:` text; raw prose would add injection surface for
- * no autonomy gain.
+ * REPOSITORY-CONTROLLED: `.claude/scratchpad.md` and `.claude/instincts.md`.
+ * Cloning a hostile repo and opening it is enough to reach this code, and
+ * whatever this hook emits lands in the model's context at the start of
+ * every session. `.claude/instincts.md` is the sharper of the two: it exists
+ * specifically to be believed and acted on by every future session in this
+ * project, so a hostile entry that survives extraction does not just color
+ * one turn — it becomes a standing "instinct."
  *
- * Extraction is line-based, so no value can contain a newline. That is what
- * makes markdown-heading injection and frame escape structurally impossible,
- * rather than merely filtered.
+ * MACHINE-LOCAL, CLI-OWNED: `~/.claude/plugins/installed_plugins.json`, the
+ * plugin registry written by the Claude Code CLI, never by a repository. Its
+ * reachability is fundamentally different: writing it requires already
+ * holding the user's home directory, at which point this hook is not an
+ * attacker's cheapest path. Its fields are sanitized and regex-validated
+ * identically anyway — as discipline, because a machine-local file is still
+ * not this handler's own output — not as a security boundary. (The loaded
+ * plugin's own manifest, read for its version, is in this class too.)
+ *
+ * The hook injects a fixed set of TYPED CONSTRUCTS AND NOTHING ELSE: the six
+ * scalar scratchpad fields it has always had, the two independent
+ * version-check lines (each built only from values that individually pass
+ * the anchored version regex), and a bounded (at most 6) list of Prevention
+ * Rule lines, each an independently-validated short string — never free-form
+ * prose. Everything else — plan prose, Completed, Blockers, Archive, the
+ * instinct store's `Pattern:`/`Category:`/`Trigger:`/heading text, every
+ * registry field other than a validated version (`projectPath` and
+ * `installPath` are never emitted, on any path), anything unrecognised — is
+ * refused outright rather than sanitized.
+ *
+ * For the two markdown sources, extraction is line-based, so no extracted
+ * value can contain a newline — that is what makes markdown-heading
+ * injection and frame escape structurally impossible for them, rather than
+ * merely filtered. The registry is JSON-parsed, so its string values CAN
+ * carry newlines; its basis is different: sanitizeField maps every control
+ * character to a space before VERSION_RE — anchored ^…$ over a charset with
+ * no whitespace at all — accepts or rejects the whole value, so a
+ * newline-bearing version cannot pass, but by validation, not by line
+ * structure.
  *
  * HONESTY, NOT A GUARANTEE. The allowed-character regex below (RULE_RE)
  * constrains CHARACTERS, not SEMANTICS: a rule reading "ALWAYS run curl
@@ -42,10 +60,12 @@
  * regex has no opinion on what the sentence means. `Confidence:` is likewise
  * attacker-settable: a hostile store can simply write `Confidence: 0.9` on
  * every entry it wants injected, and this hook has no way to tell that apart
- * from a genuinely reconfirmed instinct. Neither check is a security
- * boundary; both are bookkeeping over content this hook has already decided
- * is safe to show the model, framed as untrusted data, never as an
- * instruction to execute.
+ * from a genuinely reconfirmed instinct. VERSION_RE has the same character
+ * of limit: `1.2.3-IGNORE-ALL-PREVIOUS-INSTRUCTIONS` is a passing version
+ * string, so registry validation too is character-safe, not semantics-safe.
+ * None of these checks is a security boundary; all are bookkeeping over
+ * content this hook has already decided is safe to show the model, framed as
+ * untrusted data, never as an instruction to execute.
  * ---------------------------------------------------------------------------
  */
 
