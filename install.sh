@@ -1442,17 +1442,16 @@ install_plugin() {
     return 0
   fi
 
-  # Measured on Claude Code 2.1.9: a user-scope enable reports success and
-  # writes enabledPlugins to ~/.claude/settings.json, but the plugin still does
-  # not load — 0 of 15 agents resolve. The same plugin enabled at PROJECT scope
-  # loads all 15. So user scope is attempted (it is the right long-term home,
-  # and costs nothing if a later version honours it) and project scope is what
-  # actually turns it on today. Re-check on upgrade; drop the notice when a
-  # user-scope enable is observed to work.
+  # Re-measured on Claude Code 2.1.237 (docs/findings/remeasurement-2.1.237.md
+  # §1): a user-scope enable DOES load the plugin — a fresh directory with no
+  # project-scope install resolved all 15 agents and fired hooks under
+  # user-scope enablement alone. The enable call below is the normal path.
+  # Project-scope install remains available purely as optional version pinning,
+  # never as an activation step.
   claude plugin enable "$PLUGIN_REF" > /dev/null 2>&1 || true
 
   echo ""
-  log_info "To activate it in a project (required on Claude Code 2.1.x):"
+  log_info "Optional — pin a specific project to this plugin version:"
   echo "    cd your-project && claude plugin install ${PLUGIN_REF} --scope project"
   log_info "That writes .claude/settings.json, merging with anything already there."
 }
@@ -1613,33 +1612,36 @@ print_footer() {
   print_next_step
 }
 
-# Deliberately the last output of a successful run, and deliberately loud.
-# Step 1 alone leaves an install that looks complete and loads nothing: on
-# Claude Code 2.1.x a user-scope enable reports success and still resolves 0 of
-# 15 agents, while project scope resolves all 15. Someone who misses this line
-# concludes the harness is broken, so it must survive being scrolled past.
+# Deliberately the last output of a successful run. Re-measured on Claude
+# Code 2.1.237 (docs/findings/remeasurement-2.1.237.md §1): user-scope
+# enablement alone loads all 15 agents in a fresh directory, so no
+# per-project step remains. This block tells the user how to VERIFY the
+# install, and names the project-scope install as optional version pinning.
 print_next_step() {
   if [ "$NO_PLUGIN" = true ]; then
     return 0
   fi
 
-  echo -e "${YELLOW}============================================${NC}"
-  echo -e "${BOLD}  ONE STEP LEFT — required, per project${NC}"
-  echo -e "${YELLOW}============================================${NC}"
   echo ""
 
   if [ "$INIT_PROJECT" = true ]; then
-    echo -e "  ${GREEN}Already done for this project.${NC} For any OTHER project, run:"
+    echo -e "  ${GREEN}Project scaffolded.${NC} The plugin loads here — and in every"
+    echo "  other project — from the user-scope install alone."
   else
-    echo "  The plugin is installed but does NOT load until you enable it"
-    echo "  in a project. Run this in each project you use it in:"
+    echo "  The plugin is installed and enabled at user scope. It loads in"
+    echo "  every project — there is no per-project activation step."
   fi
 
   echo ""
-  echo -e "    ${BOLD}cd your-project && claude plugin install ${PLUGIN_REF} --scope project${NC}"
+  echo "  Verify it: open a NEW session and run:"
   echo ""
-  echo "  Then open a NEW session and run /agents — expect 15 agents named"
-  echo "  ${PLUGIN_NAME}:<role>. If you see none, this step has not taken effect."
+  echo -e "    ${BOLD}claude plugin list${NC}"
+  echo ""
+  echo "  Expect the ${PLUGIN_NAME} entry to show Scope: user and ✔ enabled."
+  echo ""
+  echo "  Optional — pin a specific project to this plugin version:"
+  echo ""
+  echo -e "    ${BOLD}cd your-project && claude plugin install ${PLUGIN_REF} --scope project${NC}"
   echo ""
 }
 
