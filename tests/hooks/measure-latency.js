@@ -11,6 +11,7 @@
  * Run: node tests/hooks/measure-latency.js
  */
 
+const fs = require('fs');
 const path = require('path');
 const { runHook, tempDir, rimraf, REPO_ROOT } = require('./harness');
 
@@ -48,10 +49,31 @@ const editInput = {
 const sessionInput = { session_id: 'latency', cwd: scratch, hook_event_name: 'SessionStart' };
 const stopInput = { session_id: 'latency', cwd: scratch, hook_event_name: 'Stop' };
 
+// The spine measurement pins HOME to a seeded temp home carrying a stale
+// project-scope registry entry matching the measured cwd, so it (a) exercises
+// the registry read + match + line-assembly path for real (TC-6.10) instead
+// of whatever the developer's machine happens to hold, and (b) never reads
+// the developer's real ~/.claude/plugins/installed_plugins.json — the QA
+// doc's testing convention forbids pointing any check at the real registry.
+const spineHome = tempDir('sdlc-latency-home-');
+fs.mkdirSync(path.join(spineHome, '.claude', 'plugins'), { recursive: true });
+fs.writeFileSync(
+  path.join(spineHome, '.claude', 'plugins', 'installed_plugins.json'),
+  JSON.stringify({
+    version: 2,
+    plugins: {
+      'claude-code-sdlc@claude-code-sdlc': [
+        { scope: 'project', projectPath: scratch, installPath: '/x', version: '0.0.1' },
+      ],
+    },
+  })
+);
+const spineEnv = { HOME: spineHome, USERPROFILE: spineHome };
+
 const results = [];
 results.push(measure('post:edit:accumulate (per Edit call)', 'post:edit:accumulate', editInput, CALLS));
 results.push(measure('post:edit:accumulate, hooks disabled', 'post:edit:accumulate', editInput, CALLS, { SDLC_HOOKS_ENABLED: '0' }));
-results.push(measure('session:start:spine (once per session)', 'session:start:spine', sessionInput, 5));
+results.push(measure('session:start:spine (once per session)', 'session:start:spine', sessionInput, 5, spineEnv));
 results.push(measure('stop:typecheck-format (once per response)', 'stop:typecheck-format', stopInput, 5));
 
 process.stdout.write('\nHook latency — median of ' + TRIALS + ' trials\n');
@@ -74,4 +96,5 @@ process.stdout.write('Measured on a machine that may already have other hook ent
 process.stdout.write('in ~/.claude/settings.json; those add to this figure in a real session.\n\n');
 
 rimraf(scratch);
+rimraf(spineHome);
 process.exit(0);

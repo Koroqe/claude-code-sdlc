@@ -21,11 +21,39 @@ separated from the cost of starting Node at all.
 |---|---|---|
 | `post:edit:accumulate` | **21.4 ms** per call | every Edit and Write |
 | same, hooks disabled | 19.9 ms per call | — |
-| `session:start:spine` | 21.4 ms | once per session |
+| `session:start:spine` | 52.0 ms *(re-measured 2026-08-20, post-§12 — see note)* | once per session |
 | `stop:typecheck-format` (no command declared) | 23.2 ms | once per response |
 
 **Marginal cost of the accumulate hook: 1.5 ms.** Reference budget was 150 ms
 per call; the measured figure is an order of magnitude inside it.
+
+### `session:start:spine` re-measurement (2026-08-20, post-Section-12)
+
+Measured after §12 added the stale project-scope install check: **52.0 ms
+median** (best of two runs; first run 54.0 ms), Node v24.12.0, Apple M3. Not
+directly comparable to the 21.4 ms row above or the three untouched rows, for
+three reasons that all changed at once:
+
+1. **The environment changed.** The same run's hooks-disabled baseline — pure
+   Node startup, zero hook logic — measured **48.4 ms** against the original
+   19.9 ms. The startup floor itself more than doubled (different Node major,
+   same machine class); ~48 of the 52 ms is that floor.
+2. **The measurement conditions changed.** The spine measurement now pins
+   `HOME` to a seeded temp home carrying a matching stale registry entry, so it
+   genuinely exercises the §12 registry read + match + line assembly (and no
+   longer reads the developer's real registry, which the QA conventions
+   forbid). The original row used the inherited real `HOME`.
+3. **The handler does two more reads.** §12 made the plugin-manifest read
+   unconditional (it was previously skipped for receipt-less installs) and
+   added the registry read — two file reads plus two `JSON.parse` calls per
+   session start.
+
+The hook-logic delta attributable to §12 is the spread over the same-run
+startup floor: **~3.6 ms**. §12's NFR-2 states a ≤ 30 ms median: that
+threshold was set against the 21.4 ms-era floor and is unmeetable under a
+~48 ms startup floor regardless of hook logic — recorded here as measured
+rather than met, per NFR-2's own fallback; the meaningful engineering bound
+(logic cost, not startup) is a few milliseconds and comfortably healthy.
 
 ## Reading these numbers honestly
 

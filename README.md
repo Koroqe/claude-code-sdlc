@@ -400,7 +400,7 @@ two kinds, and the difference matters.
 
 | Hook | Fires | Does |
 |------|-------|------|
-| `session:start:spine` | Session start | Injects the current feature, branch, wave and slice from the scratchpad, plus active prevention rules, so a resumed or compacted session re-enters the loop at the right point instead of asking. Reports memory-layer version drift. |
+| `session:start:spine` | Session start | Injects the current feature, branch, wave and slice from the scratchpad, plus active prevention rules, so a resumed or compacted session re-enters the loop at the right point instead of asking. Reports memory-layer version drift, and warns when a stale project-scope install shadows the loaded plugin (`claude plugin update claude-code-sdlc@claude-code-sdlc --scope project` fixes it). |
 | `post:edit:accumulate` | After each Edit/Write | Records the edited path. |
 | `stop:typecheck-format` | End of a response | Runs the project's declared format and typecheck commands **once** over everything edited, instead of once per edit. |
 | `subagent:stop:wave-record` | A parallel-wave subagent finishes | Reads that subagent's **own transcript** and records what it actually ran, what errored, and what it wrote. |

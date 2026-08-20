@@ -6,7 +6,7 @@
 
 ## Branch: feat/stale-install-detection
 
-## Status: implementing wave 4 slice 4/5
+## Status: implementing wave 5 slice 5/5
 
 ## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
 
@@ -30,8 +30,9 @@ Slice 2 build-runner attempts: 1/3
 - [x] Slice 3: fail-open proofs — 14 SILENT + 2 EMIT + S3-1/2/3 fixtures, 181 checks green, test-only (guards shipped in tracer per S1-1) — 13f7974. Sweep 16/16 + 20/20.
 Slice 3 build-runner attempts: 1/3
 
-### Wave 4
-- [ ] Slice 4: drift-line coexistence, shared cap, structural helper proof, header third-trust-class rewrite (all three "seven" phrasings) + PRD §11 FR-5.6 supersession via prd-writer. Pre-review: architect. [pending]
+### Wave 4 [COMPLETE]
+- [x] Slice 4: coexistence + structural tests (198 checks), header third-trust-class rewrite (zero "seven", architect must-fix on line-based guarantee delivered, S3-4 semantics note), PRD §11 FR-5.6 supersession — 5f47f55. Sweep 16/16 + 20/20. Sources-frame advisory DELIBERATELY not applied (non-blocking; rewording the frame sentence mid-feature would break its asserted contract — recorded for a future feature).
+Slice 4 build-runner attempts: 1/3
 
 ### Wave 5
 - [ ] Slice 5: measure-latency HOME pinning, latency doc update (with comparability caveat), README spine row, PRD §12 status flip + AC-1 de-hardcode via prd-writer. [pending]
