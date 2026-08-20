@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-20
 
+### Plugin Failed To Load On Current Versions — 15:20 UTC
+**Summary:** On up-to-date Claude Code the whole toolkit silently failed to start. Fixed, and the mistake is now caught automatically.
+**Details:** On current Claude Code the toolkit did not load at all — it announced itself as installed and enabled, then failed, leaving every specialist and every safeguard unavailable. The cause was naming a file the application already finds on its own, which newer versions treat as a conflict rather than ignoring. Anyone on a recent version was running nothing. An automatic check now covers it.
+**Technical details:** The plugin manifest declared the conventional hooks file by path. Recent releases load that file automatically and reject the duplicate, failing the entire plugin rather than the single entry — the same defect class that once made the plugin uninstallable, one key over, and it survived the earlier fix because only the keys that had already broken were examined. Found by upgrading the command-line build and listing plugins, not by any existing check. The manifest validator now rejects it, with an isolating seeded fixture. Affects every install on a recent version; upgrade is required. No screens, endpoints, schema, or deployment changes.
+
 ### Evidence For Skipped Work — 14:10 UTC
 **Summary:** The toolkit can no longer report that all its quality checks passed when it never actually ran them.
 **Details:** Until now every automatic check reacted to something being done — a commit, an edit, a changed file. None could notice a step being skipped, because skipping leaves no trace to react to. A run could therefore announce that every quality check passed without having run any of them. That announcement is now refused unless the specialists were actually consulted, judged from the session's own record rather than its summary.
