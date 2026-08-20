@@ -453,7 +453,7 @@ This step records a changelog entry once the feature is cleared for merge.
 **Steps:**
 1. Retrieve the real UTC timestamp by running the command `date -u +'%Y-%m-%d %H:%M'`. NEVER invent, estimate, or hardcode this value — always use the actual command output.
 2. Apply the idempotency guard before writing: if an entry for the same feature name already exists under today's date, update it in place — do NOT create a duplicate entry.
-3. Delegate the actual file write to the `doc-updater` agent. It writes one changelog entry following the changelog rule (`changelog.md`) with these fields:
+3. Compose-then-orchestrator-writes. The `doc-updater` agent COMPOSES the changelog entry text following the changelog rule (`changelog.md`) and RETURNS it — it does not (and cannot) write `CHANGELOG.md` itself: `pre:agent:isolation-guard` refuses subagent changelog writes by design (measured live 2026-08-20, `docs/findings/live-pipeline-run-2026-08-20.md` §1). The ORCHESTRATOR then performs the single `CHANGELOG.md` write of the returned entry, under the idempotency guard applied in step 2. The composed entry carries these fields:
    - **Feature name**
    - **UTC time** (from the `date -u` command above)
    - **Summary** — non-technical, plain-language description for end users
@@ -461,7 +461,7 @@ This step records a changelog entry once the feature is cleared for merge.
    - Entries are day-grouped, newest-first.
 
 **Failure handling:**
-- If the `doc-updater` agent fails to write the entry, surface it as a **WARNING**. A changelog write failure does NOT fail the merge — the merge remains MERGE READY.
+- If the `doc-updater` agent fails to compose the entry, OR the orchestrator's own write of it fails, surface it as a **WARNING**. Neither a compose failure nor a write failure fails the merge — the merge remains MERGE READY.
 
 ## Consolidate Instincts
 
@@ -580,7 +580,11 @@ and an install base that receives nothing.
 
 4. **Then publish**, following the declared procedure, with release notes derived from the changelog
    entry written immediately above — the same feature name, the same Summary, expanded with the
-   Details.
+   Details. When the declared procedure's publish involves a push that `pre:bash:git-guard` refuses
+   as unrequested, `SDLC_ALLOW_GIT_GUARD=1` is the SANCTIONED override for that push — spent
+   deliberately as part of following the declared procedure, not an improvisation. The guard refusing
+   an unrequested push is working as designed (measured live,
+   `docs/findings/live-pipeline-run-2026-08-20.md` §7); the guard itself is not modified.
 
 5. **Sync any outward-facing surface that lives outside the repository.** A project's public
    description, catalogue listing, docs site or package-registry metadata is not a file in the tree,
