@@ -485,13 +485,17 @@ module.exports = function sessionStartSpine(input) {
     // way to tell. So report the branch git actually has, say the scratchpad
     // is stale, and suppress the rest rather than dressing up the wrong
     // feature as current state.
-    const stale =
+    // Named distinctly from the outer `stale` (the stale-install line, a
+    // string): this one is a boolean about the scratchpad itself, and the two
+    // being both called `stale` in overlapping scopes invited exactly the
+    // kind of misread a future edit here could act on.
+    const scratchpadStale =
       actualBranch !== null &&
       state.branch !== undefined &&
       state.branch !== 'unparseable' &&
       state.branch !== actualBranch;
 
-    if (stale) {
+    if (scratchpadStale) {
       parts.push('branch: ' + actualBranch);
       parts.push('scratchpad: stale — it describes ' + state.branch + ', not this branch');
     } else {

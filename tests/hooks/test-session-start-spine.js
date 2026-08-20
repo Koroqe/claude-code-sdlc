@@ -231,10 +231,7 @@ function extractLine(text, prefix) {
 // from the loaded plugin, produces exactly one warning line naming both
 // versions and the exact fix command.
 const tc11Project = project('stale-tc11', null);
-const tc11Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc11Project, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc11Home = homeWithRegistry([staleEntryFor(tc11Project)], null);
 r = spine(tc11Project, { HOME: tc11Home });
 const staleLine =
   'stale project-scope install: project-scope 0.0.1, loaded ' + pluginVersion +
@@ -267,10 +264,7 @@ rimraf(tc11Project);
 // of `driftLine()`'s (bypassed) derivation. The stale line still appears;
 // no `version drift:` line appears (there is nothing to drift against).
 const tc72Project = project('stale-tc72', null);
-const tc72Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc72Project, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc72Home = homeWithRegistry([staleEntryFor(tc72Project)], null);
 r = spine(tc72Project, { HOME: tc72Home });
 c.contains('TC-7.2: stale line still emitted with no .sdlc-receipt', ctx(r), staleLine);
 c.ok('TC-7.2: no version drift line appears', ctx(r).indexOf('version drift:') === -1, ctx(r));
@@ -297,10 +291,7 @@ function homeAbsentRegistry() {
 // TC-2.1 / FIX-C — a user-scope-only entry is not a candidate at all: no
 // line, no source attribution.
 const fixCProject = project('stale-fixc', null);
-let fixCHome = homeWithRegistry(
-  [{ scope: 'user', projectPath: fixCProject, installPath: '/x', version: '0.0.1' }],
-  null
-);
+let fixCHome = homeWithRegistry([staleEntryFor(fixCProject, null, 'user')], null);
 r = spine(fixCProject, { HOME: fixCHome });
 c.ok('FIX-C: no stale line for a user-scope-only entry',
   ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
@@ -312,10 +303,7 @@ rimraf(fixCProject);
 // TC-2.2 / FIX-D — project-scope entry whose projectPath is a different
 // directory than cwd.
 const fixDProject = project('stale-fixd', null);
-const fixDHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: '/some/other/project', installPath: '/x', version: '0.0.1' }],
-  null
-);
+const fixDHome = homeWithRegistry([staleEntryFor('/some/other/project')], null);
 r = spine(fixDProject, { HOME: fixDHome });
 c.ok('FIX-D: no stale line on projectPath mismatch',
   ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
@@ -326,10 +314,7 @@ rimraf(fixDProject);
 // when its projectPath coincidentally matches cwd; the path check never gets
 // a chance to run.
 const ac9Project = project('stale-ac9', null);
-const ac9Home = homeWithRegistry(
-  [{ scope: 'user', projectPath: ac9Project, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const ac9Home = homeWithRegistry([staleEntryFor(ac9Project, null, 'user')], null);
 r = spine(ac9Project, { HOME: ac9Home });
 c.ok('AC-9: user-scope entry with matching projectPath still yields no line',
   ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
@@ -339,10 +324,7 @@ rimraf(ac9Project);
 // TC-3.1 / FIX-B — matched entry whose version equals the loaded manifest
 // version: no line.
 const fixBProject = project('stale-fixb', null);
-const fixBHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: fixBProject, installPath: '/x', version: pluginVersion }],
-  null
-);
+const fixBHome = homeWithRegistry([staleEntryFor(fixBProject, pluginVersion)], null);
 r = spine(fixBProject, { HOME: fixBHome });
 c.ok('FIX-B: matching version produces no stale line',
   ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
@@ -361,10 +343,7 @@ rimraf(fixEProject);
 // TC-3.2 — FIX-B and FIX-E are byte-identical, including both being null
 // when every other source is also empty.
 const tc32Empty = project('stale-tc32-empty', null);
-const tc32EmptyFixBHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc32Empty, installPath: '/x', version: pluginVersion }],
-  null
-);
+const tc32EmptyFixBHome = homeWithRegistry([staleEntryFor(tc32Empty, pluginVersion)], null);
 const tc32EmptyFixEHome = homeAbsentRegistry();
 const tc32RB = spine(tc32Empty, { HOME: tc32EmptyFixBHome });
 const tc32RE = spine(tc32Empty, { HOME: tc32EmptyFixEHome });
@@ -384,10 +363,7 @@ rimraf(tc32Empty);
 const tc32PopScratch = '## Feature: Stale Byte Identity\n## Branch: main\n## Status: idle\n';
 const tc32PopA = project('stale-tc32-pop-a', tc32PopScratch);
 const tc32PopB = project('stale-tc32-pop-b', tc32PopScratch);
-const tc32PopFixBHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc32PopA, installPath: '/x', version: pluginVersion }],
-  null
-);
+const tc32PopFixBHome = homeWithRegistry([staleEntryFor(tc32PopA, pluginVersion)], null);
 const tc32PopFixEHome = homeAbsentRegistry();
 const tc32PopRB = spine(tc32PopA, { HOME: tc32PopFixBHome });
 const tc32PopRE = spine(tc32PopB, { HOME: tc32PopFixEHome });
@@ -404,10 +380,7 @@ const tc42Scratch = '## Feature: Stale Absent Vs No Match\n## Branch: main\n## S
 const tc42A = project('stale-tc42-a', tc42Scratch);
 const tc42B = project('stale-tc42-b', tc42Scratch);
 const tc42AbsentHome = homeAbsentRegistry();
-const tc42NoMatchHome = homeWithRegistry(
-  [{ scope: 'user', projectPath: tc42B, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc42NoMatchHome = homeWithRegistry([staleEntryFor(tc42B, null, 'user')], null);
 const tc42RAbsent = spine(tc42A, { HOME: tc42AbsentHome });
 const tc42RNoMatch = spine(tc42B, { HOME: tc42NoMatchHome });
 c.equal('TC-4.2: registry-absent and registry-present-no-match produce identical additionalContext',
@@ -424,10 +397,7 @@ rimraf(tc42B);
 const tc13Scratch = '## Feature: Stale Delta\n## Branch: main\n## Status: idle\n';
 const tc13A = project('stale-tc13-a', tc13Scratch);
 const tc13E = project('stale-tc13-e', tc13Scratch);
-const tc13FixAHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc13A, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc13FixAHome = homeWithRegistry([staleEntryFor(tc13A)], null);
 const tc13FixEHome = homeAbsentRegistry();
 const tc13RA = spine(tc13A, { HOME: tc13FixAHome });
 const tc13RE = spine(tc13E, { HOME: tc13FixEHome });
@@ -447,10 +417,7 @@ rimraf(tc13E);
 // TC-6.1 — a trailing slash on the registry's projectPath still matches cwd
 // (step 1's normalized comparison).
 const tc61Project = project('stale-tc61', null);
-const tc61Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc61Project + '/', installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc61Home = homeWithRegistry([staleEntryFor(tc61Project + '/')], null);
 r = spine(tc61Project, { HOME: tc61Home });
 c.equal('TC-6.1: trailing-slash projectPath emits the line exactly once',
   countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
@@ -465,10 +432,7 @@ const tc62RealLeaf = path.join(tc62RealAncestor, 'proj');
 fs.mkdirSync(tc62RealLeaf, { recursive: true });
 fs.symlinkSync(tc62RealAncestor, tc62LinkAncestor);
 const tc62LinkLeaf = path.join(tc62LinkAncestor, 'proj');
-const tc62Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc62LinkLeaf, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc62Home = homeWithRegistry([staleEntryFor(tc62LinkLeaf)], null);
 r = runHook(
   'session:start:spine',
   { session_id: 's1', cwd: tc62RealLeaf, hook_event_name: 'SessionStart' },
@@ -485,10 +449,7 @@ rimraf(tc62LinkAncestor);
 // unconditional normalized comparison establishes equality first, so
 // realpath is never called and the line IS emitted exactly once.
 const tc64GhostX = path.join(scratch, 'stale-tc64-ghost-' + Date.now());
-const tc64Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc64GhostX + '/', installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc64Home = homeWithRegistry([staleEntryFor(tc64GhostX + '/')], null);
 r = runHook(
   'session:start:spine',
   { session_id: 's1', cwd: tc64GhostX, hook_event_name: 'SessionStart' },
@@ -505,10 +466,7 @@ rimraf(tc64Home);
 // no-match-for-that-entry — no line, no escaping throw.
 const ghostNegProject = project('stale-ghost-neg', null);
 const ghostPath = path.join(scratch, 'stale-ghost-nonexistent');
-const ghostNegHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: ghostPath, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const ghostNegHome = homeWithRegistry([staleEntryFor(ghostPath)], null);
 r = spine(ghostNegProject, { HOME: ghostNegHome });
 c.ok('ghost-path negative: no stale line', ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
 c.equal('ghost-path negative: exits 0', r.code, 0);
@@ -521,10 +479,7 @@ const removedDirPath = path.join(scratch, 'stale-removed-dir');
 fs.mkdirSync(removedDirPath, { recursive: true });
 rimraf(removedDirPath);
 const removedDirProject = project('stale-removed-dir-cwd', null);
-const removedDirHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: removedDirPath, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const removedDirHome = homeWithRegistry([staleEntryFor(removedDirPath)], null);
 r = spine(removedDirProject, { HOME: removedDirHome });
 c.ok('removed-directory: no stale line', ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
 c.equal('removed-directory: exits 0', r.code, 0);
@@ -535,10 +490,7 @@ rimraf(removedDirProject);
 // the second's version never appears anywhere in the output.
 const tc65Project = project('stale-tc65', null);
 const tc65Home = homeWithRegistry(
-  [
-    { scope: 'project', projectPath: tc65Project, installPath: '/x', version: '0.0.1' },
-    { scope: 'project', projectPath: tc65Project, installPath: '/x', version: '0.0.2' },
-  ],
+  [staleEntryFor(tc65Project, '0.0.1'), staleEntryFor(tc65Project, '0.0.2')],
   null
 );
 r = spine(tc65Project, { HOME: tc65Home });
@@ -577,8 +529,8 @@ function registryEnvelope(entries, topVersion) {
   return JSON.stringify(obj);
 }
 
-function staleEntryFor(root, version) {
-  return { scope: 'project', projectPath: root, installPath: '/x', version: version || '0.0.1' };
+function staleEntryFor(root, version, scope) {
+  return { scope: scope || 'project', projectPath: root, installPath: '/x', version: version || '0.0.1' };
 }
 
 // Every SILENT-set fixture (per S3-1's mandatory condition) is run against a
@@ -978,10 +930,7 @@ const hostileVersion = '#'.repeat(20) + '\n```\n' + 'x'.repeat(5000);
 // leading attribution sentence names the drift source before the registry
 // source (TC-1.2's ordering requirement).
 const tc66Project = project('stale-tc66', null);
-const tc66Home = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc66Project, installPath: '/x', version: '0.0.1' }],
-  '1.2.3'
-);
+const tc66Home = homeWithRegistry([staleEntryFor(tc66Project)], '1.2.3');
 r = spine(tc66Project, { HOME: tc66Home });
 const tc66Ctx = ctx(r);
 c.contains('TC-6.6: version drift line present', tc66Ctx, 'version drift:');
@@ -1022,10 +971,7 @@ rimraf(tc67aHome);
 
 // TC-6.7(b) — registry only, receipt removed: the stale line's own text is
 // byte-identical to its form in the combined TC-6.6 run.
-const tc67bHome = homeWithRegistry(
-  [{ scope: 'project', projectPath: tc66Project, installPath: '/x', version: '0.0.1' }],
-  null
-);
+const tc67bHome = homeWithRegistry([staleEntryFor(tc66Project)], null);
 r = spine(tc66Project, { HOME: tc67bHome });
 const tc67bStaleLine = extractLine(ctx(r), 'stale project-scope install:');
 c.equal(
