@@ -7,3 +7,14 @@
 # it would let a contributor's rewritten tree pass the CI drift check that
 # exists to catch exactly that mismatch.
 /.sdlc-model-profile
+
+# Transient wave-record and debugger state written by the harness's own hooks
+# during a run — never curated project knowledge (unlike .claude/scratchpad.md
+# and .claude/instincts.md, which stay tracked). The leading slash is stylistic,
+# matching the /.sdlc-model-profile convention above: per measured gitignore
+# semantics (docs/findings/remeasurement-2.1.237.md §5), any pattern with a
+# middle separator is already root-relative, so the anchor adds explicitness,
+# not protection. The genuinely dangerous shape is a separator-free pattern
+# like `debug/`, which matches at ANY depth and would shadow the tracked
+# fixtures under tests/fixtures/agents/debugger/.
+/.claude/debug/
