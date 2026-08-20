@@ -51,6 +51,28 @@ is now version-stale. All three are one coordinated feature through the pipeline
 `['doctor', 'color']`. The README's "terminal-only wizard" caveat was deleted with the step-2
 rewrite.
 
+## 5. Addendum (2026-08-20, planning measurements for PRD §13)
+
+Two further measurements taken while planning the post-live-run reconciliation feature, each
+settling a plan-critic dispute:
+
+**Stop / SubagentStop session identity.** Temporary capture hooks on both events, one headless
+`claude -p` run spawning one subagent: the `Stop` payload and the `SubagentStop` payload carried
+the **identical `session_id` UUID** (`81ea7ae9-…` on both). Same-session equality is measured fact
+on 2.1.237 — the basis for wave-record session filtering (PRD §13 FR-4.5/FR-5.3). The 2.1.9
+capture also carried `session_id`, so the field's presence is not version-gated.
+
+**gitignore pattern anchoring semantics.** Per gitignore(5) and measured with
+`git check-ignore --no-index -v` against a tracked fixture at depth
+(`tests/fixtures/agents/debugger/.../.claude/debug/some-feature.md`):
+- unanchored `.claude/debug/` (middle separator → root-relative): **exit 1, no match** — it does
+  NOT shadow nested fixture paths;
+- separator-free `debug/`: **exit 0, matches at any depth** — this is the shape that genuinely
+  shadows.
+Consequence: anchoring `/.claude/debug/` is an explicitness/precedent choice, not fixture
+protection, and `check-ignore` needs `--no-index` to be a real assertion on tracked paths (the
+default consults the index and never reports tracked files).
+
 ## Still unknown
 
 `PreCompact` payload shape — `pre:compact:probe` has still never fired on any version. Unchanged.
