@@ -1,5 +1,13 @@
 # SubagentStop: the observed payload
 
+> **Superseded in part on 2026-08-20.** Re-captured on **Claude Code 2.1.237** (temporary
+> settings.json hook, headless `claude -p` run): the payload NOW carries **`agent_type`**
+> (e.g. `"agent_type": "general-purpose"`), plus `prompt_id` and an `effort` object. The 2.1.9
+> capture below stands as the record for that version. Consequence: `stop:gate-evidence` can now
+> attribute evidence to specific gate agents, and `subagent:stop:wave-record` no longer needs to
+> key on opaque `agent_id` alone — both are recorded as a follow-up feature, not yet implemented.
+> Full re-measurement: `remeasurement-2.1.237.md`.
+
 Captured live on **Claude Code 2.1.9** by a temporary plugin hook, then removed. This is measurement,
 not documentation-reading — two prior claims about this event turned out to be wrong.
 

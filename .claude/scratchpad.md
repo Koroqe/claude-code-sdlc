@@ -49,9 +49,9 @@ Slice 5 build-runner attempts: 1/3
 (none for this feature)
 
 Project-level notes carried over:
-- **Four behavioural findings were measured on Claude Code 2.1.9 and need re-measuring on 2.1.237.**
-  See `docs/findings/compaction-probe.md` §7.
-- **Compaction schema still uncaptured.** `pre:compact:probe` has never fired.
+- **Compaction schema still uncaptured.** `pre:compact:probe` has never fired (re-confirmed unknown on 2.1.237).
+- **Re-measurement follow-ups (docs/findings/remeasurement-2.1.237.md):** (1) install.sh still prints the obsolete "ONE STEP LEFT — required, per project" banner — sensitive path, needs a pipeline run to remove; (2) SubagentStop now carries agent_type → stop:gate-evidence per-gate attribution + wave-record agent-type keying + develop-feature step-1a text update, one coordinated feature.
+- **Live-run follow-ups (docs/findings/live-pipeline-run-2026-08-20.md):** isolation-guard vs merge-ready changelog delegation contradiction; read-guard Write-then-Edit false positive; git-guard vs release-procedure push; .claude/debug/ not gitignored; develop-feature stale "land in a later slice" prose; step-1a errored-tool-results tolerance.
 
 ## Environment — changed 2026-08-20, read this before trusting old measurements
 

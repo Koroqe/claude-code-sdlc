@@ -7,6 +7,12 @@ from evidence rather than repeating the search.
 
 Measured against **Claude Code 2.1.9** on macOS.
 
+> **Re-measured 2026-08-20 on 2.1.237** — see `remeasurement-2.1.237.md`. §1 (settings.json hooks
+> never fire headless) **no longer holds**: both SessionStart and SubagentStop capture hooks fired
+> under `claude -p`. §7's four at-risk findings are all resolved there (user-scope enablement fixed,
+> `SubagentStop` now carries `agent_type`, `/agents` no longer terminal-only). `PreCompact`'s payload
+> remains uncaptured on every version. The sections below stand as the 2.1.9 historical record.
+
 ## 1. Hooks in `~/.claude/settings.json` do not execute under headless `claude -p`
 
 The decisive test: a capture hook registered on `Stop` — which fires on **every** response — never
