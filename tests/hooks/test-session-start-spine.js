@@ -538,6 +538,426 @@ c.ok('TC-6.5: the second entry\'s version never appears',
 rimraf(tc65Home);
 rimraf(tc65Project);
 
+// --- Slice 3: shape validation, sanitize-then-validate ordering, and
+// output-level fail-open under hostile and malformed registries (TC-5.1-
+// TC-5.14, TC-6.8, TC-6.9, TC-7.4, S3-1, S3-2, S3-3) -----------------------
+//
+// `homeWithRegistryRaw` writes the registry file verbatim — the
+// entries-shaped `homeWithRegistry` cannot express malformed content
+// (truncated JSON, a bare-array top level, `plugins: "not-an-object"`,
+// top-level `version` variants, MAX_BYTES padding).
+function homeWithRegistryRaw(rawString, receiptVersion) {
+  const home = tempDir('sdlc-regrawhome-');
+  fs.mkdirSync(path.join(home, '.claude', 'plugins'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), rawString);
+  if (receiptVersion !== null && receiptVersion !== undefined) {
+    fs.writeFileSync(path.join(home, '.claude', '.sdlc-receipt'), receiptVersion + '\nclaude.md\n');
+  }
+  return home;
+}
+
+// A well-formed envelope, built explicitly so SILENT-set fixtures can bend
+// exactly one shape at a time. `topVersion === undefined` omits the
+// top-level `version` key entirely (one of the two EMIT-set fixtures).
+function registryEnvelope(entries, topVersion) {
+  const obj = {};
+  if (topVersion !== undefined) obj.version = topVersion;
+  obj.plugins = { 'claude-code-sdlc@claude-code-sdlc': entries };
+  return JSON.stringify(obj);
+}
+
+function staleEntryFor(root, version) {
+  return { scope: 'project', projectPath: root, installPath: '/x', version: version || '0.0.1' };
+}
+
+// Every SILENT-set fixture (per S3-1's mandatory condition) is run against a
+// project that ALSO has a populated scratchpad, a qualifying Prevention
+// Rule, and (via `homeWithRegistryRaw`'s receiptVersion) a drift-producing
+// receipt, so the assertion proves the catch sits at this check's own call
+// site — not the wrapper's — by showing the rest of the block survives.
+function richProject(name) {
+  const root = project(name, [
+    '## Feature: Silent Set ' + name,
+    '## Branch: main',
+    '## Status: idle',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(root, '.claude', 'instincts.md'), [
+    '## Prevention Rules',
+    '',
+    '### slice-3-fixture-rule',
+    'Confidence: 0.9',
+    'Category: general',
+    'Pattern: hooks/handlers/session-start-spine.js',
+    'Rule: Always keep the shape guard ahead of the typeof checks',
+    'Trigger: adding a new registry-derived field',
+    'Occurrences: 3 (feat-a, feat-b, feat-c)',
+    'Last confirmed at: 20',
+    'Retires at: 30',
+    '',
+  ].join('\n'));
+  return root;
+}
+
+// S3-1: the negative greps and the systemMessage check run against `r.stdout`
+// — the FULL emitted payload — never `ctx(r)`, which reads only
+// `additionalContext` and is blind to the wrapper's `systemMessage` leak
+// channel. `runHook` (tests/hooks/harness.js) already exposes raw process
+// stdout as `r.stdout`, so no harness change was needed here.
+function assertSilentSurvives(r, label, opts) {
+  const o = opts || {};
+  c.equal(label + ': exits 0', r.code, 0);
+  c.ok(label + ': no stale-install line', ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+  c.ok(label + ': no systemMessage (S3-1 — a wrapper exception note is a failure)',
+    !(r.json && r.json.systemMessage), JSON.stringify(r.json && r.json.systemMessage));
+  c.contains(label + ': seeded feature line survives', ctx(r), 'feature: Silent Set');
+  c.contains(label + ': seeded prevention rule survives', ctx(r), 'prevention rule:');
+  if (!o.noDrift) {
+    c.contains(label + ': seeded drift line survives', ctx(r), 'version drift:');
+  }
+}
+
+function assertEmits(r, label, expectedVersion) {
+  c.equal(label + ': exits 0', r.code, 0);
+  c.contains(label + ': stale line still emits', ctx(r), buildStaleLine(expectedVersion));
+}
+
+function skipIfRoot(label) {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    process.stdout.write('SKIP ' + label + ' — running as root, permission bits do not bind\n');
+    return true;
+  }
+  return false;
+}
+
+// TC-5.1 — unreadable registry file (chmod 0o000).
+{
+  const f = richProject('silent-unreadable');
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f)], 2), '1.2.3');
+  const regPath = path.join(h, '.claude', 'plugins', 'installed_plugins.json');
+  if (!skipIfRoot('TC-5.1 unreadable registry')) {
+    fs.chmodSync(regPath, 0o000);
+    r = spine(f, { HOME: h });
+    assertSilentSurvives(r, 'TC-5.1 unreadable registry');
+    fs.chmodSync(regPath, 0o644);
+  }
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.2 — registry file is a symlink to a real, otherwise-valid file.
+{
+  const f = richProject('silent-symlink');
+  const h = tempDir('sdlc-regrawhome-');
+  fs.mkdirSync(path.join(h, '.claude', 'plugins'), { recursive: true });
+  const symTarget = path.join(h, '.claude', 'plugins', 'real-target.json');
+  fs.writeFileSync(symTarget, registryEnvelope([staleEntryFor(f)], 2));
+  fs.symlinkSync(symTarget, path.join(h, '.claude', 'plugins', 'installed_plugins.json'));
+  fs.writeFileSync(path.join(h, '.claude', '.sdlc-receipt'), '1.2.3\nclaude.md\n');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.2 symlinked registry');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.3 — truncated JSON. Designated outer-catch proof: JSON.parse's throw
+// genuinely reaches staleInstallLine's own try/catch.
+{
+  const f = richProject('silent-truncated');
+  const h = homeWithRegistryRaw('{"version":2,"plugins":{', '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.3 truncated JSON (outer-catch proof)');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.4 — top-level shape is a bare array.
+{
+  const f = richProject('silent-bare-array');
+  const h = homeWithRegistryRaw('[]', '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.4 top-level bare array');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.5 — `plugins` is a string, not an object.
+{
+  const f = richProject('silent-plugins-string');
+  const h = homeWithRegistryRaw(JSON.stringify({ version: 2, plugins: 'not-an-object' }), '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.5 plugins is a string');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.6 — `plugins` is an array, not a plain object.
+{
+  const f = richProject('silent-plugins-array');
+  const h = homeWithRegistryRaw(JSON.stringify({ version: 2, plugins: [] }), '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.6 plugins is an array');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.7 — the registry key's value is not an array.
+{
+  const f = richProject('silent-key-not-array');
+  const h = homeWithRegistryRaw(
+    JSON.stringify({ version: 2, plugins: { 'claude-code-sdlc@claude-code-sdlc': 'not-an-array' } }),
+    '1.2.3'
+  );
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.7 registry key value is not an array');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.9 — matched entry's version fails VERSION_RE after sanitizing.
+{
+  const f = richProject('silent-bad-version');
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f, 'not-a-version!!')], 2), '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.9 non-version-shaped version string');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.10 — matched entry's version is a number, not a string.
+{
+  const f = richProject('silent-version-number');
+  const h = homeWithRegistryRaw(
+    registryEnvelope([{ scope: 'project', projectPath: f, installPath: '/x', version: 12345 }], 2),
+    '1.2.3'
+  );
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.10 version is a number');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.11 — matched entry's version is a 5,000-character hostile string with
+// embedded newlines, backticks and markdown-heading syntax.
+const hostileVersion = '#'.repeat(20) + '\n```\n' + 'x'.repeat(5000);
+{
+  const f = richProject('silent-hostile-version');
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f, hostileVersion)], 2), '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.11 hostile version string');
+  c.ok('TC-5.11: no 20-char run of the hostile filler reaches stdout',
+    r.stdout.indexOf('x'.repeat(20)) === -1);
+  c.ok('TC-5.11: no 20-char run of the hostile heading marker reaches stdout',
+    r.stdout.indexOf('#'.repeat(20)) === -1);
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.14 — registry padded past MAX_BYTES so the capped read truncates
+// mid-JSON. Designated outer-catch proof, same path as TC-5.3.
+{
+  const f = richProject('silent-oversized');
+  const bigRaw = JSON.stringify({
+    version: 2,
+    plugins: { 'claude-code-sdlc@claude-code-sdlc': [staleEntryFor(f)] },
+    filler: 'y'.repeat(300 * 1024), // > MAX_BYTES (256 KiB)
+  });
+  const h = homeWithRegistryRaw(bigRaw, '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.14 oversized registry (outer-catch proof)');
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-5.13 — HOME and USERPROFILE both empty: homeDir resolves to '', so
+// neither drift nor stale-install can be computed at all. Only the
+// scratchpad-derived output (and the cwd-derived Prevention Rule, which does
+// not depend on homeDir) survives; drift is asserted ABSENT, never present.
+{
+  const f = richProject('silent-empty-home');
+  r = spine(f, { HOME: '', USERPROFILE: '' });
+  assertSilentSurvives(r, 'TC-5.13 empty HOME/USERPROFILE', { noDrift: true });
+  c.ok('TC-5.13: no drift line at all (homeDir empty by construction)',
+    ctx(r).indexOf('version drift:') === -1, ctx(r));
+  rimraf(f);
+}
+
+// TC-5.12 — a registry entry engineered to make fs.realpathSync throw an
+// ENOTDIR (not ENOENT): a regular file sits where a directory component is
+// expected. This proves Slice 2's "realpath throw on either side is
+// no-match-for-that-entry" rule, NOT the outer catch (the surviving drift
+// line shows the catch sits at this check's own call site regardless).
+{
+  const notADirFile = path.join(scratch, 'silent-notadir-file');
+  fs.writeFileSync(notADirFile, 'not a directory');
+  const f = richProject('silent-enotdir-cwd');
+  const h = homeWithRegistryRaw(
+    registryEnvelope([staleEntryFor(path.join(notADirFile, 'sub'))], 2),
+    '1.2.3'
+  );
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'TC-5.12 ENOTDIR real-throw absorbed as no-match');
+  rimraf(h);
+  rimraf(f);
+}
+
+// Over-cap — a matching stale entry placed at index MAX_REGISTRY_ENTRIES
+// (32), behind 32 non-matching entries: ignored, no line, no throw.
+{
+  const f = richProject('silent-overcap');
+  const nonMatching = [];
+  for (let i = 0; i < 32; i += 1) {
+    nonMatching.push({ scope: 'project', projectPath: '/nonmatch/' + i, installPath: '/x', version: '9.9.' + i });
+  }
+  const entries = nonMatching.concat([staleEntryFor(f)]);
+  const h = homeWithRegistryRaw(registryEnvelope(entries, 2), '1.2.3');
+  r = spine(f, { HOME: h });
+  assertSilentSurvives(r, 'over-cap: matching entry at index 32 is ignored');
+  rimraf(h);
+  rimraf(f);
+}
+
+// EMIT set (2 fixtures) — the top-level `version` field is never a gate.
+{
+  const f = project('emit-topversion3', null);
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f)], 3), null);
+  r = spine(f, { HOME: h });
+  assertEmits(r, 'TC-5.8a top-level version:3', '0.0.1');
+  rimraf(h);
+  rimraf(f);
+}
+{
+  const f = project('emit-noversion', null);
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f)]), null); // topVersion omitted
+  r = spine(f, { HOME: h });
+  assertEmits(r, 'TC-5.8b top-level version omitted', '0.0.1');
+  rimraf(h);
+  rimraf(f);
+}
+
+// S3-2 — heterogeneous entries: null, a bare string, and a number sibling
+// must not disable the check for the genuinely valid entry that follows
+// them (the regression proof for S1-1's entry-shape guard).
+{
+  const f = project('s3-2-heterogeneous', null);
+  const h = homeWithRegistryRaw(
+    registryEnvelope([null, 'a string', 42, staleEntryFor(f)]),
+    null
+  );
+  r = spine(f, { HOME: h });
+  c.equal('S3-2: exits 0 with heterogeneous sibling entries', r.code, 0);
+  c.contains('S3-2: the line still emits despite null/string/number siblings',
+    ctx(r), buildStaleLine('0.0.1'));
+  rimraf(h);
+  rimraf(f);
+}
+
+// S3-3 — truncation boundary: sanitizeField truncates to 40 chars BEFORE
+// VERSION_RE runs, so no fragment beyond the validated prefix may reach
+// output regardless of whether the truncated value itself passes VERSION_RE.
+{
+  const f = project('s3-3-truncation', null);
+  const hostileTail = '1.2.3-' + 'a'.repeat(34) + '\n# INJECTED';
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f, hostileTail)]), null);
+  r = spine(f, { HOME: h });
+  c.equal('S3-3: exits 0', r.code, 0);
+  c.ok('S3-3: "# INJECTED" reaches nowhere in stdout regardless of whether the ' +
+    'truncated 40-char prefix itself validates',
+    r.stdout.indexOf('# INJECTED') === -1, r.stdout);
+  const s33StaleIdx = ctx(r).indexOf('stale project-scope install:');
+  if (s33StaleIdx !== -1) {
+    c.contains('S3-3: an emitted line carries only the 40-char truncated prefix, no more',
+      ctx(r), buildStaleLine('1.2.3-' + 'a'.repeat(34)));
+  }
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-6.8 — projectPath is never interpolated into additionalContext under
+// any circumstance: matching, non-matching, or malformed/hostile.
+{
+  // (a) matching fixture, marker embedded in the (matching) projectPath.
+  const f = project('MARKER-XYZ-match', null);
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f)]), null);
+  r = spine(f, { HOME: h });
+  c.ok('TC-6.8a: matching fixture never leaks the projectPath marker',
+    ctx(r).indexOf('MARKER-XYZ') === -1, ctx(r));
+  c.contains('TC-6.8a: sanity — the line does emit', ctx(r), buildStaleLine('0.0.1'));
+  rimraf(h);
+  rimraf(f);
+}
+{
+  // (b) non-matching fixture, marker embedded in a mismatched projectPath.
+  const f = project('marker-nonmatch-cwd', null);
+  const h = homeWithRegistryRaw(
+    registryEnvelope([staleEntryFor('/some/MARKER-XYZ/other')]),
+    null
+  );
+  r = spine(f, { HOME: h });
+  c.ok('TC-6.8b: non-matching fixture never leaks the projectPath marker',
+    ctx(r).indexOf('MARKER-XYZ') === -1, ctx(r));
+  c.ok('TC-6.8b: no stale line emitted (mismatched projectPath)',
+    ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+  rimraf(h);
+  rimraf(f);
+}
+{
+  // (c) TC-5.11's hostile-version fixture, additionally given a marker-
+  // bearing (matching) projectPath.
+  const f = project('MARKER-XYZ-hostile', null);
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f, hostileVersion)]), null);
+  r = spine(f, { HOME: h });
+  c.ok('TC-6.8c: hostile-version fixture never leaks the projectPath marker',
+    ctx(r).indexOf('MARKER-XYZ') === -1, ctx(r));
+  c.ok('TC-6.8c: hostile version still yields no stale line',
+    ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-6.9 — installPath and an unrecognized extra field on the matched entry
+// are never surfaced; only the two validated version tokens reach the line.
+{
+  const f = project('stale-tc69', null);
+  const h = homeWithRegistryRaw(
+    registryEnvelope([{
+      scope: 'project',
+      projectPath: f,
+      installPath: '/INSTALLPATH_SENTINEL',
+      version: '0.0.1',
+      foo: 'bar-should-never-appear',
+    }]),
+    null
+  );
+  r = spine(f, { HOME: h });
+  c.contains('TC-6.9: the line emits normally despite extra fields',
+    ctx(r), buildStaleLine('0.0.1'));
+  c.ok('TC-6.9: installPath value never appears',
+    ctx(r).indexOf('/INSTALLPATH_SENTINEL') === -1, ctx(r));
+  c.ok('TC-6.9: the unrecognized extra field value never appears',
+    ctx(r).indexOf('bar-should-never-appear') === -1, ctx(r));
+  rimraf(h);
+  rimraf(f);
+}
+
+// TC-7.4 — line-format parity: single line, fixed label, both version
+// tokens independently VERSION_RE-shaped before assembly.
+{
+  const f = project('stale-tc74', null);
+  const h = homeWithRegistryRaw(registryEnvelope([staleEntryFor(f, '0.0.1')]), null);
+  r = spine(f, { HOME: h });
+  const line = buildStaleLine('0.0.1');
+  c.contains('TC-7.4: the line is present and begins with the fixed label',
+    ctx(r), 'stale project-scope install: project-scope 0.0.1, loaded ' + pluginVersion);
+  c.ok('TC-7.4: the line itself contains no embedded newline',
+    line.indexOf('\n') === -1);
+  c.ok('TC-7.4: both version tokens independently pass VERSION_RE',
+    /^v?\d+\.\d+\.\d+([-+][A-Za-z0-9.-]{1,32})?$/.test('0.0.1') &&
+    /^v?\d+\.\d+\.\d+([-+][A-Za-z0-9.-]{1,32})?$/.test(pluginVersion));
+  rimraf(h);
+  rimraf(f);
+}
+
 // --- stale scratchpad and archived history (adoption findings) ------------
 //
 // Both cases come from one real 2,316-line operational scratchpad. The spine

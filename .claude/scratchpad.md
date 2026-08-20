@@ -6,7 +6,7 @@
 
 ## Branch: feat/stale-install-detection
 
-## Status: implementing wave 2 slice 2/5
+## Status: implementing wave 3 slice 3/5
 
 ## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
 
@@ -22,8 +22,9 @@ Slice 1 build-runner attempts: 1/3
 ### Wave 1 [COMPLETE]
 - [x] Slice 1 (Tracer): loadedPluginVersion() hoist + staleInstallLine() end-to-end + 4.5.0 bump (4 sources) + PRD FR-2.2/FR-1.4/AC-2 amendments via prd-writer — e26a68d. Verify PASSED: 4 suites green + full sweep 16/16 validators, 934 checks. Tracer gate: SATISFIED.
 
-### Wave 2
-- [ ] Slice 2: match semantics — scope-first, first-match-wins, step-1-first path order, silent no-line paths, byte-identity assertions; QA TC-6.3/6.4 mechanism wording + loaded-version de-hardcode. [pending]
+### Wave 2 [COMPLETE]
+- [x] Slice 2: match semantics — 75 checks green (was 34); all 14 new fixture groups passed against Slice 1's implementation (zero handler diff — semantics already correct); QA TC-6.3/6.4 mechanism wording + loaded-version de-hardcode — 34640c4. Verify PASSED, sweep 16/16 + 20/20.
+Slice 2 build-runner attempts: 1/3
 
 ### Wave 3
 - [ ] Slice 3: shape validation, sanitize-then-validate, output-level fail-open — 14 SILENT + 2 EMIT fixtures, raw-registry helper, over-cap fixture. Pre-review: security. [pending]
