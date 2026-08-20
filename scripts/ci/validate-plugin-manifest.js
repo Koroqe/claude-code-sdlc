@@ -84,6 +84,38 @@ function tryRead(root, rel) {
   }
 }
 
+// The conventional hooks file, loaded automatically. Naming it in the manifest
+// is not redundant-but-harmless: on Claude Code 2.1.237 it is a hard error.
+//
+//   Status: ✘ failed to load
+//   Error: Hook load failed: Duplicate hooks file detected: ./hooks/hooks.json
+//          resolves to already-loaded file .../hooks/hooks.json.
+//
+// The WHOLE plugin fails — every agent, skill and hook — for declaring by path
+// something that is discovered by convention. That is the identical mistake
+// that made `agents: "./agents/"` uninstallable, one key over, and it survived
+// the first fix because only the two keys that had already broken were
+// examined. `manifest.hooks` is for ADDITIONAL hook files, never this one.
+const CONVENTIONAL_HOOKS = ['./hooks/hooks.json', 'hooks/hooks.json'];
+
+function checkHooksKey(v, manifest) {
+  if (!('hooks' in manifest)) return; // omitted is correct — it is auto-loaded
+  const values = typeof manifest.hooks === 'string' ? [manifest.hooks] : manifest.hooks;
+  if (!Array.isArray(values)) return;
+  for (const entry of values) {
+    if (typeof entry !== 'string') continue;
+    if (CONVENTIONAL_HOOKS.indexOf(entry.trim()) === -1) continue;
+    v.error(
+      PLUGIN_MANIFEST,
+      `\`hooks\` names ${JSON.stringify(entry)}, which Claude Code already loads by ` +
+        `convention. Declaring it produces "Duplicate hooks file detected" and the ENTIRE ` +
+        `plugin fails to load — every agent, skill and hook becomes unreachable, exactly as ` +
+        `a directory string for \`agents\` once made it uninstallable. Omit the \`hooks\` key; ` +
+        `it exists only for ADDITIONAL hook files beyond the conventional one.`
+    );
+  }
+}
+
 function checkComponentKeys(v, root, manifest) {
   for (const key of NO_DIRECTORY_STRING_KEYS) {
     if (!(key in manifest)) continue; // omitted is valid and preferred
@@ -223,6 +255,8 @@ core.run('validate-plugin-manifest', (v, args) => {
   }
 
   checkComponentKeys(v, root, manifest);
+
+  checkHooksKey(v, manifest);
   checkConventionDirs(v, root, manifest);
   checkHooks(v, root, manifest);
   checkVersionAgreement(v, root, manifest);
