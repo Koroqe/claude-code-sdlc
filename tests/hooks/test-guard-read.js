@@ -119,6 +119,12 @@ c.equal('the recorder is disabled too', r.code, 0);
 r = gate(root, 's8', A);
 c.ok('so nothing was recorded while disabled', denied(r));
 
+// TC-A17: identically for the Write spelling of the recorder.
+r = record(root, 's8w', A, { SDLC_DISABLED_HOOKS: 'pre:edit:read-guard' }, 'Write');
+c.equal('TC-A17: the Write recorder is disabled too', r.code, 0);
+r = gate(root, 's8w', A);
+c.ok('TC-A17: so a disabled Write minted nothing', denied(r));
+
 // --- TC-A1: a Write records freshness just like a Read (matcher widening) ---
 record(root, 's-w1', A, null, 'Write');
 r = gate(root, 's-w1', A);
@@ -144,6 +150,129 @@ c.ok('TC-A2: that entry\'s matcher routes Write to the recorder',
 const readOnlyFixture = { matcher: 'Read', hooks: [{ id: 'pre:edit:read-guard' }] };
 c.ok('TC-A18: the assertion logic correctly rejects a Read-only matcher',
   !matcherRoutesWrite(readOnlyFixture.matcher));
+
+// =========================================================================
+// Slice 2 — FR-3.6 recorder residuals: errored Writes, permissive tool_name
+// =========================================================================
+
+/** Raw PostToolUse payload, for shapes record()'s fixed signature cannot express. */
+function recordRaw(rt, session, payload, env) {
+  return runHook('pre:edit:read-guard',
+    Object.assign({ session_id: session, cwd: rt, hook_event_name: 'PostToolUse' }, payload),
+    Object.assign({ SDLC_HOOK_HANDLERS_DIR: HANDLERS }, env || {}));
+}
+
+// --- TC-A4: consecutive Writes then an Edit ------------------------------
+record(root, 's-a4', A, null, 'Write');
+record(root, 's-a4', A, null, 'Write');
+r = gate(root, 's-a4', A);
+c.ok('TC-A4: Write, Write, Edit is allowed', !denied(r), reason(r));
+
+// --- TC-A5: mixed Read and Write evidence in one session -----------------
+record(root, 's-a5', A, null, 'Read');
+record(root, 's-a5', B, null, 'Write');
+r = gate(root, 's-a5', A);
+c.ok('TC-A5: the Read-recorded file is editable', !denied(r), reason(r));
+r = gate(root, 's-a5', B);
+c.ok('TC-A5: the Write-recorded file is editable too', !denied(r), reason(r));
+
+// --- TC-A8: no record at all denies --------------------------------------
+// Structural proof that a *refused* Write cannot mint freshness: a refused
+// call fires no PostToolUse at all, so its state is exactly "no record".
+r = gate(root, 's-a8', A);
+c.ok('TC-A8: with no record whatsoever the edit is refused', denied(r));
+
+// --- TC-A9: a detectably-errored Write does not mint freshness -----------
+recordRaw(root, 's-a9', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: { is_error: true } });
+r = gate(root, 's-a9', A);
+c.ok('TC-A9: errored Write (is_error === true) leaves the Edit denied', denied(r));
+c.contains('TC-A9: the deny reason is the unchanged one', reason(r), 'compaction');
+c.contains('TC-A9: the deviation token is unchanged', reason(r), '[deviation: rule-1');
+
+recordRaw(root, 's-a9b', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: { error: 'disk full' } });
+r = gate(root, 's-a9b', A);
+c.ok('TC-A9: errored Write (truthy own error) leaves the Edit denied', denied(r));
+
+// --- M14 strictness: only definite errors count --------------------------
+recordRaw(root, 's-a9c', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: { is_error: 'true' } });
+r = gate(root, 's-a9c', A);
+c.ok('M14: is_error must be strictly true — a string still records', !denied(r), reason(r));
+
+recordRaw(root, 's-a9d', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: { is_error: false, error: '' } });
+r = gate(root, 's-a9d', A);
+c.ok('M14: falsy indicators still record', !denied(r), reason(r));
+
+// --- TC-A10: unclassifiable tool_response fails open ---------------------
+recordRaw(root, 's-a10', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: 'opaque string' });
+r = gate(root, 's-a10', A);
+c.ok('TC-A10: non-object tool_response records and allows', !denied(r), reason(r));
+
+recordRaw(root, 's-a10b', {
+  tool_name: 'Write', tool_input: { file_path: A }, tool_response: { ok: true } });
+r = gate(root, 's-a10b', A);
+c.ok('TC-A10: no recognizable indicator records and allows', !denied(r), reason(r));
+
+recordRaw(root, 's-a10c', { tool_name: 'Write', tool_input: { file_path: A } });
+r = gate(root, 's-a10c', A);
+c.ok('TC-A10: absent tool_response records and allows', !denied(r), reason(r));
+
+// --- M15: an errored *Read* keeps minting freshness (unchanged path) -----
+recordRaw(root, 's-m15', {
+  tool_name: 'Read', tool_input: { file_path: A }, tool_response: { is_error: true } });
+r = gate(root, 's-m15', A);
+c.ok('M15: errored Read — Edit still allowed, Read path byte-identical', !denied(r), reason(r));
+
+// --- TC-A11: tool_name omitted or non-string still records ---------------
+recordRaw(root, 's-a11', { tool_input: { file_path: A } });
+r = gate(root, 's-a11', A);
+c.ok('TC-A11: omitted tool_name defaults to recording', !denied(r), reason(r));
+
+recordRaw(root, 's-a11b', { tool_name: 42, tool_input: { file_path: A } });
+r = gate(root, 's-a11b', A);
+c.ok('TC-A11: non-string tool_name defaults to recording', !denied(r), reason(r));
+
+// --- TC-A12: record and gate as two separate processes -------------------
+// Every runHook call spawns its own child process (see harness.js); this
+// case makes the cross-process handoff explicit rather than incidental.
+const recA12 = record(root, 's-a12', A, null, 'Write');
+c.equal('TC-A12: the recording process exits 0', recA12.code, 0);
+r = gate(root, 's-a12', A);
+c.ok('TC-A12: a later, separate gate process sees the record', !denied(r), reason(r));
+
+// --- TC-A13: unknown allows where no denies, under Write evidence --------
+const recFileA13 = tracker.recordPath(root, 's-a13');
+fs.mkdirSync(recFileA13, { recursive: true });   // a directory where a file belongs
+r = gate(root, 's-a13', A);
+c.ok('TC-A13: an unreadable record allows (mechanism failure)', !denied(r), reason(r));
+fs.rmSync(recFileA13, { recursive: true, force: true });
+record(root, 's-a13b', B, null, 'Write');
+r = gate(root, 's-a13b', A);
+c.ok('TC-A13: a readable record lacking the file denies', denied(r));
+
+// --- TC-A14: notebook_path is evidence too -------------------------------
+const NB = path.join(root, 'src', 'n.ipynb');
+fs.writeFileSync(NB, '{}\n');
+recordRaw(root, 's-a14', { tool_name: 'Write', tool_input: { notebook_path: NB } });
+r = runHook('pre:edit:read-guard',
+  { session_id: 's-a14', cwd: root, hook_event_name: 'PreToolUse', tool_name: 'NotebookEdit',
+    tool_input: { notebook_path: NB } },
+  { SDLC_HOOK_HANDLERS_DIR: HANDLERS });
+c.ok('TC-A14: a Write recorded via notebook_path gates clean', !denied(r), reason(r));
+
+// --- TC-A15/TC-A16: forbidden couplings, by source inspection ------------
+const handlerSrc = fs.readFileSync(path.join(HANDLERS, 'pre-edit-read-guard.js'), 'utf8');
+c.equal('TC-A15: exactly one freshness-recording call site',
+  handlerSrc.split('recordRead').length - 1, 1);
+c.ok('TC-A15: recording sits before the PreToolUse branch begins',
+  handlerSrc.indexOf('recordRead') !== -1 &&
+  handlerSrc.indexOf('recordRead') < handlerSrc.indexOf("event !== 'PreToolUse'"));
+c.ok('TC-A16: no coupling to the accumulate handler',
+  handlerSrc.indexOf('post-edit-accumulate') === -1);
 
 rimraf(scratch);
 c.finish();
