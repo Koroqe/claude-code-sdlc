@@ -116,3 +116,29 @@ Two attempted verifications in this round used `timeout <n> claude …` and both
 nothing — `timeout` is not present on macOS (it is `gtimeout`, from coreutils). The commands failed
 with `command not found` and were briefly misread as "the check found nothing." Empty output from a
 harness command is not evidence; confirm the command ran.
+
+## 7. Everything above was measured on a build 219 versions old
+
+`claude --version` reports **2.1.9**. The current cask is **2.1.228**; npm's latest is **2.1.237**.
+`brew outdated --cask claude-code` confirms the installed copy is stale — it was installed
+2026-01-16 and never upgraded.
+
+Every finding in this file, and in `subagent-stop-payload.md`, was measured against that build. They
+were honest measurements of what was in front of us, and they are now **claims about January**, not
+about current Claude Code. Specifically at risk of being stale:
+
+| Finding | Why it might no longer hold |
+|---|---|
+| User-scope plugin enablement resolves 0 of 15 agents | A plugin-loading fix in 219 releases is entirely plausible. If fixed, README step 2 and all its emphasis should be **deleted**, not softened. |
+| `settings.json` hooks never execute under `claude -p` | Same. |
+| `SubagentStop` carries no `agent_type` | If it now does, `stop:gate-evidence` could attribute gates to specific agents instead of asserting only "no subagent ran at all". |
+| `/agents` is a terminal-only wizard | Frontend behaviour changes often. |
+| `PreCompact` payload shape | Never captured at all; entirely unknown on any version. |
+
+**Do not file the user-scope enablement defect upstream from this build.** Anthropic's bug template
+requires confirming the latest version, and that confirmation would be false. Upgrade first, re-run
+these measurements, and file only what still reproduces.
+
+The general rule this reinforces: *measure, don't read the docs* was right, but a measurement carries
+the version it was taken on. Ours did not carry it prominently enough to stop us treating
+five-month-old observations as current.
