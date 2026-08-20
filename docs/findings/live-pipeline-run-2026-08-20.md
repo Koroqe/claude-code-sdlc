@@ -107,6 +107,45 @@ No. The three closest calls, all resolved autonomously:
   `--scope project` fixed this repo's stale 4.1.0→4.5.0 — using exactly the command the shipped
   warning names.
 
+## 8. Second run, same day — the reconciliation feature (v4.6.0)
+
+The follow-up feature (PRD §13, fixing everything above) was itself run through the pipeline. What
+the second run measured that the first could not:
+
+- **The first genuine parallel wave.** Wave 2 dispatched four subagents against four disjoint file
+  sets simultaneously; Wave 3 dispatched two. All six passed, all committed only their own files,
+  and no wave conflicted. Wave assignment held under real concurrency.
+- **`develop-feature` step 1a ran for real, six times.** Every subagent's wave-record was
+  cross-checked against its self-report: `files_written` was in-surface in all six, and every
+  slice's `Verify:` command appeared in `commands`. No self-report disagreed with its record — but
+  the check now has live evidence behind it rather than unit tests alone.
+- **The errored-tool-results calibration was confirmed a third and fourth time.** Two of the four
+  Wave-2 slices carried `tool_results_errored` of 1 and 2 while passing cleanly (benign, self-
+  disclosed drafting no-ops). Under the old absolute rule both would have been flagged. The
+  calibrated rule this feature shipped is the correct one, and it now has four data points.
+- **Gate 6 failed honestly, and the `--gaps` replan loop worked.** The verifier returned
+  `PRESENT_BEHAVIOR_UNVERIFIED` because two fixes (install.sh messaging, the gitignore entry) had
+  only been checked by hand — real one-off runs, self-reported in the scratchpad, with nothing
+  committed that could re-check them. `planner` turned both gaps into slices, both became committed
+  self-registering tests, both were proven able to fail with a seeded break, and the rerun returned
+  `VERIFIED`. This is the first time a gate blocked the pipeline on a genuine deficiency and the
+  recovery path closed it without human input. It also produced the run's one gate-triggered
+  instinct.
+- **The Auto-Fix Protocol's re-review clause bit correctly.** The replan commits invalidated the
+  earlier Gate 2 and Gate 3 passes; both were re-run over just those commits and re-passed. Without
+  that clause the two new test files — one of which *executes a sensitive path* — would have been
+  the only code in the feature no reviewer inspected.
+- **The read-guard false positive fired again, on the branch that fixes it.** Expected and worth
+  stating: a session's hooks are resolved at session start, so the fix ships to the *next* session,
+  never the one that writes it. Any hook change is unobservable in its own run.
+- **Guard/skill contradictions are now closed rather than tolerated.** The changelog entry for this
+  feature was composed by `doc-updater` and written by the orchestrator — the first use of the
+  contract this feature shipped, and the isolation guard raised no refusal.
+
+Residual, recorded rather than fixed: `tests/hooks/test-gitignore-hygiene.js` inherits the ambient
+environment, so an exported `XDG_CONFIG_HOME` could point git at a developer's own ignore file.
+Evidence-integrity hardening, not security; deliberately not committed mid-gate.
+
 ## Cost profile (for future planning)
 
 ~20 subagent invocations end-to-end. Largest single consumers: planner (122k tokens), plan-critic

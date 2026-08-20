@@ -2584,7 +2584,7 @@ None. This project has no API.
 
 ## 13. Post-Live-Run Reconciliation
 
-**Status:** [PLANNED]
+**Status:** [SHIPPED]
 **Date:** 2026-08-20
 **Priority:** High
 **Related:** Section 12 (the first live end-to-end pipeline run that shipped Section 12 as 4.5.0 is the run that produced the measured defects this feature fixes — `docs/findings/live-pipeline-run-2026-08-20.md`); `docs/findings/remeasurement-2.1.237.md` (the four-finding re-measurement against Claude Code 2.1.237 that this feature also acts on); `docs/findings/subagent-stop-payload.md` (the annotated `SubagentStop` payload capture referenced by FR-4/FR-5).

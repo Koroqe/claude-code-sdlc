@@ -2,11 +2,31 @@
 
 ## Meta
 
-Feature counter: 1
+Feature counter: 2
 
 ## Prevention Rules
 
 ## Instincts Log
+
+### manual-verification-must-be-persisted
+Confidence: 0.3
+Category: general
+Pattern: docs/verification/
+Rule: ALWAYS persist a one-off verification command as a committed test before treating the behavior as verified — a manual run that only survives as a self-report cannot be re-checked
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: post-live-run-reconciliation)
+Last confirmed at: 2
+Retires at: 12
+
+### git-guard-chain-blindness
+Confidence: 0.3
+Category: general
+Pattern: hooks/handlers/pre-bash-git-guard.js
+Rule: WHEN a git commit or push follows a checkout in one chained Bash command, the guard evaluates the branch state before the chain runs — issue the checkout and the commit as separate calls
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: post-live-run-reconciliation)
+Last confirmed at: 1
+Retires at: 11
 
 ### fixed-limits-collide-with-autonomous-runs
 Confidence: 0.3
