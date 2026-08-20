@@ -9,11 +9,15 @@
  * wrong source for all three — it is the same agent grading its own work, and
  * a subagent that never ran its verify command has no way to know it didn't.
  *
- * SubagentStop's payload does NOT carry the subagent's output. Measured
- * directly (docs/findings/subagent-stop-payload.md): `agent_type` and
- * `last_assistant_message` are both absent, despite being documented. What it
- * does carry is `agent_transcript_path`, pointing at the subagent's own
- * transcript on disk — the primary record, present at the moment this fires.
+ * SubagentStop's payload does NOT carry the subagent's output —
+ * `last_assistant_message` is absent on every measured build. But `agent_type`
+ * IS carried on 2.1.237 (docs/findings/remeasurement-2.1.237.md §3; it was
+ * absent in the 2.1.9 capture, docs/findings/subagent-stop-payload.md), and so
+ * is `session_id`, identical between Stop and SubagentStop within one session
+ * (remeasurement-2.1.237.md §5) — which is what lets `stop:gate-evidence`
+ * filter stale records from prior features. The primary record remains
+ * `agent_transcript_path`, pointing at the subagent's own transcript on disk,
+ * present at the moment this fires.
  *
  * So this reads the transcript and writes a structured record the orchestrator
  * consults during post-wave collection, alongside the subagent's own summary.
@@ -24,9 +28,15 @@
  * converts a recoverable wave failure into a stuck run, which the autonomy
  * contract's third rule forbids. Report, and let the orchestrator decide.
  *
- * `agent_type` being absent is why records are keyed by `agent_id` alone. The
- * orchestrator knows which id it dispatched for which slice; this hook cannot,
- * and does not guess.
+ * Records stay KEYED by `agent_id`: `agent_type` is recorded when it passes
+ * the field bound below, but it is absent on older builds, so it cannot be the
+ * key. The orchestrator knows which id it dispatched for which slice; this
+ * hook cannot, and does not guess. All three fields arrive on stdin —
+ * model-adjacent, untrusted — and are bounded: `agent_type` is omitted
+ * entirely on any failure (never null, never truncated, no empty-string
+ * carve-out); the body `agent_id` falls back to the filename-safe `safeId`
+ * (never omitted — it is the record's key); `session_id` is omitted on
+ * failure.
  */
 
 const fs = require('fs');
@@ -34,6 +44,12 @@ const path = require('path');
 
 const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT = 2000;
+// ':' is admitted so plugin-prefixed types ("sdlc:code-reviewer") survive the
+// bound. safeId strips it for the FILENAME, so a colon-bearing agent_id
+// legitimately differs between filename and record body — do not align them.
+const FIELD_RE = /^[A-Za-z0-9:_-]{1,64}$/;
+const SESSION_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+const hasOwn = Object.prototype.hasOwnProperty;
 
 function contentBlocks(record) {
   const message = record && record.message;
@@ -94,7 +110,10 @@ function summarise(text) {
 module.exports = function subagentStopWaveRecord(input, ctx) {
   try {
     const transcriptPath = input && input.agent_transcript_path;
-    const agentId = (input && input.agent_id) || 'unknown';
+    // typeof guard: a truthy NON-string agent_id (number, array, object) must
+    // fall back to 'unknown' here — letting it through to `.replace` below
+    // would throw into this catch and silently write NO record at all.
+    const agentId = (input && typeof input.agent_id === 'string' && input.agent_id) || 'unknown';
     if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
 
     const stat = fs.statSync(transcriptPath);
@@ -110,9 +129,24 @@ module.exports = function subagentStopWaveRecord(input, ctx) {
     // rather than interpolating it raw — the same discipline the accumulator
     // applies to session_id.
     const safeId = agentId.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'unknown';
+
+    // agent_type / session_id also arrive on stdin. Read as own properties,
+    // bound, and OMIT the key on any failure — the serialized record must not
+    // contain the key at all (never null, never a truncated/coerced value).
+    // The body agent_id instead FALLS BACK to safeId: it is the record's key
+    // and is never omitted. Neither field reaches path construction.
+    const head = {
+      agent_id: FIELD_RE.test(agentId) ? agentId : safeId,
+      recorded_at: new Date().toISOString(),
+    };
+    const agentType = hasOwn.call(input, 'agent_type') ? input.agent_type : undefined;
+    if (typeof agentType === 'string' && FIELD_RE.test(agentType)) head.agent_type = agentType;
+    const sessionId = hasOwn.call(input, 'session_id') ? input.session_id : undefined;
+    if (typeof sessionId === 'string' && SESSION_ID_RE.test(sessionId)) head.session_id = sessionId;
+
     fs.writeFileSync(
       path.join(dir, safeId + '.json'),
-      JSON.stringify(Object.assign({ agent_id: agentId, recorded_at: new Date().toISOString() }, summary), null, 2) + '\n'
+      JSON.stringify(Object.assign(head, summary), null, 2) + '\n'
     );
   } catch (err) {
     // A record that fails to write must never disturb the wave it observes.
