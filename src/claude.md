@@ -74,7 +74,7 @@ Triggered immediately after Step 7 states `tier: fast`, within the same response
 
 #### Quick Tier Execution (FR-4) — Dispatch Summary
 
-Triggered immediately after Step 7 states `tier: quick`. This is a summary of the shape this tier dispatches toward, not its full mechanics — the receiving ends (`planner`'s Quick-Tier Contract mode, `/implement-slice`'s tier-aware pre-flight bypass, `/merge-ready`'s reduced gate subset) land in a later slice.
+Triggered immediately after Step 7 states `tier: quick`.
 
 1. Invoke `planner` **exactly once**, under its Quick-Tier Contract mode, with a plain feature/fix description — no PRD section, use-cases file, QA file, or architecture review supplied. `planner` returns exactly one slice, with no `**Tracer:** yes` marker.
 2. Write that one slice into `.claude/scratchpad.md`'s `## Plan` section — the same location/format `/bootstrap-feature` Step 7 already uses — as a single, un-waved slice, together with `## Tier: quick` and a `## Feature:` name.

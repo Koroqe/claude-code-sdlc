@@ -379,7 +379,7 @@ carries a named escape.
 | Guard | Fires on | Refuses | Escape |
 |---|---|---|---|
 | `pre:bash:git-guard` | `Bash` | Commits on `main`/`master`, `--no-verify`, AI attribution in the message, non-conforming commit type/scope, unrequested `push` | `SDLC_ALLOW_GIT_GUARD=1` |
-| `pre:edit:read-guard` | `Edit`/`Write` | Editing a file not read this session — the rule most likely to lapse silently after compaction | `SDLC_ALLOW_UNREAD_EDIT=1` |
+| `pre:edit:read-guard` | `Edit`/`Write` | Editing a file with no same-session freshness — a `Read` **or** a successful `Write` of the file this session both count; the rule most likely to lapse silently after compaction | `SDLC_ALLOW_UNREAD_EDIT=1` |
 | `pre:write:shrink-guard` | `Write` | Whole-file writes that collapse curated state (scratchpad, PRD, use cases, QA, changelog, instincts) below 40% of its length | `SDLC_ALLOW_SHRINK=1` |
 | `pre:edit:config-protection` | `Edit`/`Write` | Weakening tsconfig/eslint/biome/prettier/jest configs, `@ts-nocheck`, blanket `eslint-disable` — the usual way an unattended run turns a red build green dishonestly | `SDLC_ALLOW_CONFIG_EDIT=1` |
 | `pre:agent:isolation-guard` | `Edit`/`Write` inside a subagent | Parallel-wave subagents writing the scratchpad, changelog or instinct store | `SDLC_ALLOW_SUBAGENT_WRITE=1` |
@@ -400,9 +400,11 @@ writes about its own work would just be another self-report.
 
 It is deliberately narrow: it blocks a MERGE READY verdict when **no subagent ran at all**.
 `/merge-ready` delegates to six agents, so zero invocations is not a borderline reading. It does not
-try to match individual `Gate N: PASS` lines to individual agents — `SubagentStop` carries no
-`agent_type`, so that would mean guessing, and a guard that fires wrongly on honest work gets
-switched off and then protects nothing.
+match individual `Gate N: PASS` lines to individual agents for the blocking decision — a guard that
+fires wrongly on honest work gets switched off and then protects nothing. Alongside the unchanged
+decision it emits an advisory `systemMessage` naming which gate agents were observed in same-session
+wave-records and which had no same-session wave-record found — advisory only, because wave-records
+are model-writable self-reports; the block itself still rests solely on the transcript.
 
 A refusal is never a dead end. It returns a concrete remedy, which the 4-tier deviation rules
 classify and act on — auto-fix, auto-add, auto-resolve, or escalate. The escape is printed in the
