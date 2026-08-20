@@ -266,6 +266,278 @@ c.ok('TC-7.2: no version drift line appears', ctx(r).indexOf('version drift:') =
 rimraf(tc72Home);
 rimraf(tc72Project);
 
+// --- Slice 2: match semantics — scope filter, first-match-wins, realpath/
+// trailing-slash equivalence, and every silent no-line path (TC-1.3, TC-2.x,
+// TC-3.x, TC-4.x, TC-6.1-6.5, AC-2, AC-4, AC-9) -----------------------------
+
+function buildStaleLine(entryVersion) {
+  return 'stale project-scope install: project-scope ' + entryVersion +
+    ', loaded ' + pluginVersion +
+    ' — run `claude plugin update claude-code-sdlc@claude-code-sdlc --scope project`';
+}
+
+// A registry-absent home: same shape `homeWith(null)` already produces (no
+// `plugins/installed_plugins.json` at all), reused here under a name that
+// matches the QA doc's FIX-E fixture.
+function homeAbsentRegistry() {
+  return homeWith(null);
+}
+
+// TC-2.1 / FIX-C — a user-scope-only entry is not a candidate at all: no
+// line, no source attribution.
+const fixCProject = project('stale-fixc', null);
+let fixCHome = homeWithRegistry(
+  [{ scope: 'user', projectPath: fixCProject, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(fixCProject, { HOME: fixCHome });
+c.ok('FIX-C: no stale line for a user-scope-only entry',
+  ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+c.ok('FIX-C: no registry source attribution',
+  ctx(r).indexOf('the project-scope install registry') === -1, ctx(r));
+rimraf(fixCHome);
+rimraf(fixCProject);
+
+// TC-2.2 / FIX-D — project-scope entry whose projectPath is a different
+// directory than cwd.
+const fixDProject = project('stale-fixd', null);
+const fixDHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: '/some/other/project', installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(fixDProject, { HOME: fixDHome });
+c.ok('FIX-D: no stale line on projectPath mismatch',
+  ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+rimraf(fixDHome);
+rimraf(fixDProject);
+
+// TC-2.3 / AC-9 — the scope filter alone rejects a user-scope entry even
+// when its projectPath coincidentally matches cwd; the path check never gets
+// a chance to run.
+const ac9Project = project('stale-ac9', null);
+const ac9Home = homeWithRegistry(
+  [{ scope: 'user', projectPath: ac9Project, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(ac9Project, { HOME: ac9Home });
+c.ok('AC-9: user-scope entry with matching projectPath still yields no line',
+  ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+rimraf(ac9Home);
+rimraf(ac9Project);
+
+// TC-3.1 / FIX-B — matched entry whose version equals the loaded manifest
+// version: no line.
+const fixBProject = project('stale-fixb', null);
+const fixBHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: fixBProject, installPath: '/x', version: pluginVersion }],
+  null
+);
+r = spine(fixBProject, { HOME: fixBHome });
+c.ok('FIX-B: matching version produces no stale line',
+  ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+rimraf(fixBHome);
+rimraf(fixBProject);
+
+// TC-4.1 / FIX-E — registry file entirely absent: no line.
+const fixEProject = project('stale-fixe', null);
+const fixEHomeSolo = homeAbsentRegistry();
+r = spine(fixEProject, { HOME: fixEHomeSolo });
+c.ok('FIX-E: registry-absent produces no stale line',
+  ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+rimraf(fixEHomeSolo);
+rimraf(fixEProject);
+
+// TC-3.2 — FIX-B and FIX-E are byte-identical, including both being null
+// when every other source is also empty.
+const tc32Empty = project('stale-tc32-empty', null);
+const tc32EmptyFixBHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc32Empty, installPath: '/x', version: pluginVersion }],
+  null
+);
+const tc32EmptyFixEHome = homeAbsentRegistry();
+const tc32RB = spine(tc32Empty, { HOME: tc32EmptyFixBHome });
+const tc32RE = spine(tc32Empty, { HOME: tc32EmptyFixEHome });
+c.equal('TC-3.2: FIX-B and FIX-E produce identical additionalContext when all sources are empty',
+  ctx(tc32RB), ctx(tc32RE));
+c.ok('TC-3.2: FIX-B run carries no hookSpecificOutput (null overall)',
+  !(tc32RB.json && tc32RB.json.hookSpecificOutput));
+c.ok('TC-3.2: FIX-E run carries no hookSpecificOutput (null overall)',
+  !(tc32RE.json && tc32RE.json.hookSpecificOutput));
+rimraf(tc32EmptyFixBHome);
+rimraf(tc32EmptyFixEHome);
+rimraf(tc32Empty);
+
+// TC-3.2 (populated) — the same byte-identity holds when other sources DO
+// contribute output, proving the equivalence is not an artifact of the
+// all-empty early return.
+const tc32PopScratch = '## Feature: Stale Byte Identity\n## Branch: main\n## Status: idle\n';
+const tc32PopA = project('stale-tc32-pop-a', tc32PopScratch);
+const tc32PopB = project('stale-tc32-pop-b', tc32PopScratch);
+const tc32PopFixBHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc32PopA, installPath: '/x', version: pluginVersion }],
+  null
+);
+const tc32PopFixEHome = homeAbsentRegistry();
+const tc32PopRB = spine(tc32PopA, { HOME: tc32PopFixBHome });
+const tc32PopRE = spine(tc32PopB, { HOME: tc32PopFixEHome });
+c.equal('TC-3.2 (populated): FIX-B and FIX-E produce identical additionalContext',
+  ctx(tc32PopRB), ctx(tc32PopRE));
+rimraf(tc32PopFixBHome);
+rimraf(tc32PopFixEHome);
+rimraf(tc32PopA);
+rimraf(tc32PopB);
+
+// TC-4.2 — registry-absent and registry-present-but-no-match are
+// indistinguishable in output.
+const tc42Scratch = '## Feature: Stale Absent Vs No Match\n## Branch: main\n## Status: idle\n';
+const tc42A = project('stale-tc42-a', tc42Scratch);
+const tc42B = project('stale-tc42-b', tc42Scratch);
+const tc42AbsentHome = homeAbsentRegistry();
+const tc42NoMatchHome = homeWithRegistry(
+  [{ scope: 'user', projectPath: tc42B, installPath: '/x', version: '0.0.1' }],
+  null
+);
+const tc42RAbsent = spine(tc42A, { HOME: tc42AbsentHome });
+const tc42RNoMatch = spine(tc42B, { HOME: tc42NoMatchHome });
+c.equal('TC-4.2: registry-absent and registry-present-no-match produce identical additionalContext',
+  ctx(tc42RAbsent), ctx(tc42RNoMatch));
+rimraf(tc42AbsentHome);
+rimraf(tc42NoMatchHome);
+rimraf(tc42A);
+rimraf(tc42B);
+
+// TC-1.3 — FIX-A (stale, matching) versus FIX-E over otherwise identical
+// projects: once the stale line and its ' and the project-scope install
+// registry' source clause are stripped from FIX-A's output, the two are
+// equal.
+const tc13Scratch = '## Feature: Stale Delta\n## Branch: main\n## Status: idle\n';
+const tc13A = project('stale-tc13-a', tc13Scratch);
+const tc13E = project('stale-tc13-e', tc13Scratch);
+const tc13FixAHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc13A, installPath: '/x', version: '0.0.1' }],
+  null
+);
+const tc13FixEHome = homeAbsentRegistry();
+const tc13RA = spine(tc13A, { HOME: tc13FixAHome });
+const tc13RE = spine(tc13E, { HOME: tc13FixEHome });
+const tc13StaleLine = buildStaleLine('0.0.1');
+const tc13Stripped = ctx(tc13RA)
+  .split('\n')
+  .filter((line) => line !== tc13StaleLine)
+  .join('\n')
+  .replace(' and the project-scope install registry', '');
+c.equal('TC-1.3: FIX-A stripped of the stale line and source clause equals FIX-E',
+  tc13Stripped, ctx(tc13RE));
+rimraf(tc13FixAHome);
+rimraf(tc13FixEHome);
+rimraf(tc13A);
+rimraf(tc13E);
+
+// TC-6.1 — a trailing slash on the registry's projectPath still matches cwd
+// (step 1's normalized comparison).
+const tc61Project = project('stale-tc61', null);
+const tc61Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc61Project + '/', installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(tc61Project, { HOME: tc61Home });
+c.equal('TC-6.1: trailing-slash projectPath emits the line exactly once',
+  countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
+rimraf(tc61Home);
+rimraf(tc61Project);
+
+// TC-6.2 — a registry projectPath recorded through a symlinked ancestor
+// still matches a cwd reported through the real target (or vice versa).
+const tc62RealAncestor = path.join(scratch, 'stale-tc62-real');
+const tc62LinkAncestor = path.join(scratch, 'stale-tc62-link');
+const tc62RealLeaf = path.join(tc62RealAncestor, 'proj');
+fs.mkdirSync(tc62RealLeaf, { recursive: true });
+fs.symlinkSync(tc62RealAncestor, tc62LinkAncestor);
+const tc62LinkLeaf = path.join(tc62LinkAncestor, 'proj');
+const tc62Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc62LinkLeaf, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = runHook(
+  'session:start:spine',
+  { session_id: 's1', cwd: tc62RealLeaf, hook_event_name: 'SessionStart' },
+  { SDLC_HOOK_HANDLERS_DIR: HANDLERS, HOME: tc62Home }
+);
+c.equal('TC-6.2: symlinked-ancestor projectPath emits the line exactly once',
+  countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
+rimraf(tc62Home);
+rimraf(tc62RealAncestor);
+rimraf(tc62LinkAncestor);
+
+// TC-6.4 (kept positive) — projectPath '<X>/' vs cwd '<X>' where <X> never
+// exists on disk at all: both sides' realpathSync would fail, but step 1's
+// unconditional normalized comparison establishes equality first, so
+// realpath is never called and the line IS emitted exactly once.
+const tc64GhostX = path.join(scratch, 'stale-tc64-ghost-' + Date.now());
+const tc64Home = homeWithRegistry(
+  [{ scope: 'project', projectPath: tc64GhostX + '/', installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = runHook(
+  'session:start:spine',
+  { session_id: 's1', cwd: tc64GhostX, hook_event_name: 'SessionStart' },
+  { SDLC_HOOK_HANDLERS_DIR: HANDLERS, HOME: tc64Home }
+);
+c.equal('TC-6.4: identical-modulo-trailing-slash nonexistent paths still emit the line exactly once',
+  countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
+c.equal('TC-6.4: exits 0', r.code, 0);
+rimraf(tc64Home);
+
+// Ghost-path negative — a registry projectPath that never existed on disk,
+// compared against a real, existing, but genuinely different cwd: strings
+// mismatch (step 1), the entry-side realpathSync throws ENOENT (step 2),
+// no-match-for-that-entry — no line, no escaping throw.
+const ghostNegProject = project('stale-ghost-neg', null);
+const ghostPath = path.join(scratch, 'stale-ghost-nonexistent');
+const ghostNegHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: ghostPath, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(ghostNegProject, { HOME: ghostNegHome });
+c.ok('ghost-path negative: no stale line', ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+c.equal('ghost-path negative: exits 0', r.code, 0);
+rimraf(ghostNegHome);
+rimraf(ghostNegProject);
+
+// Removed-directory negative — a projectPath that existed, was deleted, and
+// is compared against a real, different cwd: no line, exit 0.
+const removedDirPath = path.join(scratch, 'stale-removed-dir');
+fs.mkdirSync(removedDirPath, { recursive: true });
+rimraf(removedDirPath);
+const removedDirProject = project('stale-removed-dir-cwd', null);
+const removedDirHome = homeWithRegistry(
+  [{ scope: 'project', projectPath: removedDirPath, installPath: '/x', version: '0.0.1' }],
+  null
+);
+r = spine(removedDirProject, { HOME: removedDirHome });
+c.ok('removed-directory: no stale line', ctx(r).indexOf('stale project-scope install') === -1, ctx(r));
+c.equal('removed-directory: exits 0', r.code, 0);
+rimraf(removedDirHome);
+rimraf(removedDirProject);
+
+// TC-6.5 — two matching project-scope entries: only the first is used, and
+// the second's version never appears anywhere in the output.
+const tc65Project = project('stale-tc65', null);
+const tc65Home = homeWithRegistry(
+  [
+    { scope: 'project', projectPath: tc65Project, installPath: '/x', version: '0.0.1' },
+    { scope: 'project', projectPath: tc65Project, installPath: '/x', version: '0.0.2' },
+  ],
+  null
+);
+r = spine(tc65Project, { HOME: tc65Home });
+c.equal('TC-6.5: first matching entry emits exactly one line',
+  countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
+c.ok('TC-6.5: the second entry\'s version never appears',
+  ctx(r).indexOf('0.0.2') === -1, ctx(r));
+rimraf(tc65Home);
+rimraf(tc65Project);
+
 // --- stale scratchpad and archived history (adoption findings) ------------
 //
 // Both cases come from one real 2,316-line operational scratchpad. The spine

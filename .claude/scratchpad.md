@@ -6,7 +6,7 @@
 
 ## Branch: feat/stale-install-detection
 
-## Status: implementing wave 1 slice 1/5
+## Status: implementing wave 2 slice 2/5
 
 ## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
 
@@ -15,10 +15,12 @@
 Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-stale-install-detection.md`
 Feature: PRD §12. Docs: docs/use-cases/stale-install-detection_use_cases.md, docs/qa/stale-install-detection_test_cases.md (42 TCs). Critic: 3 loops, all BLOCKER/WARNING fixed.
 
-Deviation rule fires this feature: rule1=0 rule2=0 rule3=0 rule4=0
+Deviation rule fires this feature: rule1=1 rule2=0 rule3=0 rule4=0
+(rule1: git-guard refused non-conventional "docs" commit type during bootstrap git setup — rewrote to chore, free)
+Slice 1 build-runner attempts: 1/3
 
-### Wave 1
-- [ ] Slice 1 (Tracer): loadedPluginVersion() hoist + staleInstallLine() end-to-end + 4.5.0 bump (4 sources) + PRD FR-2.2/FR-1.4/AC-2 amendments via prd-writer. Files: session-start-spine.js, test-session-start-spine.js, marketplace.json, plugin.json, install.sh, README badge, docs/PRD.md. Pre-review: security + architect. [pending]
+### Wave 1 [COMPLETE]
+- [x] Slice 1 (Tracer): loadedPluginVersion() hoist + staleInstallLine() end-to-end + 4.5.0 bump (4 sources) + PRD FR-2.2/FR-1.4/AC-2 amendments via prd-writer — e26a68d. Verify PASSED: 4 suites green + full sweep 16/16 validators, 934 checks. Tracer gate: SATISFIED.
 
 ### Wave 2
 - [ ] Slice 2: match semantics — scope-first, first-match-wins, step-1-first path order, silent no-line paths, byte-identity assertions; QA TC-6.3/6.4 mechanism wording + loaded-version de-hardcode. [pending]
