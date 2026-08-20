@@ -51,7 +51,16 @@ Two consequences that are easy to get backwards:
    gh release create v<version> --target main --title "v<version> — <headline>" --notes-file <file>
    ```
 
-5. **Confirm delivery rather than assuming it:**
+5. **Sync the outward-facing surfaces that live outside the repository:**
+   ```bash
+   ./scripts/release/sync-repo-metadata.sh
+   ```
+   GitHub's About panel, topics and homepage are not files, so no grep, validator or review can
+   see them drift — the description sat at "13 AI agents" through two major versions for exactly
+   that reason. The script derives them from `.claude-plugin/plugin.json` so there is no second
+   copy to fall out of date. It is idempotent; run it every release.
+
+6. **Confirm delivery rather than assuming it:**
    ```bash
    claude plugin marketplace update claude-code-sdlc
    claude plugin update claude-code-sdlc@claude-code-sdlc
@@ -65,8 +74,9 @@ configure the harness. Never reuse a published number.
 
 ## Working Rules
 
-- **Budgets are hard caps.** ≤16 agents, ≤10 skills, ≤12 hook registrations. Current: 15 / 7 / 12 —
-  **hooks are at the ceiling**, so a new hook requires removing one, not squeezing one in.
+- **Budgets are hard caps.** ≤16 agents, ≤10 skills, ≤12 hook **ids**. Current: 15 / 7 / **12** —
+  hooks are AT the ceiling with no slot left, so a thirteenth requires retiring one. Ids, not
+  registrations: `pre:edit:read-guard` listens on two events and is one hook.
 - **Every validator must fail on a seeded broken fixture**, pinned to an exact problem count. A check
   that only ever passes is not evidence.
 - **Measure Claude Code's behaviour; do not read it off the docs.** Several documented claims have

@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { runHook, tempDir, rimraf, Checks, REPO_ROOT } = require('./harness');
 
 const c = new Checks('session:start:spine');
@@ -178,6 +179,76 @@ c.ok('malformed receipt is treated as absent, not as drift',
   ctx(r).indexOf('version drift') === -1, ctx(r));
 c.ok('malformed receipt content is never echoed', ctx(r).indexOf('rm -rf') === -1);
 rimraf(home);
+
+// --- stale scratchpad and archived history (adoption findings) ------------
+//
+// Both cases come from one real 2,316-line operational scratchpad. The spine
+// reported `branch: feat/mnda-real-document` for a feature merged days
+// earlier while the session was on `main`, and counted `slice 1 of 17` out of
+// long-archived plans. Specific, plausible, and wrong is worse than silent:
+// the reader cannot tell it is wrong.
+
+function gitProject(name, branch, scratchpadText) {
+  const root = project(name, scratchpadText);
+  const run = (args) => spawnSync('git', ['-C', root].concat(args), { stdio: 'ignore' });
+  run(['init', '-q']);
+  run(['config', 'user.email', 't@t']);
+  run(['config', 'user.name', 't']);
+  run(['add', '-A']);
+  run(['commit', '-qm', 'init']);
+  if (branch !== 'master' && branch !== 'main') run(['checkout', '-qb', branch]);
+  else run(['branch', '-M', branch]);
+  return root;
+}
+
+const staleBoard = [
+  '## Feature: Something Finished',
+  '## Branch: feat/long-since-merged',
+  '## Status: implementing wave 2 slice 3/8',
+  '',
+  '### Wave 2 [IN PROGRESS]',
+  '- [ ] Slice 3: a slice from other work',
+].join('\n');
+
+r = spine(gitProject('stale', 'main', staleBoard));
+c.ok('stale scratchpad reports the branch git actually has',
+  ctx(r).indexOf('branch: main') !== -1, ctx(r));
+c.ok('stale scratchpad is named as stale',
+  ctx(r).indexOf('scratchpad: stale') !== -1, ctx(r));
+c.ok('stale scratchpad does not report a slice from other work',
+  ctx(r).indexOf('slice: 3') === -1, ctx(r));
+c.ok('stale scratchpad does not report the other feature as current',
+  ctx(r).indexOf('Something Finished') === -1, ctx(r));
+
+r = spine(gitProject('fresh', 'feat/current-work', [
+  '## Feature: Current Work',
+  '## Branch: feat/current-work',
+  '## Status: implementing slice 2/4',
+  '- [ ] Slice 2: the real one',
+].join('\n')));
+c.ok('a matching branch still reports full state',
+  ctx(r).indexOf('slice: 2') !== -1 && ctx(r).indexOf('feature: Current Work') !== -1, ctx(r));
+c.ok('a matching branch is not flagged stale', ctx(r).indexOf('stale') === -1, ctx(r));
+
+r = spine(gitProject('archived', 'feat/live', [
+  '## Feature: Live',
+  '## Branch: feat/live',
+  '## Status: implementing slice 1/2',
+  '- [ ] Slice 1: current',
+  '- [ ] Slice 2: current',
+  '',
+  '## Archive',
+  '- [ ] Slice 7: from a finished feature',
+  '- [ ] Slice 8: also finished',
+  '- [ ] Slice 9: also finished',
+].join('\n')));
+c.ok('archived slices are not counted in the total',
+  ctx(r).indexOf('slice: 1 of 2') !== -1, ctx(r));
+
+// Fail-open: no git at all must not change the previous behaviour.
+r = spine(midFeature);
+c.ok('a non-repository project still reports its scratchpad state',
+  ctx(r).indexOf('branch: feat/hook-infrastructure') !== -1, ctx(r));
 
 rimraf(scratch);
 c.finish();
