@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-08-20
 
+### Stale plugin install warning — 17:23 UTC
+**Summary:** Claude now warns at the start of a session when a project is still running an outdated copy of this plugin, and shows the exact command to fix it.
+**Details:** The session-start hook now reads Claude Code's plugin registry and compares any project-scope install of this plugin against the loaded version; a mismatch injects one warning line naming both versions and the fix command. Fail-open at output level: a missing, malformed, oversized or hostile registry emits nothing and never suppresses existing context. Registry fields are sanitized and regex-validated; projectPath is never emitted. 198 handler checks; version 4.5.0.
+**Technical details:** One extended session-start hook in the plugin's hook layer; no new hook id, no schema, no network, read-only against a machine-local CLI registry file. Display-only impact — worst case is one extra advisory line in session context. Ships as minor version 4.5.0.
+
 ### Plugin Failed To Load On Current Versions — 15:20 UTC
 **Summary:** On up-to-date Claude Code the whole toolkit silently failed to start. Fixed, and the mistake is now caught automatically.
 **Details:** On current Claude Code the toolkit did not load at all — it announced itself as installed and enabled, then failed, leaving every specialist and every safeguard unavailable. The cause was naming a file the application already finds on its own, which newer versions treat as a conflict rather than ignoring. Anyone on a recent version was running nothing. An automatic check now covers it.

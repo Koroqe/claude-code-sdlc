@@ -6,7 +6,11 @@
 
 ## Branch: feat/stale-install-detection
 
-## Status: implementing wave 5 slice 5/5
+## Status: complete
+
+Gates: 9/9 — MERGE READY. Gate 0 PASS; Gate 1 PASS; Gate 2 PASS (no findings above threshold); Gate 3 PASS (all S1/S3 conditions delivered); Gate 4 PASS (16/16 validators, 20/20 suites, 1,079 checks); Gate 5 PASS (198/198 + live probe detected the real 4.1.0 stale install); Gate 6 VERIFIED passed:true (freshness confirmed 2026-08-20 17:17); Gate 7 PASS (use-case fix + digest row); Gate 8 N/A (no UI). Finalization: changelog entry written 17:23 UTC (orchestrator write — isolation-guard refused the delegated write, see docs/findings/live-pipeline-run-2026-08-20.md); instinct store created, Feature counter=1, zero captures (no trigger met threshold).
+Gate 4 attempts: 1/3
+Gate 6 attempts: 1/3
 
 ## Version: 4.5.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.6.0 on an empty delta)
 
@@ -15,8 +19,9 @@
 Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-stale-install-detection.md`
 Feature: PRD §12. Docs: docs/use-cases/stale-install-detection_use_cases.md, docs/qa/stale-install-detection_test_cases.md (42 TCs). Critic: 3 loops, all BLOCKER/WARNING fixed.
 
-Deviation rule fires this feature: rule1=1 rule2=0 rule3=0 rule4=0
+Deviation rule fires this feature: rule1=1 rule2=0 rule3=1 rule4=0
 (rule1: git-guard refused non-conventional "docs" commit type during bootstrap git setup — rewrote to chore, free)
+(rule3: NFR-2's 30ms latency threshold unmeetable under Node 24's ~48ms startup floor — recorded actual 52.0ms + 3.6ms logic delta per the fallback clause, 1 retry)
 Slice 1 build-runner attempts: 1/3
 
 ### Wave 1 [COMPLETE]
@@ -34,8 +39,9 @@ Slice 3 build-runner attempts: 1/3
 - [x] Slice 4: coexistence + structural tests (198 checks), header third-trust-class rewrite (zero "seven", architect must-fix on line-based guarantee delivered, S3-4 semantics note), PRD §11 FR-5.6 supersession — 5f47f55. Sweep 16/16 + 20/20. Sources-frame advisory DELIBERATELY not applied (non-blocking; rewording the frame sentence mid-feature would break its asserted contract — recorded for a future feature).
 Slice 4 build-runner attempts: 1/3
 
-### Wave 5
-- [ ] Slice 5: measure-latency HOME pinning, latency doc update (with comparability caveat), README spine row, PRD §12 status flip + AC-1 de-hardcode via prd-writer. [pending]
+### Wave 5 [COMPLETE]
+- [x] Slice 5: measure-latency HOME pinning, latency re-measured (52.0ms median, ~48ms startup floor, ~3.6ms logic delta — NFR-2 threshold recorded-not-met per fallback, Rule 3), latency doc + README row, PRD §12 [SHIPPED] + AC-1 de-hardcode — de23e25. Sweep 16/16 + 20/20.
+Slice 5 build-runner attempts: 1/3
 
 ## Blockers
 
