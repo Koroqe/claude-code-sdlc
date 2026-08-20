@@ -40,8 +40,13 @@ for (const h of allHandlers) {
 }
 const postMatchers = config.hooks.PostToolUse.map((e) => e.matcher);
 c.ok('PostToolUse matches Edit|Write', postMatchers.indexOf('Edit|Write') !== -1, postMatchers.join(','));
-c.ok('PostToolUse also matches Read (the read-guard recorder)',
-  postMatchers.indexOf('Read') !== -1, postMatchers.join(','));
+// Semantic, not exact-string: the recorder's matcher must route both Read and
+// Write (widened for the Write-then-Edit fix, PRD §13 FR-3) — a future
+// widening must not re-break this assertion the way the exact 'Read' check did.
+c.ok('PostToolUse routes Read to the read-guard recorder',
+  postMatchers.some((m) => new RegExp(m).test('Read')), postMatchers.join(','));
+c.ok('PostToolUse routes Write to the read-guard recorder',
+  postMatchers.some((m) => new RegExp(m).test('Write')), postMatchers.join(','));
 
 // --- no blocking anywhere under hooks/ ------------------------------------
 function walk(dir, out) {

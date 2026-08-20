@@ -19,9 +19,9 @@ function project(name) {
   return root;
 }
 
-function record(root, session, target, env) {
+function record(root, session, target, env, toolName) {
   return runHook('pre:edit:read-guard',
-    { session_id: session, cwd: root, hook_event_name: 'PostToolUse', tool_name: 'Read', tool_input: { file_path: target } },
+    { session_id: session, cwd: root, hook_event_name: 'PostToolUse', tool_name: toolName || 'Read', tool_input: { file_path: target } },
     Object.assign({ SDLC_HOOK_HANDLERS_DIR: HANDLERS }, env || {}));
 }
 function gate(root, session, target, env) {
@@ -118,6 +118,32 @@ r = record(root, 's8', A, { SDLC_DISABLED_HOOKS: 'pre:edit:read-guard' });
 c.equal('the recorder is disabled too', r.code, 0);
 r = gate(root, 's8', A);
 c.ok('so nothing was recorded while disabled', denied(r));
+
+// --- TC-A1: a Write records freshness just like a Read (matcher widening) ---
+record(root, 's-w1', A, null, 'Write');
+r = gate(root, 's-w1', A);
+c.ok('TC-A1: editing a file after a Write is allowed', !denied(r), reason(r));
+
+// --- TC-A2: hooks.json actually routes Write to the read-guard recorder ---
+// (config-level assertion, not a handler invocation — the harness invokes
+// handlers by id, bypassing matcher routing, so TC-A1 above would pass even
+// before the hooks.json fix ships. This is the genuinely red test.)
+function matcherRoutesWrite(matcher) {
+  return new RegExp(matcher).test('Write');
+}
+const hooksConfig = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'hooks', 'hooks.json'), 'utf8'));
+const postToolUseEntries = (hooksConfig.hooks && hooksConfig.hooks.PostToolUse) || [];
+const readGuardEntry = postToolUseEntries.find(
+  (entry) => (entry.hooks || []).some((h) => h.id === 'pre:edit:read-guard'));
+c.ok('TC-A2: hooks.json has a PostToolUse entry for pre:edit:read-guard', !!readGuardEntry);
+c.ok('TC-A2: that entry\'s matcher routes Write to the recorder',
+  !!readGuardEntry && matcherRoutesWrite(readGuardEntry.matcher),
+  readGuardEntry && readGuardEntry.matcher);
+
+// --- TC-A18: negative control — the same assertion correctly rejects a Read-only matcher ---
+const readOnlyFixture = { matcher: 'Read', hooks: [{ id: 'pre:edit:read-guard' }] };
+c.ok('TC-A18: the assertion logic correctly rejects a Read-only matcher',
+  !matcherRoutesWrite(readOnlyFixture.matcher));
 
 rimraf(scratch);
 c.finish();

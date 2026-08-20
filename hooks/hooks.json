@@ -34,12 +34,12 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Read",
+        "matcher": "Read|Write",
         "hooks": [
           {
             "id": "pre:edit:read-guard",
             "type": "command",
-            "description": "Records that a file was read, so the PreToolUse half can tell a fresh edit from one made against stale, pre-compaction memory.",
+            "description": "Records that a file was read or written this session, so the PreToolUse half can tell a fresh edit from one made against stale, pre-compaction memory. A same-session Write is knowledge of the file's content, exactly as a Read is.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook pre:edit:read-guard",
             "timeout": 10
           }
