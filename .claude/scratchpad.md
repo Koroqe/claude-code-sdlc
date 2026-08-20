@@ -19,7 +19,8 @@ Gate 6 attempts: 1/3
 Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-stale-install-detection.md`
 Feature: PRD §12. Docs: docs/use-cases/stale-install-detection_use_cases.md, docs/qa/stale-install-detection_test_cases.md (42 TCs). Critic: 3 loops, all BLOCKER/WARNING fixed.
 
-Deviation rule fires this feature: rule1=1 rule2=0 rule3=1 rule4=0
+Deviation rule fires this feature: rule1=1 rule2=0 rule3=2 rule4=0
+(rule3 #2: git-guard refused the release-procedure push — override applied per CLAUDE.md ## Release authority, 1 retry. Tally reached 2 → Trigger 2 instinct captured.)
 (rule1: git-guard refused non-conventional "docs" commit type during bootstrap git setup — rewrote to chore, free)
 (rule3: NFR-2's 30ms latency threshold unmeetable under Node 24's ~48ms startup floor — recorded actual 52.0ms + 3.6ms logic delta per the fallback clause, 1 retry)
 Slice 1 build-runner attempts: 1/3

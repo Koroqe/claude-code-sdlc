@@ -85,6 +85,28 @@ No. The three closest calls, all resolved autonomously:
   both non-loading versions. The new warning will surface in those projects once they update
   user-scope; the fix command is per-project.
 
+## 7. Release phase (appended post-release)
+
+- **`pre:bash:git-guard` refused the release push** ("Refusing an unrequested `git push`. Pushing is
+  the developer's call, not the pipeline's"). The `/merge-ready` Release finalization and CLAUDE.md
+  `## Release` step 3 both *require* the push — so every autonomous release will hit this refusal and
+  spend a Rule 3 retry on the documented `SDLC_ALLOW_GIT_GUARD=1` override. Guard and release
+  procedure disagree about whether a pipeline release push is "requested." Worth an explicit carve-out
+  or an explicit statement that the override IS the intended release mechanism.
+- The refusal pushed the feature's rule3 tally to 2, which correctly fired Trigger 2 — the instinct
+  store's first live capture (`fixed-limits-collide-with-autonomous-runs`). Note the mechanism's
+  coarseness: the two rule3 fires had unrelated root causes (latency threshold vs. push guard); the
+  tally counts fires per rule, not per root cause.
+- **`pre:edit:read-guard`'s Write-then-Edit false positive is systematic**: it fired a second time on
+  a different file this session (a findings doc created by Write, then edited). The guard counts only
+  Reads as freshness evidence.
+- **Housekeeping commits on `main` now need a branch**: prior sessions committed directly to `main`
+  (hooks weren't loaded); with the guard live, even post-release state bookkeeping goes through a
+  branch + fast-forward merge.
+- **Delivery confirmed, not assumed**: `claude plugin update` reported user scope 4.4.0→4.5.0, and
+  `--scope project` fixed this repo's stale 4.1.0→4.5.0 — using exactly the command the shipped
+  warning names.
+
 ## Cost profile (for future planning)
 
 ~20 subagent invocations end-to-end. Largest single consumers: planner (122k tokens), plan-critic
