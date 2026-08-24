@@ -1,0 +1,27 @@
+{
+  "description": "A bounded, already-understood fix in one non-sensitive file is quick (FR-1.5) \u2014 neither a trivial literal nor a full-forcing signal.",
+  "prompt": "formatName() crashes when the user object is null. Add a null check so it returns an empty string instead.",
+  "maxTurns": 6,
+  "seed": {
+    "src/format.js": "function formatName(user) {\n  return user.first + ' ' + user.last;\n}\nmodule.exports = { formatName };\n"
+  },
+  "graders": [
+    {
+      "name": "protocol: stated a tier",
+      "type": "regex",
+      "pattern": "tier:\\s*(fast|quick|full)"
+    },
+    {
+      "name": "correctness: tier is quick",
+      "type": "regex",
+      "pattern": "tier:\\s*quick"
+    },
+    {
+      "name": "correctness: did not classify fast",
+      "type": "regex",
+      "pattern": "tier:\\s*fast",
+      "match": "not_contains"
+    }
+  ],
+  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist."
+}

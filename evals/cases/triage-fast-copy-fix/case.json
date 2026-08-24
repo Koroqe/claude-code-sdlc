@@ -1,0 +1,39 @@
+{
+  "description": "A one-file copy fix must classify fast (FR-1.4). Protocol graders check the tier was STATED with a reason before any edit; correctness graders check WHICH tier.",
+  "prompt": "The word 'recieve' is misspelled in README.md. Fix it.",
+  "maxTurns": 6,
+  "seed": {
+    "README.md": "# Demo\n\nUsers recieve a confirmation email after signup.\n",
+    "docs/PRD.md": "# PRD\n"
+  },
+  "graders": [
+    {
+      "name": "protocol: stated a tier",
+      "type": "regex",
+      "pattern": "tier:\\s*(fast|quick|full)"
+    },
+    {
+      "name": "protocol: stated the estimated file set",
+      "type": "regex",
+      "pattern": "README\\.md"
+    },
+    {
+      "name": "correctness: tier is fast",
+      "type": "regex",
+      "pattern": "tier:\\s*fast"
+    },
+    {
+      "name": "correctness: did not over-escalate",
+      "type": "regex",
+      "pattern": "tier:\\s*(quick|full)",
+      "match": "not_contains"
+    },
+    {
+      "name": "correctness: wrote no PRD for a typo",
+      "type": "file_written",
+      "pattern": "docs/use-cases|docs/qa",
+      "match": "not_contains"
+    }
+  ],
+  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist."
+}
