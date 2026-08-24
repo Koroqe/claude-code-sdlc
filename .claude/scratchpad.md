@@ -56,6 +56,22 @@ Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED — 2 Level-4 gaps,
 (none for this feature)
 
 Project-level notes carried over:
+- **Behavioural eval shipped (2026-08-24).** `node scripts/eval/run-evals.js`. Baseline: **4/4 Triage
+  cases pass**. Grading logic unit-tested free in the sweep (30 checks, 8 seeded-broken). Read
+  `evals/README.md` before believing a failure — two instrument bugs produced confident false results
+  before the first true baseline.
+- **Evidence-ranked improvement queue** (all measured; `docs/findings/harness-optimization-research.md`):
+  (1) red-phase / discriminating-evidence done-condition — a test must be shown to FAIL before the fix
+  (23.8% of agent patches carry no discriminating evidence; 31% pass tests without resolving);
+  (2) stall detection — step repetition is MAST's largest single failure mode at 17.14%; costs a hook
+  id and we are at 12/12, so it requires retiring one;
+  (3) `maxTurns` on agent frontmatter — supported, set nowhere, bounds runaway directly;
+  (4) confidence signal at plan time (Devin: green ≈ 2× merged-PR likelihood vs red);
+  (5) context-tax reduction — ~93k tok of skill text per 8-slice feature — gated behind the eval,
+  because no study measures relocating MANDATORY gating rules and Triage Steps 1-7 are exactly that.
+- **Documented anti-patterns — do not "improve" into these:** multi-agent debate on the GENERATION
+  path (−1.6 to −15.5pp), full-file context (−5.3pp), raw iterative search (worse than no search at
+  all), repository-overview prose in instruction files (+20% cost, no success gain).
 - **Compaction schema still uncaptured.** `pre:compact:probe` has never fired (re-confirmed unknown on 2.1.237).
 - **Re-measurement follow-ups (docs/findings/remeasurement-2.1.237.md):** (1) install.sh still prints the obsolete "ONE STEP LEFT — required, per project" banner — sensitive path, needs a pipeline run to remove; (2) SubagentStop now carries agent_type → stop:gate-evidence per-gate attribution + wave-record agent-type keying + develop-feature step-1a text update, one coordinated feature.
 - **Live-run follow-ups (docs/findings/live-pipeline-run-2026-08-20.md):** isolation-guard vs merge-ready changelog delegation contradiction; read-guard Write-then-Edit false positive; git-guard vs release-procedure push; .claude/debug/ not gitignored; develop-feature stale "land in a later slice" prose; step-1a errored-tool-results tolerance.
