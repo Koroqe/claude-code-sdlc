@@ -12,6 +12,20 @@ for v in scripts/ci/validate-*.js; do node "$v" || exit 1; done
 for t in tests/hooks/test-*.js; do node "$t" || exit 1; done
 ```
 
+Those check **structure** and **hook logic**. They do not check that the instructions this harness
+ships actually steer a real session — that is what the behavioural eval is for:
+
+```bash
+node scripts/eval/run-evals.js --dry-run   # free: show the plan
+node scripts/eval/run-evals.js             # COSTS MONEY: real headless sessions, graded
+```
+
+It sits outside the sweep because it spends real tokens; its grading logic is unit-tested for free
+inside the sweep (`tests/hooks/test-eval-graders.js`, 30 checks, 8 seeded-broken). **Read
+`evals/README.md` before believing a failure** — two separate instrument bugs produced confident
+false results the first two times it ran, both pointing at the product while the eval itself was
+broken.
+
 ## Release
 
 **Read this before publishing anything. The ordering below is the whole point.**
