@@ -4,6 +4,7 @@ description: Plan new features, break work into slices, validate requirements be
 tools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Tech Lead — Feature Planner

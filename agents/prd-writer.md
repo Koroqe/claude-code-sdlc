@@ -4,6 +4,7 @@ description: Document feature requirements in docs/PRD.md before implementation 
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
 model: sonnet
 effort: low
+maxTurns: 60
 ---
 
 # PRD Writer

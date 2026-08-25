@@ -164,6 +164,12 @@ jobs:
       - name: Falsify — agents validator catches a missing effort field
         run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-effort-missing --min 1 --expect-failure "missing or empty required frontmatter field \`effort\`" --expect-problems 1
 
+      - name: Falsify — an agent with no maxTurns backstop must fail
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-maxturns --min 1 --expect-failure "missing required frontmatter field \`maxTurns\`" --expect-problems 1
+
+      - name: Falsify — a too-tight maxTurns must fail
+        run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent-maxturns-tight --min 1 --expect-failure "must be an integer >= 40" --expect-problems 1
+
       - name: Falsify — skills validator catches a bad skill
         run: node scripts/ci/validate-skills.js --root tests/fixtures/ci/bad-skill --min 1 --expect-failure "argument-hint" --expect-problems 6
 

@@ -4,7 +4,7 @@ description: Run typecheck, tests, and build to verify code quality and catch er
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: sonnet
 effort: low
-maxTurns: 60
+maxTurns: 2
 ---
 
 # Build Runner

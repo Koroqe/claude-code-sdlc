@@ -4,6 +4,7 @@ description: Review architecture decisions, validate module boundaries, design d
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Architecture Reviewer

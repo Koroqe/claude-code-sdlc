@@ -31,6 +31,14 @@ const VALID_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable', 'fast',
 const EXPLICIT_MODEL_ID = /^claude-[a-z0-9.-]+$/;
 const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high']);
 const REQUIRED_FIELDS = ['name', 'description', 'tools', 'model', 'effort'];
+// A runaway agent is bounded by nothing else in this harness: retry budgets are
+// per-slice and per-gate, not per-agent. Measured on this repo's own 85-record
+// wave corpus, a subagent uses a median of 19 tool calls, p90 53, max 81 — so a
+// backstop only earns its place well ABOVE that, where it can only ever catch a
+// pathological loop. Measured 2026-08-24: maxTurns IS honoured, and a value set
+// too LOW is its own failure mode — a bounded agent returns a confident preamble
+// having done no work at all, which reads like progress. Generous, not tight.
+const MIN_SANE_MAX_TURNS = 40;
 
 core.run('validate-agents', (v, args) => {
   const dir = path.join(args.root, 'agents');
@@ -82,6 +90,15 @@ core.run('validate-agents', (v, args) => {
     }
 
     const effort = parsed.data.effort;
+    const maxTurns = parsed.data.maxTurns;
+    if (maxTurns === undefined || maxTurns === null || maxTurns === '') {
+      v.error(rel, 'missing required frontmatter field `maxTurns` — every agent needs a runaway backstop');
+    } else if (!/^\d+$/.test(String(maxTurns).trim()) ||
+               Number(String(maxTurns).trim()) < MIN_SANE_MAX_TURNS) {
+      v.error(rel, '`maxTurns` must be an integer >= ' + MIN_SANE_MAX_TURNS +
+        ' (a tight bound makes an agent return a preamble having done no work — measured); got ' + maxTurns);
+    }
+
     if (!VALID_EFFORT_LEVELS.has(effort)) {
       v.error(
         rel,

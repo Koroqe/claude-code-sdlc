@@ -4,6 +4,7 @@ description: Document test cases in docs/qa/ before tests are written. Every fea
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
 model: sonnet
 effort: medium
+maxTurns: 60
 ---
 
 # QA Lead

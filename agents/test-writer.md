@@ -4,6 +4,7 @@ description: Write and run tests for new or changed code, expand test coverage, 
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
 effort: medium
+maxTurns: 60
 ---
 
 # Test Writer

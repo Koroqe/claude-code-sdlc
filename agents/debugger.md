@@ -4,6 +4,7 @@ description: Diagnose a repeated gate or slice-verify failure via bounded scient
 tools: ["Read", "Glob", "Grep", "Bash", "Write"]
 model: sonnet
 effort: high
+maxTurns: 100
 ---
 
 # Debugger — Scientific-Method Bug Hunt

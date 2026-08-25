@@ -75,7 +75,7 @@ set -euo pipefail
 # class of drift this feature exists to close (PRD Section 10.1).
 # ----------------------------------------------------------------------------
 
-VERSION="4.6.0"
+VERSION="4.7.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 REPO_SLUG="Koroqe/claude-code-sdlc"
 PLUGIN_NAME="claude-code-sdlc"

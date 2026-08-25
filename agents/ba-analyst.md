@@ -4,6 +4,7 @@ description: Analyze features and document use cases with all scenarios for deve
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
 model: sonnet
 effort: medium
+maxTurns: 60
 ---
 
 # Business Analyst

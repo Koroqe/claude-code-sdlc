@@ -4,6 +4,7 @@ description: Audit code for security vulnerabilities, check for leaked secrets, 
 tools: ["Read", "Glob", "Grep"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Security Auditor

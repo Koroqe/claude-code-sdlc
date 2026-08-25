@@ -4,6 +4,7 @@ description: Review code changes for quality, security, architecture compliance,
 tools: ["Read", "Glob", "Grep", "Bash"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # Code Reviewer

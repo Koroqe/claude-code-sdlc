@@ -4,6 +4,7 @@ description: Adversarially critique an implementation plan before implementation
 tools: ["Read", "Glob", "Grep"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Plan Critic

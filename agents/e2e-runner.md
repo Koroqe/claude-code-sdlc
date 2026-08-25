@@ -4,6 +4,7 @@ description: Write and run end-to-end tests that verify complete user flows acro
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # QA Engineer — E2E Test Runner

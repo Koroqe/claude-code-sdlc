@@ -4,6 +4,7 @@ description: Update project documentation after code changes, keep docs accurate
 tools: ["Read", "Glob", "Grep", "Edit", "Write"]
 model: sonnet
 effort: low
+maxTurns: 60
 ---
 
 # Documentation Updater

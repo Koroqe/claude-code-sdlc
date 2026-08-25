@@ -4,6 +4,7 @@ description: Goal-backward integration verification — checks that features are
 tools: ["Read", "Glob", "Grep", "Write"]
 model: sonnet
 effort: high
+maxTurns: 100
 ---
 
 # Verifier — Goal-Backward Integration Check

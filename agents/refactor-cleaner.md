@@ -4,6 +4,7 @@ description: Refactor code for clarity, reduce duplication, improve type safety,
 tools: ["Read", "Glob", "Grep", "Edit", "Write", "Bash"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # Refactor & Cleaner

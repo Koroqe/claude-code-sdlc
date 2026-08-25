@@ -4,6 +4,7 @@ description: Seeded bad fixture — the effort level is not one of low, medium, 
 tools: ["Read"]
 model: sonnet
 effort: extreme
+maxTurns: 60
 ---
 
 # Seeded Bad Agent Fixture — Invalid Effort Level
