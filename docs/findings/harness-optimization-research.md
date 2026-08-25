@@ -180,3 +180,85 @@ Recorded because they were beliefs before, and are evidence now:
   you own the history; Claude Code owns compaction here. Also worth knowing before anyone sells it as
   a quality win: measured at **200 vs 203** resolved and **+$40** — it buys bounded latency and
   per-turn cost, not accuracy **[M]**.
+
+
+---
+
+## 9. Second round — three loops, implemented and verified (2026-08-26, shipped as 4.7.0)
+
+Each item below was queued in §4 with measured backing. What changed, and what verified it.
+
+### Loop 6 — discriminating evidence (queue item 1)
+
+**Built.** The done-condition was "the tests pass", which the evidence says is not enough. Now:
+`agents/test-writer.md` gained an `## Output Format` requiring the red run (command, pre-change
+result, what failed); `skills/implement-slice/SKILL.md` requires that run *before* implementation and
+persists `Slice <N> red-phase:` next to the existing attempts counter; `agents/verifier.md` Level 4
+criterion (a) now distinguishes a test with recorded discriminating evidence from one that merely
+exists, and treats an **undeclared** absence as a Level 4 gap.
+
+**The exemption is the honest part.** A green first run is legitimate — the behaviour may already
+exist and the slice characterizes it. What is forbidden is silence. This repo's own history is the
+motivating case: two slices of the stale-install feature went green with no red phase and that was
+accepted without comment at the time.
+
+**Verified by** `scripts/ci/validate-red-phase-contract.js` — three assertions across the three files,
+plus a seeded fixture (`tests/fixtures/ci/red-phase-contract/bad-reverted-step2`) that reverts Step 2
+to the old wording and must fail with **exactly 3** problems. The contract spans three files, so
+deleting any one leaves the other two reading fine while the guarantee is gone; that is precisely
+what the validator exists to catch.
+
+### Loop 7 — runaway backstops (queue item 3)
+
+**Measured first, and the measurement changed the design.** `maxTurns` in agent frontmatter is
+genuinely honoured (probed via `--agents` with `maxTurns: 1`: the subagent made exactly one tool call
+and stopped). But note *how* it failed — it returned a confident preamble, "I'll read the files. Let
+me start by locating them," having done **no work at all**. A bound that is too tight does not
+produce a visible error; it produces something that reads like progress. That is the same shape as
+the eval's `maxTurns` trap in §6.
+
+**So the values are backstops, not budgets,** sized from this repo's own 85-record wave corpus:
+median **19** tool calls per subagent, p90 **53**, max **81**. Heavy explorers (planner, plan-critic,
+verifier, architect, security-auditor, debugger, code-reviewer, e2e-runner, refactor-cleaner) get
+**100**; producers get **60**. Both sit above the observed maximum, so they can only ever catch a
+pathological loop.
+
+**Verified by** `validate-agents.js`, extended to require `maxTurns` and reject anything under 40,
+with two seeded fixtures: one agent with no backstop, one with a too-tight bound, each pinned to
+exactly 1 problem. A future agent cannot ship unbounded.
+
+### Loop 8 — step repetition (queue item 2)
+
+**Built without spending the last hook slot.** The ceiling is enforced by a handler-*file* count, so
+detection lives in `hooks/lib/repetition.js` — free against the budget — and is consumed by
+`subagent:stop:wave-record`, which already parses each subagent transcript. It emits
+`{distinct, repeated, maxRepeat, longestRun}` into the record `develop-feature` step 1a already
+opens, and step 1a now reads it as check (d). `stop:gate-evidence` was deliberately **not** used as
+the host: its tests pin "no systemMessage without a verdict", and diluting that narrow contract to
+carry an advisory would have cost more than it bought.
+
+**The craft is the normalisation, not the counting.** Compare raw text and a real loop never matches
+(temp paths and ids differ every time); normalise too hard and honest iteration looks like a loop.
+The normaliser strips only what cannot carry intent — temp paths, hex ids, timestamps, whitespace,
+and JSON-escaped newlines, which `\s+` alone does not see.
+
+**Verified by** `tests/hooks/test-repetition.js` (23 checks) where every assertion is paired: the
+detector must FIRE on a loop and STAY QUIET on four distinct calls, and normalisation must merge
+incidental differences while keeping different commands, tools and files distinct. Plus an
+end-to-end run of the real hook against a seeded looping transcript, which produced
+`longestRun: 4` in the record.
+
+**Also measured:** `longestRun` (consecutive identical calls) is the sharper signal than raw repeat
+count — revisiting a file later is normal work; calling it four times in a row is not. Both are
+recorded; the guidance keys on the run.
+
+### Still queued, deliberately not done
+
+**Context-tax reduction** (queue item 5) is unchanged and still gated. The section map produced this
+round found ~3.2k tokens of pure rationale in `merge-ready` and ~2.6k in `develop-feature` that could
+move with no gating rule removed. It was **not** cut, for a reason worth recording: every eval case
+currently grades Triage only. Cutting merge-ready prose would be a change the instrument cannot see —
+and this document's §6 exists because two instrument bugs already produced confident false results.
+The order stands: extend eval coverage to the gate surfaces first, then cut, then re-measure.
+
+**Confidence signal at plan time** (queue item 4) also remains unbuilt.

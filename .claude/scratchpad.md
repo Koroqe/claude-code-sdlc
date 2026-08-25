@@ -60,16 +60,20 @@ Project-level notes carried over:
   cases pass**. Grading logic unit-tested free in the sweep (30 checks, 8 seeded-broken). Read
   `evals/README.md` before believing a failure — two instrument bugs produced confident false results
   before the first true baseline.
+- **Round 2 shipped (2026-08-26, 4.7.0):** (1) discriminating-evidence contract — a test must be
+  observed FAILING before the change, or the green first run must be DECLARED; pinned by
+  `validate-red-phase-contract.js` + seeded fixture (3 problems). (2) `maxTurns` backstops on all 15
+  agents (100 heavy / 60 producers), sized from the 85-record corpus (median 19, p90 53, max 81);
+  `validate-agents` now requires it and rejects < 40 — measured: a too-tight bound yields a confident
+  preamble with zero work done. (3) step-repetition detection in `hooks/lib/repetition.js` (free
+  against the 12-handler ceiling), surfaced in wave records and read by develop-feature step 1a as
+  check (d); 23 paired unit checks + end-to-end hook run.
 - **Evidence-ranked improvement queue** (all measured; `docs/findings/harness-optimization-research.md`):
-  (1) red-phase / discriminating-evidence done-condition — a test must be shown to FAIL before the fix
-  (23.8% of agent patches carry no discriminating evidence; 31% pass tests without resolving);
-  (2) stall detection — step repetition is MAST's largest single failure mode at 17.14%; costs a hook
-  id and we are at 12/12 — so it must FOLD INTO an existing id (stop:gate-evidence already
-  reads the transcript and has a non-blocking systemMessage channel), not add one;
-  (3) `maxTurns` on agent frontmatter — supported, set nowhere, bounds runaway directly;
-  (4) confidence signal at plan time (Devin: green ≈ 2× merged-PR likelihood vs red);
-  (5) context-tax reduction — ~93k tok of skill text per 8-slice feature — gated behind the eval,
-  because no study measures relocating MANDATORY gating rules and Triage Steps 1-7 are exactly that.
+  (4) confidence signal at plan time (Devin: green ≈ 2× merged-PR likelihood vs red) — NOT built;
+  (5) context-tax reduction — NOT built, still gated: the section map found ~3.2k tok of movable
+  rationale in merge-ready and ~2.6k in develop-feature, but EVERY eval case grades Triage only, so
+  a cut there is invisible to the instrument (~93k tok of skill text per 8-slice feature is the prize).
+  Extend eval coverage to the gate surfaces FIRST, then cut, then re-measure with `claude plugin details`.
 - **Documented anti-patterns — do not "improve" into these:** multi-agent debate on the GENERATION
   path (−1.6 to −15.5pp), full-file context (−5.3pp), raw iterative search (worse than no search at
   all), repository-overview prose in instruction files (+20% cost, no success gain).
