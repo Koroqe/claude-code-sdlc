@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-25
+
+### Harness self-correction, round two — 23:07 UTC
+**Summary:** Three improvements drawn from published research on what makes AI coding agents fail: work is no longer called done just because tests pass, every specialist now has a safety limit that stops it looping forever, and a specialist that gets stuck repeating itself is now visible instead of silent.
+**Details:** Tests that pass are not proof on their own — published measurements show roughly a third of agent runs pass their own tests without actually fixing anything. Work now has to show a test failing first, or say plainly why it could not. Each specialist also gained a generous ceiling on how long it may keep working, sized from this project's own recorded history so it only ever catches a genuine runaway. And when a specialist repeats the same step over and over, that now shows up in the record its supervisor reads. Version 4.7.0.
+**Technical details:** Three coordinated changes, each pinned by a validator with a deliberately-broken fixture. (1) A discriminating-evidence contract spanning the test author, the slice workflow and the verifier: a red run must be observed before implementation and recorded per slice, and an undeclared absence is now a verification gap rather than a silent pass. (2) `maxTurns` backstops on all fifteen agents, sized from an 85-record corpus (median 19 tool calls, p90 53, max 81) — measured first, because a bound set too tight makes an agent return a confident preamble having done no work. (3) Step-repetition detection, the largest single measured multi-agent failure mode at 17.14%, added as a library module so it costs nothing against the hook ceiling, surfaced in wave records and read during wave collection. Process and verification changes only — no screens, endpoints, schema or deployment impact.
+
 ## 2026-08-20
 
 ### Harness self-correction after the first live run — 21:28 UTC
