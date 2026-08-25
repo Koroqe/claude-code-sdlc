@@ -1,16 +1,16 @@
 # Scratchpad
 
-## Feature: post-live-run-reconciliation
+## Feature: none active
 
-## Tier: full
+## Tier: n/a
 
-## Branch: feat/post-live-run-reconciliation
+## Branch: main
 
-## Status: implementing wave 2 slice 2/8
+## Status: idle
 
-## Version: 4.6.0 — bumped in Slice 1's commit; /merge-ready Release step: bump already done, do NOT bump again (a re-bump would burn 4.7.0 on an empty delta)
+## Version: 4.6.0 shipped and delivered (user scope + both live project scopes). Next bump is a real one.
 
-## Plan
+## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
 
 Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-post-live-run-reconciliation.md`
 Feature: PRD §13. Docs: docs/use-cases/post-live-run-reconciliation_use_cases.md (73 scenarios), docs/qa/post-live-run-reconciliation_test_cases.md (99 TCs). Architecture: FAIL→delta-PASS. Critic: 3 loops (36 findings), all BLOCKER/WARNING fixed; two disputes settled by live measurement (docs/findings/remeasurement-2.1.237.md §5). Docs committed: 91d7b3f.
@@ -36,12 +36,12 @@ Post-wave orchestrator sweep: 16/16 validators + 20/20 suites green.
 - [x] Slice 7: merge-ready SKILL compose-then-orchestrator-writes + sanctioned release-push override — a35fe27. attempts 1/3, errored 0.
 Post-wave orchestrator sweep: 16/16 validators + 20/20 suites green (sweep needed extended timeout — suites grew).
 
-## Status: implementing wave 4 slice 8/8
+(historical: was "implementing wave 4 slice 8/8" at this point)
 
 ### Wave 4 [COMPLETE]
 - [x] Slice 8: develop-feature + src/claude.md + README stale-text reconciliation — all greps pre-verified unique, parity validator green after each edit, full sweep 16/16 + 20/20 — b8cdf9b. attempts 0/3, no deviations.
 
-## Status: complete
+(historical: feature reached "complete" here)
 
 Gates: 9/9 — MERGE READY. Gate 2 PASS ×2 (main diff + replan commits); Gate 6 VERIFIED passed:true gaps:[] on attempt 2 (freshness confirmed 2026-08-20 21:24); Gate 8 N/A (no UI). Finalization: changelog 21:28 UTC written by orchestrator from doc-updater's composed text (the contract this feature shipped, used on itself). Instincts: counter 1→2, new capture manual-verification-must-be-persisted (Gate Auto-Fix from Gate 6), git-guard-chain-blindness re-stamped; no elevation (all general at 1 occurrence), no decay (Prevention Rules empty), no retirement.
 
@@ -64,7 +64,8 @@ Project-level notes carried over:
   (1) red-phase / discriminating-evidence done-condition — a test must be shown to FAIL before the fix
   (23.8% of agent patches carry no discriminating evidence; 31% pass tests without resolving);
   (2) stall detection — step repetition is MAST's largest single failure mode at 17.14%; costs a hook
-  id and we are at 12/12, so it requires retiring one;
+  id and we are at 12/12 — so it must FOLD INTO an existing id (stop:gate-evidence already
+  reads the transcript and has a non-blocking systemMessage channel), not add one;
   (3) `maxTurns` on agent frontmatter — supported, set nowhere, bounds runaway directly;
   (4) confidence signal at plan time (Devin: green ≈ 2× merged-PR likelihood vs red);
   (5) context-tax reduction — ~93k tok of skill text per 8-slice feature — gated behind the eval,
@@ -73,8 +74,6 @@ Project-level notes carried over:
   path (−1.6 to −15.5pp), full-file context (−5.3pp), raw iterative search (worse than no search at
   all), repository-overview prose in instruction files (+20% cost, no success gain).
 - **Compaction schema still uncaptured.** `pre:compact:probe` has never fired (re-confirmed unknown on 2.1.237).
-- **Re-measurement follow-ups (docs/findings/remeasurement-2.1.237.md):** (1) install.sh still prints the obsolete "ONE STEP LEFT — required, per project" banner — sensitive path, needs a pipeline run to remove; (2) SubagentStop now carries agent_type → stop:gate-evidence per-gate attribution + wave-record agent-type keying + develop-feature step-1a text update, one coordinated feature.
-- **Live-run follow-ups (docs/findings/live-pipeline-run-2026-08-20.md):** isolation-guard vs merge-ready changelog delegation contradiction; read-guard Write-then-Edit false positive; git-guard vs release-procedure push; .claude/debug/ not gitignored; develop-feature stale "land in a later slice" prose; step-1a errored-tool-results tolerance.
 
 ## Environment — changed 2026-08-20, read this before trusting old measurements
 

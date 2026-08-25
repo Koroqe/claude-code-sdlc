@@ -80,21 +80,9 @@ Delegate to `test-writer` agent:
 - Reference use-case scenarios from `docs/use-cases/` for this slice (for a `quick`-tier run, use the
   slice's own `Use cases:` field if present, since no use-cases file exists by design)
 - Write tests for this slice's behavior using the project's test framework
-- **Run them and capture the RED result before writing any implementation.** `test-writer` reports
-  the command, the exit status and which assertions failed, per its Output Format. This run is the
-  point of TDD here: a test never observed to fail is not evidence that the change did anything.
-  Measured basis — 23.8% of agent patches carry no bug-discriminating evidence at all, and 31% of
-  trajectories pass their local tests without actually resolving the task
-  (`docs/findings/harness-optimization-research.md` §3).
-- **If the tests pass on that first run, that is a legitimate outcome — but it must be declared,
-  never silent.** Two honest cases: the behaviour already exists and the slice *characterizes* it,
-  or the test does not reach the new path and is therefore wrong. Say which. The forbidden state is
-  a green suite whose greenness nobody can account for.
+- Tests should FAIL initially (no implementation yet)
 
 ### 3. Implement Code
-- **Do not start until Step 2's red-phase result is in hand** (a failing run, or a declared reason
-  the tests passed). Implementing first and testing after produces a green suite that cannot
-  distinguish "fixed it" from "never tested it".
 - Before editing each file: re-read it from disk (do NOT rely on earlier in-context reads — context compaction may have made them stale)
 - Make minimal changes to pass the tests
 - Follow the project structure as defined in CLAUDE.md
@@ -110,18 +98,6 @@ Delegate to `test-writer` agent:
 **If the slice has a `Verify:` field with "Manual verification:":** report the check instructions in the output so the developer can verify manually.
 
 **Fallback (no structured fields):** delegate to `build-runner` agent to run the project's typecheck, test, and build commands (from CLAUDE.md).
-
-**Persisted red-phase record.** Alongside the attempts counter below, write one line per slice into
-`.claude/scratchpad.md` via **`Edit`, never a whole-file `Write`**:
-
-```
-Slice <N> red-phase: <command> → FAILED (<n> assertions) | NONE — <declared reason>
-```
-
-Same discipline as the attempts counter: it is the durable half of a fact that otherwise lives only
-in a subagent's reply and dies with its context. On the wave-subagent path `.claude/scratchpad.md`
-is `PROTECTED`, so the subagent reports the red-phase line and the **orchestrator** writes it when
-folding the wave, exactly as it already does for `(category, count)` deviation pairs.
 
 **Persisted build-runner attempts counter and `debugger` auto-invocation (FR-8.5, C8/FR-8.10).** The 3-retry budget `src/rules/error-recovery.md` already governs is not tracked in conversation memory alone here either — mirroring `/merge-ready`'s `Gate 6 attempts: N/3` precedent exactly:
 
@@ -238,7 +214,6 @@ If either condition holds, do NOTHING here — `merge-ready` writes the single c
 - [files changed with brief description]
 
 ### Verification
-- Red phase: [command] → FAILED ([n] assertions) / NONE — [declared reason]
 - Typecheck: PASS/FAIL
 - Tests: PASS/FAIL (X passed)
 - Build: PASS/FAIL

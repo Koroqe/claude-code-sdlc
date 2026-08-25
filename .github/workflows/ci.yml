@@ -110,6 +110,9 @@ jobs:
       - name: Validate instinct discipline
         run: node scripts/ci/validate-instinct-discipline.js
 
+      - name: Validate red-phase (discriminating-evidence) contract
+        run: node scripts/ci/validate-red-phase-contract.js
+
       # The plugin manifest is what `claude plugin install` actually parses.
       # v4.0.0 shipped `"agents": "./agents/"`, which that schema rejects, so
       # the plugin was uninstallable for every user while CI stayed green —
@@ -147,6 +150,9 @@ jobs:
       # was written to catch.
       - name: Falsify — agents validator catches a bad agent
         run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/bad-agent --min 1 --expect-failure "frontmatter fence" --expect-problems 2
+
+      - name: Falsify — red-phase contract reverted must fail
+        run: node scripts/ci/validate-red-phase-contract.js --root tests/fixtures/ci/red-phase-contract/bad-reverted-step2 --expect-failure "red-phase" --expect-problems 3
 
       # PRD Section 10, FR-11: `effort:` became a required frontmatter field
       # in the same commit that added it to all 14 agents. These two fixtures
