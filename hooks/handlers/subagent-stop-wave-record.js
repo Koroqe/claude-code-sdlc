@@ -44,6 +44,7 @@ const path = require('path');
 
 const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT = 2000;
+const MAX_TOOL_CALLS = 400;
 // ':' is admitted so plugin-prefixed types ("sdlc:code-reviewer") survive the
 // bound. safeId strips it for the FILENAME, so a colon-bearing agent_id
 // legitimately differs between filename and record body — do not align them.
@@ -60,6 +61,7 @@ function contentBlocks(record) {
 /** Pull the facts a wave cares about out of a subagent transcript. */
 function summarise(text) {
   const commands = [];
+  const toolCalls = [];
   const filesWritten = [];
   const toolCounts = {};
   let finalText = '';
@@ -82,6 +84,7 @@ function summarise(text) {
         const name = String(block.name || 'unknown');
         toolCounts[name] = (toolCounts[name] || 0) + 1;
         const input = block.input || {};
+        if (toolCalls.length < MAX_TOOL_CALLS) toolCalls.push({ name, input });
         if (typeof input.command === 'string') {
           commands.push(input.command.slice(0, 400));
         }
@@ -97,9 +100,20 @@ function summarise(text) {
     }
   }
 
+  // Advisory repetition signal — never a decision, just a fact the orchestrator
+  // already has the record open to read. Step repetition is the largest single
+  // measured multi-agent failure mode (17.14%, MAST).
+  let repetition = null;
+  try {
+    repetition = require('../lib/repetition.js').analyse(toolCalls);
+  } catch (err) {
+    repetition = null;   // a broken lib must not cost us the whole record
+  }
+
   return {
     commands,
     files_written: filesWritten,
+    repetition,
     tool_counts: toolCounts,
     tool_results: totalResults,
     tool_results_errored: erroredResults,
