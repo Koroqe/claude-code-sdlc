@@ -1,7 +1,7 @@
 {
   "name": "claude-code-sdlc",
-  "version": "4.7.0",
-  "description": "Turn Claude Code into an autonomous software development team — 15 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
+  "version": "4.8.0",
+  "description": "Turn Claude Code into an autonomous software development team \u2014 15 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
   "author": {
     "name": "Aleksei Korobeinikov",
     "url": "https://github.com/Koroqe"

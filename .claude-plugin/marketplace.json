@@ -5,17 +5,24 @@
     "url": "https://github.com/Koroqe"
   },
   "metadata": {
-    "description": "The Claude Code SDLC harness — an autonomous, documentation-first software development pipeline for Claude Code."
+    "description": "The Claude Code SDLC harness \u2014 an autonomous, documentation-first software development pipeline for Claude Code."
   },
   "plugins": [
     {
       "name": "claude-code-sdlc",
       "source": "./",
-      "description": "Turn Claude Code into an autonomous software development team — 15 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
-      "version": "4.7.0",
+      "description": "Turn Claude Code into an autonomous software development team \u2014 15 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
+      "version": "4.8.0",
       "license": "MIT",
       "category": "workflow",
-      "tags": ["sdlc", "agents", "tdd", "documentation", "quality-gates", "autonomous"]
+      "tags": [
+        "sdlc",
+        "agents",
+        "tdd",
+        "documentation",
+        "quality-gates",
+        "autonomous"
+      ]
     }
   ]
 }
