@@ -6,12 +6,17 @@
 
 ## Branch: feat/eval-multirun
 
-## Status: complete on branch — 22 commits, sweep green (18 validators + 26 suites), eval 15/15,
-4.8.0 bumped and changelogged. NOT merged, NOT pushed, NOT released — awaiting go-ahead.
+## Status: RELEASED — 4.8.0 merged to main (a5f114f), pushed, tagged v4.8.0, metadata synced.
+Delivery confirmed: user scope 4.7.0 -> 4.8.0, this repo's project scope 4.6.0 -> 4.8.0.
 
-## Version: 4.7.0 shipped and delivered. **4.8.0 bumped but NOT released** — the merge-ready cut is a
-delivered-file change, so validate-release-readiness demanded the bump before merge. Release it or the
-cut reaches nobody.
+## Version: **4.8.0 shipped and delivery-confirmed** (2026-08-26 01:15 UTC). Sweep 18 validators +
+26 suites green on main; eval 15/15.
+
+**Stale project-scope installs remain, NOT touched (other projects, outside working dirs):**
+`claude plugin list` shows several project-scope entries still on **4.0.0** — a version that does not
+load at all (the `plugin.json` "hooks" defect fixed in 4.4.0), so those projects are running with no
+hooks and no warning. `/Users/aleksei/Documents/Projects.nosync/Restaba` is the one still on disk.
+Fix per project: `cd <project> && claude plugin update claude-code-sdlc@claude-code-sdlc --scope project`.
 
 ## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
 
