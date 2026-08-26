@@ -64,15 +64,15 @@ different states and MUST NOT be conflated. `N/A` means the gate ran its applica
 nothing in scope to verify; `SKIPPED (tier: quick)` means the gate did not run at all, because the Tier
 Check preamble excluded it before it ever started.
 
-**`Gates: N/9` progress line.** After each gate reaches a terminal state (PASS, FAIL, or
-`SKIPPED (tier: quick)`), write or refresh a `Gates: N/9` line in `.claude/scratchpad.md` — `N` is the
-count of gates that have reached a terminal state so far — following the existing `Gate 6 attempts: N/3`
-precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`** (Write convention above).
-
 **Write convention — applies to every file this skill mutates.** Mutate `.claude/scratchpad.md`,
 `.claude/instincts.md` and `CHANGELOG.md` with `Edit`, never a whole-file `Write`: the shipped
 `pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite. Creating a file that
 does not exist yet is the sole exception — `Write` it once, `Edit` it thereafter.
+
+**`Gates: N/9` progress line.** After each gate reaches a terminal state (PASS, FAIL, or
+`SKIPPED (tier: quick)`), write or refresh a `Gates: N/9` line in `.claude/scratchpad.md` — `N` is the
+count of gates that have reached a terminal state so far — following the existing `Gate 6 attempts: N/3`
+precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`** (Write convention above).
 
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
