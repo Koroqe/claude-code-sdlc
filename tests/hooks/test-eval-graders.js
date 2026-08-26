@@ -235,4 +235,35 @@ c.ok('diagnose: silent when no write of that path was even attempted',
   diagnose({ type: 'file_written', pattern: 'docs/PRD\\.md' },
     parseStream(stream([text('nothing')])), []) === null);
 
+// --- every case must be able to FAIL for the right reason -----------------
+// Twice now a negative grader has passed because the environment removed the
+// capability rather than because the harness declined to use it: `file_written:
+// not_contains` when headless `-p` denied the write, and `tool_used max: 0` on
+// Agent when headless `-p` granted no Agent tool. A case built only from
+// negatives cannot tell compliance from a degraded sandbox. Each therefore needs
+// at least one POSITIVE assertion, which fails loudly when the run did nothing.
+const fsx = require('fs');
+const pathx = require('path');
+const casesRoot = pathx.join(__dirname, '..', '..', 'evals', 'cases');
+if (fsx.existsSync(casesRoot)) {
+  const isNegative = (g) =>
+    g.match === 'not_contains' || (g.type === 'tool_used' && g.max === 0) || g.type === 'no_edits';
+  const positives = (gs) => gs.reduce((n, g) => {
+    if (g.type === 'any_of') return n + positives(g.graders || []);
+    return n + (isNegative(g) ? 0 : 1);
+  }, 0);
+  let audited = 0;
+  for (const name of fsx.readdirSync(casesRoot)) {
+    const f = pathx.join(casesRoot, name, 'case.json');
+    if (!fsx.existsSync(f)) continue;
+    const spec = JSON.parse(fsx.readFileSync(f, 'utf8'));
+    audited += 1;
+    c.ok('case ' + name + ' has a positive assertion (cannot pass on a dead run)',
+      positives(spec.graders || []) >= 1);
+    c.ok('case ' + name + ' declares at least one grader',
+      Array.isArray(spec.graders) && spec.graders.length > 0);
+  }
+  c.ok('SEEDED BROKEN — the case audit actually examined cases', audited >= 4);
+}
+
 c.finish();

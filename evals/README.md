@@ -113,6 +113,19 @@ harness was right every time. That is the calibration to carry into reading any 
    (`skill-tracer-gate-refuses`, `triage-fast-copy-fix`) therefore also assert the forbidden write was
    never *attempted*, via `tool_used` with `tool: "Write|Edit"` and `max: 0`.
 
+### Every case needs a positive assertion
+
+Both of the false positives above have the same root: a **negative** grader
+(`not_contains`, `max: 0`, `no_edits`) passes when the environment removed the
+capability, not only when the harness declined to use it. A case built entirely
+from negatives cannot distinguish compliance from a dead run — and it fails in the
+reassuring direction, which is worse than failing loudly.
+
+So every case carries at least one **positive** assertion that a degraded run
+cannot satisfy, and that rule is mechanized: `tests/hooks/test-eval-graders.js`
+audits `evals/cases/*/case.json` on every sweep and fails a case that is all
+negatives.
+
 All five traps share a shape worth remembering: the harness under test was fine; the *instrument* was
 broken, and it failed in the direction that looks like a real finding.
 
