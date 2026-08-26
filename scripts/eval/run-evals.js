@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 const { parseStream, gradeCase } = require('./graders.js');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -226,6 +227,8 @@ function main() {
   for (const spec of cases) {
     process.stdout.write('· ' + spec.name + ' … ');
     const res = runCaseRepeated(spec);
+    res.graderHash = crypto.createHash('sha1')
+      .update(JSON.stringify(spec.graders || [])).digest('hex').slice(0, 12);
     results.push(res);
     process.stdout.write((res.pass ? 'PASS' : 'FAIL') + '  ' +
       res.passedRuns + '/' + res.runs + ' run(s)' +
@@ -250,6 +253,11 @@ function main() {
     ranAt: stamp,
     cases: results.map((r) => ({
       name: r.name, pass: r.pass, runs: r.runs, passedRuns: r.passedRuns,
+      // Fingerprint of the graders this result was produced under. Nine grader
+      // defects have been corrected in this suite, so a pass rate averaged across
+      // grader versions measures the instrument's history, not the harness's
+      // reliability. history.js groups on this and refuses to mix versions.
+      graderHash: r.graderHash,
       erroredRuns: r.erroredRuns,
       elapsedMs: r.elapsedMs,
       graders: r.graders, transcriptChars: r.transcriptChars,
