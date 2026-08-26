@@ -179,4 +179,29 @@ c.ok('tool alternation: does not match a tool whose name merely contains the pat
 c.ok('tool alternation: a malformed pattern fails loudly rather than matching nothing',
   !runGrader({ type: 'tool_used', tool: '(' , min: 1 }, wroteViaWrite, []).pass);
 
+// --- the tier statement survives markdown emphasis --------------------------
+// Measured 2026-08-26: a fully compliant run wrote
+//   **Step 7 — tier: `full` — FR-1.3(a), new API route/endpoint**
+// and `tier:\\s*full` did not match, because `\\s` does not span a backtick. The
+// run was scored as never having stated a tier. The same pattern backs the
+// NEGATIVE grader, where the miss is worse: `tier: \`quick\`` would have slipped
+// past "did not take a cheap tier" and passed vacuously.
+const TIER_FULL = { name: 'tier is full', type: 'regex', pattern: 'tier:[`*_\\s]*full' };
+const TIER_CHEAP = { name: 'did not take a cheap tier', type: 'regex',
+  pattern: 'tier:[`*_\\s]*(fast|quick)', match: 'not_contains' };
+const realWorld = parseStream(stream([text('**Step 7 — tier: `full` — FR-1.3(a), new API route/endpoint**')]));
+c.ok('tier regex: matches the real transcript that a backtick had defeated',
+  runGrader(TIER_FULL, realWorld, []).pass);
+c.ok('tier regex: still matches the plain form',
+  runGrader(TIER_FULL, parseStream(stream([text('tier: full — FR-1.3(a)')])), []).pass);
+c.ok('tier regex: matches bold and underscore emphasis',
+  runGrader(TIER_FULL, parseStream(stream([text('tier: **full**')])), []).pass &&
+  runGrader(TIER_FULL, parseStream(stream([text('tier: _full_')])), []).pass);
+c.ok('tier regex: SEEDED BROKEN — a run that never states a tier still fails',
+  !runGrader(TIER_FULL, parseStream(stream([text('I will just fix it directly.')])), []).pass);
+c.ok('tier regex: SEEDED BROKEN — an emphasised cheap tier no longer evades the negative grader',
+  !runGrader(TIER_CHEAP, parseStream(stream([text('tier: `quick` — small change')])), []).pass);
+c.ok('tier regex: the negative grader still passes on a genuinely full-tier run',
+  runGrader(TIER_CHEAP, realWorld, []).pass);
+
 c.finish();

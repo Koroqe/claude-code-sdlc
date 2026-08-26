@@ -61,6 +61,12 @@ from the rule:
   *which agents run*, so the grader now checks that instead.
 - `tool_used` with `max: 0` — the must-not-be-used idiom — was unsatisfiable, because `min` defaulted
   to 1 and the grader asked for "1..0". Two cases reported a confident 0/3 from this alone.
+- `tier:\s*full` did not match `` tier: `full` ``, because `\s` does not span a backtick. A run that
+  stated **Step 7 — tier: `full` — FR-1.3(a), new API route/endpoint** — fully compliant, correct
+  signal, correct routing — was scored as never having stated a tier at all. The same pattern backed
+  the *negative* grader, where the miss is worse: `` tier: `quick` `` would have slipped past "did not
+  take a cheap tier" and passed vacuously. Tier patterns now tolerate markdown emphasis
+  (`tier:[`*_\s]*full`), and the real transcript is pinned as a unit test.
 - `tool_used: Skill` on the full-tier case graded **one path to the rule instead of the rule**. The
   full-tier branch of `src/claude.md` mandates the Phase 1 *deliverables* (`docs/PRD.md`,
   `docs/use-cases/*`) and names the agents that produce them; it never mandates a literal skill
@@ -68,7 +74,7 @@ from the rule:
   signals and written both documents inline — it complied. Use `any_of` when a rule is satisfiable
   more than one legitimate way.
 
-Running tally: **eight false negatives from this suite, zero true findings from a grader bug.** The
+Running tally: **nine false negatives from this suite, zero true findings from a grader bug.** The
 harness was right every time. That is the calibration to carry into reading any failure here.
 
 ## Five measured traps, all of which produced false results before being fixed
@@ -87,11 +93,12 @@ harness was right every time. That is the calibration to carry into reading any 
    real cause was the `ETIMEDOUT` line underneath them. A killed run is now reported as
    `INCONCLUSIVE — run errored, not graded` and is never graded at all: it cannot pass, and it must
    not pretend to explain itself.
-4. **Headless `claude -p` has no Agent tool, so delegation cannot be measured here.** A run stated
-   plainly: *"This session forbids me from calling the Agent tool"*, and produced the full-tier
-   deliverables inline instead. There is no deny rule in `~/.claude/settings.json` — it is a property
-   of the non-interactive mode. Any grader that expects an agent to be spawned is measuring the
-   sandbox, not the harness. Grade the artifact the agent would have produced.
+4. **Headless `claude -p` grants the Agent tool inconsistently.** One run stated plainly *"This
+   session forbids me from calling the Agent tool"* and produced the full-tier deliverables inline;
+   a later run on the same case used `Agent` without trouble. There is no deny rule in
+   `~/.claude/settings.json` — availability simply varies per run. A grader that requires an agent to
+   be spawned is therefore measuring the sandbox on some runs and the harness on others, which is the
+   worst of both. Grade the artifact the agent would have produced.
 
 5. **Headless `-p` denies `Write` to the sandbox project on some runs**, and not on others. A run that
    took the documentation-first path correctly, calling `Write` on `docs/PRD.md` twice, produced no

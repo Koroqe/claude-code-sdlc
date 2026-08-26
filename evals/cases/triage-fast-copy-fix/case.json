@@ -10,7 +10,7 @@
     {
       "name": "protocol: stated a tier",
       "type": "regex",
-      "pattern": "tier:\\s*(fast|quick|full)"
+      "pattern": "tier:[`*_\\s]*(fast|quick|full)"
     },
     {
       "name": "protocol: stated the estimated file set",
@@ -20,12 +20,12 @@
     {
       "name": "correctness: tier is fast",
       "type": "regex",
-      "pattern": "tier:\\s*fast"
+      "pattern": "tier:[`*_\\s]*fast"
     },
     {
       "name": "correctness: did not over-escalate",
       "type": "regex",
-      "pattern": "tier:\\s*(quick|full)",
+      "pattern": "tier:[`*_\\s]*(quick|full)",
       "match": "not_contains"
     },
     {
