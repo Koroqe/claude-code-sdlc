@@ -55,6 +55,50 @@ const MARKETPLACE_SUBCOMMANDS = new Set(['add', 'remove', 'rm', 'list', 'update'
 // A piped installer has no controlling terminal, so it must not stop to ask.
 const NONINTERACTIVE = /(?:^|\s)--yes(?:\s|$)/;
 
+/**
+ * The README states how many validators and hook test files this repo ships.
+ * Those numbers are claims about the tree, and they drift every time a check is
+ * added -- silently, because nothing reads them. They have been corrected by
+ * hand at least twice (16/22 during a gate replan, 17/24 here). A number in the
+ * docs that nobody verifies is the same vacuity this validator exists to catch,
+ * one level up: documentation that describes a repo it no longer matches.
+ */
+function checkAssetCounts(v, root) {
+  const readme = path.join(root, 'README.md');
+  let text = null;
+  try { text = fs.readFileSync(readme, 'utf8'); } catch (err) { return; }
+
+  const count = (dir, prefix) => {
+    try {
+      return fs.readdirSync(path.join(root, dir))
+        .filter((n) => n.indexOf(prefix) === 0 && n.endsWith('.js')).length;
+    } catch (err) { return null; }
+  };
+
+  const claims = [
+    { re: /\*\*(\d+) CI validators\*\*/, actual: count('scripts/ci', 'validate-'), what: 'CI validators' },
+    { re: /\*\*(\d+) hook test files\*\*/, actual: count('tests/hooks', 'test-'), what: 'hook test files' },
+  ];
+
+  let asserted = 0;
+  for (const c of claims) {
+    const m = text.match(c.re);
+    if (!m) {
+      v.error('README.md', 'no "' + c.what + '" count found — the claim this check pins was reworded or removed; update the pattern rather than dropping the check');
+      continue;
+    }
+    if (c.actual === null) continue;
+    asserted += 1;
+    if (Number(m[1]) !== c.actual) {
+      v.error('README.md', 'claims ' + m[1] + ' ' + c.what + ', but the tree has ' + c.actual +
+        ' — correct the README (or the tree) so the documented count is true');
+    }
+  }
+  if (asserted === 0) {
+    v.error('README.md', 'anti-vacuity: no asset count was actually compared');
+  }
+}
+
 function fencedShell(text) {
   const blocks = [];
   const re = /```(bash|sh|shell|console)\n([\s\S]*?)```/g;
@@ -178,6 +222,8 @@ core.run('validate-doc-commands', (v, args) => {
       checkLocalPaths(v, root, rel, entry);
     }
   }
+
+  checkAssetCounts(v, root);
 
   const minimum = args.min === null ? 5 : args.min;
   v.requireMinimum(commands, minimum, 'documented shell commands in fenced blocks');
