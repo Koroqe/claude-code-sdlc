@@ -91,8 +91,15 @@ function runGrader(grader, parsed, filesWritten) {
         const hasMax = typeof grader.max === 'number';
         const min = typeof grader.min === 'number' ? grader.min : (hasMax ? 0 : 1);
         const max = hasMax ? grader.max : Infinity;
+        // `tool` is an anchored alternation, not a bare string: a rule about
+        // "do not write that file" has to cover Write AND Edit in one grader,
+        // because a run that is denied Write will often reach for Edit.
+        let toolRe = null;
+        try { toolRe = new RegExp('^(?:' + grader.tool + ')$'); } catch (err) {
+          return { name, pass: false, detail: 'bad tool pattern: ' + String(grader.tool) };
+        }
         const matches = parsed.toolUses.filter((t) => {
-          if (t.name !== grader.tool) return false;
+          if (!toolRe.test(t.name)) return false;
           if (!grader.input_match) return true;
           try {
             return new RegExp(grader.input_match, 'i').test(JSON.stringify(t.input));

@@ -33,6 +33,13 @@
       "type": "file_written",
       "pattern": "docs/use-cases|docs/qa",
       "match": "not_contains"
+    },
+    {
+      "name": "correctness: never ATTEMPTED full-tier docs (robust to a denied write)",
+      "type": "tool_used",
+      "tool": "Write|Edit",
+      "input_match": "docs/use-cases|docs/qa|docs/PRD\\.md",
+      "max": 0
     }
   ],
   "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist.",

@@ -100,6 +100,12 @@ harness was right every time. That is the calibration to carry into reading any 
    the sandbox permits a write is the environment's business; which path the harness steered the
    agent onto is the thing under test.
 
+   The same denial makes a `not_contains` effect grader pass **for the wrong reason**: the file is
+   absent because the sandbox blocked the write, not because the harness refused it. That is worse
+   than a false negative — it is a green that is not evidence. Both negative cases
+   (`skill-tracer-gate-refuses`, `triage-fast-copy-fix`) therefore also assert the forbidden write was
+   never *attempted*, via `tool_used` with `tool: "Write|Edit"` and `max: 0`.
+
 All five traps share a shape worth remembering: the harness under test was fine; the *instrument* was
 broken, and it failed in the direction that looks like a real finding.
 

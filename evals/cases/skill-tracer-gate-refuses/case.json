@@ -34,6 +34,13 @@
       "type": "tool_used",
       "tool": "Agent",
       "max": 0
+    },
+    {
+      "name": "correctness: never ATTEMPTED slice-2 work (robust to a denied write)",
+      "type": "tool_used",
+      "tool": "Write|Edit",
+      "input_match": "src/format\\.js",
+      "max": 0
     }
   ],
   "runs": 3

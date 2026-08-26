@@ -161,4 +161,22 @@ c.ok('any_of: a missing graders array cannot pass vacuously',
 c.ok('any_of: nests — an inner any_of still resolves',
   runGrader({ type: 'any_of', graders: [anyOf] }, inlineRun, ['docs/PRD.md']).pass);
 
+// --- tool alternation, and grading the ATTEMPT rather than the effect ------
+// Trap 5: headless -p denies Write to the sandbox on some runs, so a
+// `file_written: not_contains` grader passes because the environment blocked the
+// write, not because the harness refused it -- a green that is not evidence.
+// The durable check is that the forbidden write was never ATTEMPTED, by either tool.
+const wroteViaEdit = parseStream(stream([text('refusing'), tool('Edit', { file_path: 'src/format.js' })]));
+const wroteViaWrite = parseStream(stream([text('refusing'), tool('Write', { file_path: 'src/format.js' })]));
+const refusedCleanly = parseStream(stream([text('refusing'), tool('Read', { file_path: 'src/format.js' })]));
+const noAttempt = { name: 'no slice-2 write attempted', type: 'tool_used', tool: 'Write|Edit',
+  input_match: 'src/format\\.js', max: 0 };
+c.ok('tool alternation: a clean refusal passes', runGrader(noAttempt, refusedCleanly, []).pass);
+c.ok('tool alternation: SEEDED BROKEN — an Edit attempt is caught', !runGrader(noAttempt, wroteViaEdit, []).pass);
+c.ok('tool alternation: SEEDED BROKEN — a Write attempt is caught', !runGrader(noAttempt, wroteViaWrite, []).pass);
+c.ok('tool alternation: does not match a tool whose name merely contains the pattern',
+  runGrader({ type: 'tool_used', tool: 'rite', input_match: 'format', max: 0 }, wroteViaWrite, []).pass);
+c.ok('tool alternation: a malformed pattern fails loudly rather than matching nothing',
+  !runGrader({ type: 'tool_used', tool: '(' , min: 1 }, wroteViaWrite, []).pass);
+
 c.finish();
