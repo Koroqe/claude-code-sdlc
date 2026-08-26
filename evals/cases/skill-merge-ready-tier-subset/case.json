@@ -1,7 +1,7 @@
 {
   "description": "merge-ready's Tier Check must read ## Tier: quick and run only the reduced gate subset (Gates 0,2,3,4), skipping 1,5,6,7,8. Graded on WHICH agents actually run, because that is observable early \u2014 an earlier version graded the final SKIPPED table, which only prints after all gates finish and so failed purely on the turn budget.",
   "prompt": "/claude-code-sdlc:merge-ready",
-  "maxTurns": 6,
+  "maxTurns": 10,
   "seed": {
     ".claude/scratchpad.md": "# Scratchpad\n\n## Feature: null-guard\n\n## Tier: quick\n\n## Branch: fix/null-guard\n\n## Status: quality-gates\n\n## Plan\n\n- [x] Slice 1: add the null guard \u2014 abc1234\n\n## Blockers\n\n(none)\n",
     "src/format.js": "function formatName(user) {\n  if (!user) return '';\n  return user.first + ' ' + user.last;\n}\nmodule.exports = { formatName };\n",
@@ -16,11 +16,27 @@
       "min": 1
     },
     {
-      "name": "correctness: ran a quick-subset gate agent",
-      "type": "tool_used",
-      "tool": "Agent",
-      "input_match": "code-reviewer|security-auditor|build-runner",
-      "min": 1
+      "name": "correctness: recognised the quick tier",
+      "type": "regex",
+      "pattern": "tier:[`*_\\s]*quick"
+    },
+    {
+      "name": "correctness: applied the reduced gate subset",
+      "type": "any_of",
+      "graders": [
+        {
+          "name": "spawned a quick-subset gate agent",
+          "type": "tool_used",
+          "tool": "Agent",
+          "input_match": "code-reviewer|security-auditor|build-runner",
+          "min": 1
+        },
+        {
+          "name": "named a full-tier-only gate as skipped",
+          "type": "regex",
+          "pattern": "SKIPPED[^\\n]{0,40}quick|Gate\\s*[1567][^\\n]{0,40}SKIP"
+        }
+      ]
     },
     {
       "name": "correctness: did NOT run the full-tier-only verifier",
@@ -37,5 +53,7 @@
       "max": 0
     }
   ],
-  "runs": 3
+  "runs": 3,
+  "timeoutSeconds": 420,
+  "_note": "Graded so it cannot pass on a dead run: the two max:0 Agent graders are vacuous in a sandbox with no Agent tool, so the tier decision is also asserted positively in prose. Measured 2026-08-26 \u2014 requiring an Agent spawn scored this case 0/3 purely on Agent availability."
 }
