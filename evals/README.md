@@ -129,6 +129,21 @@ negatives.
 All five traps share a shape worth remembering: the harness under test was fine; the *instrument* was
 broken, and it failed in the direction that looks like a real finding.
 
+## Measured baseline
+
+**2026-08-26, Claude Code 2.1.237, plugin 4.8.0 (unreleased).** Under the current
+graders: **12/12 runs green across 5 cases** — `skill-tracer-gate-refuses` 3/3,
+`triage-full-new-endpoint` 3/3, `triage-fast-copy-fix` 2/2,
+`triage-full-sensitive-path` 2/2, `triage-quick-bounded-fix` 2/2.
+
+`evals/results/` is gitignored, so that number lives only on the machine that paid
+for it — which is why it is written down here. Reproduce it with
+`node scripts/eval/run-evals.js`, then read `node scripts/eval/history.js`, which
+reports the rate for the CURRENT grader fingerprint only and refuses to average
+across versions. Thirty-three earlier results are excluded on exactly that basis:
+they were graded by patterns that have since been corrected, and folding them in
+would understate reliability while looking like diligence.
+
 ## Adding a case
 
 `evals/cases/<name>/case.json`:
