@@ -6,7 +6,8 @@
 
 ## Branch: feat/eval-multirun
 
-## Status: implementing — 4 commits, sweep green (18 validators + 25 suites), 4.8.0 bumped, unmerged
+## Status: complete on branch — 22 commits, sweep green (18 validators + 26 suites), eval 15/15,
+4.8.0 bumped and changelogged. NOT merged, NOT pushed, NOT released — awaiting go-ahead.
 
 ## Version: 4.7.0 shipped and delivered. **4.8.0 bumped but NOT released** — the merge-ready cut is a
 delivered-file change, so validate-release-readiness demanded the bump before merge. Release it or the
@@ -66,12 +67,15 @@ Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED — 2 Level-4 gaps,
   instruction text. The first version of that table wrongly listed `verifier` as per-slice (it is
   Gate 6 only, once per feature) and overstated the total by ~44k — corrected by reading which agents
   each skill actually invokes, and the error is recorded rather than quietly fixed.
-- **Progressive disclosure is real on the cost side.** A 20 KB sibling file in a skill directory moved
-  NEITHER the always-on (~1,155) nor the on-invoke (~920) number — only `SKILL.md` is charged. This
-  makes `implement-slice`'s `### 6. Capture Instincts` (7,908 of 23,176 bytes, 34%, ~22.8k tok/feature
-  for a step that usually no-ops) the largest single remaining prize. **The behavioural half is
-  UNMEASURED** — probe ready at `scratchpad/probe-sibling-read.sh`. Do not ship the split on the cost
-  result alone; the failure mode is silent.
+- **Progressive disclosure: BOTH halves now measured.** Cost — a 20 KB sibling file moved neither the
+  always-on (~1,155) nor the on-invoke (~920) number; only `SKILL.md` is charged. Behaviour — an agent
+  told to read a sibling file did so **3/3** (`scratchpad/probe-sibling-read.sh`; cache restored and
+  verified byte-identical). This makes `implement-slice`'s `### 6. Capture Instincts` (7,908 of 23,176
+  bytes, 34%, ~22.8k tok/feature for a step that usually no-ops) the **top queued item**.
+  **Still deliberately not shipped:** the probe asked an idle agent to echo a token, not a mid-slice
+  agent to follow a 7.9 KB procedure after a commit under load. Ship it fail-visible (the step says
+  plainly it could not read its procedure) with the trigger tests kept inline, as its own change with
+  its own verification.
 - **merge-ready cut by 1,190 bytes** — a war story already told in CLAUDE.md, a third copy of a
   residual-risk record already in PRD FR-4.7, one C2 meta-justification, and 3 of 4 restatements of
   the shrink-guard rationale (the imperative survives verbatim at every point of use).
@@ -86,7 +90,18 @@ Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED — 2 Level-4 gaps,
   routing failure had complied. 41 grader checks, mutation-tested (forcing `pass: true` trips the
   seeded-broken check).
 
-**Running tally: seven false negatives from the eval, zero true findings from a grader bug.** The
+- **Eval baseline: 15/15 runs green across all 6 cases** under the current graders
+  (`node scripts/eval/history.js`, which reports the current grader fingerprint only and refuses to
+  average across versions — 34 earlier results excluded on that basis). Recorded in `evals/README.md`
+  because `evals/results/` is gitignored.
+- **Instrument fixes this round:** killed runs are INCONCLUSIVE, not graded; `any_of` combinator for
+  rules satisfiable more than one way; refusals assert the forbidden write was never ATTEMPTED (a
+  `not_contains` grader passed vacuously whenever the sandbox denied the write — a green that was not
+  evidence); tier patterns tolerate markdown emphasis; the quick-tier decision is graded by effects,
+  not narration; near-miss diagnostics print `⚠ NEAR MISS` when a relaxed grader would have passed;
+  every case is audited for a positive assertion so none can pass on a dead run.
+
+**Running tally: ten false negatives from the eval, zero true findings from a grader bug.** The
 harness has been right every time. Carry that calibration into reading any eval failure.
 
 ## Blockers

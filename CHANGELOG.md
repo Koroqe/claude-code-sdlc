@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-26
+
+### Harness self-correction, round three — 01:15 UTC
+**Summary:** The harness now measures and caps what it costs a session to think, and its behavioural test suite was repaired after it was found reporting failures that were its own fault rather than the harness's.
+**Details:** Instruction text is charged to every session, and nothing was bounding it. A budget now scores every skill and agent, weighted by how often each is actually used — which revealed that the per-slice workflow costs roughly eight times what its file size suggests. Separately, the behavioural test suite was found producing confident failures caused by its own measurement bugs: a killed run graded as a defect, a rule graded by one of several valid ways to satisfy it, and greens that were not evidence at all. All six scenarios now pass every run. Version 4.8.0.
+**Technical details:** Adds a context budget as the fourth hard cap alongside agents, skills and hooks, enforced in bytes because the CLI's own cost report reads the installed cache rather than the working tree and so cannot score a change before it ships; the byte-to-token conversion is measured across nine components rather than assumed. Weighted for an eight-slice feature, instruction text totals roughly 147k tokens. Also fixes six defects in the behavioural eval — inconclusive runs are no longer graded, rules satisfiable more than one way use a new combinator, refusals assert the forbidden action was never attempted rather than that no file appeared, and per-case pass rates are never averaged across grader versions. Documentation-only product surface: no screens, endpoints, schema or deployment impact.
+
 ## 2026-08-25
 
 ### Harness self-correction, round two — 23:07 UTC
