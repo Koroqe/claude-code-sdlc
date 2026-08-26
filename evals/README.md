@@ -68,10 +68,10 @@ from the rule:
   signals and written both documents inline — it complied. Use `any_of` when a rule is satisfiable
   more than one legitimate way.
 
-Running tally: **seven false negatives from this suite, zero true findings from a grader bug.** The
+Running tally: **eight false negatives from this suite, zero true findings from a grader bug.** The
 harness was right every time. That is the calibration to carry into reading any failure here.
 
-## Four measured traps, all of which produced false results before being fixed
+## Five measured traps, all of which produced false results before being fixed
 
 1. **A sandboxed `HOME` silently destroys the run.** Isolating `HOME` to seed a private memory layer
    also strips the CLI's credentials: every case exits in ~1 s with `Not logged in`, and the suite
@@ -93,7 +93,14 @@ harness was right every time. That is the calibration to carry into reading any 
    of the non-interactive mode. Any grader that expects an agent to be spawned is measuring the
    sandbox, not the harness. Grade the artifact the agent would have produced.
 
-All four traps share a shape worth remembering: the harness under test was fine; the *instrument* was
+5. **Headless `-p` denies `Write` to the sandbox project on some runs**, and not on others. A run that
+   took the documentation-first path correctly, calling `Write` on `docs/PRD.md` twice, produced no
+   file: *"Write access to the project directory isn't granted."* A `file_written` grader sees an
+   empty directory and reports non-compliance. **Grade the attempt, not only the effect** — whether
+   the sandbox permits a write is the environment's business; which path the harness steered the
+   agent onto is the thing under test.
+
+All five traps share a shape worth remembering: the harness under test was fine; the *instrument* was
 broken, and it failed in the direction that looks like a real finding.
 
 ## Adding a case

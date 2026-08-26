@@ -37,11 +37,18 @@
           "name": "produced the Phase 1 PRD deliverable",
           "type": "file_written",
           "pattern": "docs/PRD\\.md"
+        },
+        {
+          "name": "attempted the Phase 1 PRD deliverable",
+          "type": "tool_used",
+          "tool": "Write",
+          "input_match": "docs/PRD\\.md",
+          "min": 1
         }
       ]
     }
   ],
-  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist. timeoutSeconds raised to 420: at maxTurns=10 a run averages ~158s and one hit the 240s default, which the runner used to report as three grader failures rather than a killed run.",
+  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist. timeoutSeconds raised to 420: at maxTurns=10 a run averages ~158s and one hit the 240s default, which the runner used to report as three grader failures rather than a killed run. Graded on the ATTEMPT as well as the effect: headless -p denies Write to the sandbox project on some runs (\"Write access to the project directory isn't granted\"), so a run that correctly took the documentation-first path can produce no file through no fault of the harness.",
   "runs": 3,
   "timeoutSeconds": 420
 }
