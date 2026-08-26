@@ -61,11 +61,17 @@ from the rule:
   *which agents run*, so the grader now checks that instead.
 - `tool_used` with `max: 0` — the must-not-be-used idiom — was unsatisfiable, because `min` defaulted
   to 1 and the grader asked for "1..0". Two cases reported a confident 0/3 from this alone.
+- `tool_used: Skill` on the full-tier case graded **one path to the rule instead of the rule**. The
+  full-tier branch of `src/claude.md` mandates the Phase 1 *deliverables* (`docs/PRD.md`,
+  `docs/use-cases/*`) and names the agents that produce them; it never mandates a literal skill
+  invocation. The run scored as a routing failure had stated `tier: full` with the correct FR-1.3
+  signals and written both documents inline — it complied. Use `any_of` when a rule is satisfiable
+  more than one legitimate way.
 
-Running tally: **five false negatives from this suite, zero true findings from a grader bug.** The
+Running tally: **seven false negatives from this suite, zero true findings from a grader bug.** The
 harness was right every time. That is the calibration to carry into reading any failure here.
 
-## Two measured traps, both of which produced false results before being fixed
+## Four measured traps, all of which produced false results before being fixed
 
 1. **A sandboxed `HOME` silently destroys the run.** Isolating `HOME` to seed a private memory layer
    also strips the CLI's credentials: every case exits in ~1 s with `Not logged in`, and the suite
@@ -75,7 +81,19 @@ harness was right every time. That is the calibration to carry into reading any 
    `protocol: stated a tier` — not because Triage misfired, but because the run was cut off before it
    spoke. At `maxTurns: 6` both pass. **Before believing a failure, raise the budget and re-run.**
 
-Both traps share a shape worth remembering: the harness under test was fine; the *instrument* was
+3. **`timeoutSeconds` must be raised whenever `maxTurns` is.** Raising `maxTurns` from 6 to 10 pushed
+   a case's runs past the 240 s default timeout. The killed run produced no transcript, so every
+   content grader reported "absent" and the case printed two confident behavioural failures whose
+   real cause was the `ETIMEDOUT` line underneath them. A killed run is now reported as
+   `INCONCLUSIVE — run errored, not graded` and is never graded at all: it cannot pass, and it must
+   not pretend to explain itself.
+4. **Headless `claude -p` has no Agent tool, so delegation cannot be measured here.** A run stated
+   plainly: *"This session forbids me from calling the Agent tool"*, and produced the full-tier
+   deliverables inline instead. There is no deny rule in `~/.claude/settings.json` — it is a property
+   of the non-interactive mode. Any grader that expects an agent to be spawned is measuring the
+   sandbox, not the harness. Grade the artifact the agent would have produced.
+
+All four traps share a shape worth remembering: the harness under test was fine; the *instrument* was
 broken, and it failed in the direction that looks like a real finding.
 
 ## Adding a case

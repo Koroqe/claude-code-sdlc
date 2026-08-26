@@ -68,3 +68,32 @@ the validator are now derived by reading which agents each skill actually invoke
 and the correction is recorded here because the plausible-looking version of this
 table was wrong in exactly the direction that would have justified cutting the
 wrong file.
+
+## A skill's on-invoke cost covers `SKILL.md` only — measured, not read off docs
+
+**Measured 2026-08-26, Claude Code 2.1.237.** Wrote a 20,000-byte sibling file into
+the installed cache at
+`~/.claude/plugins/cache/claude-code-sdlc/claude-code-sdlc/4.7.0/skills/context-refresh/PROBE.md`
+and re-ran `claude plugin details`:
+
+| | always-on | context-refresh on-invoke |
+|---|---|---|
+| before | ~1,155 tok | ~920 tok |
+| with a 20 KB sibling file | ~1,155 tok | ~920 tok |
+
+Neither number moved. The skill directory is not bundled into the invocation; only
+`SKILL.md` is. Probe removed afterwards, cache left clean.
+
+**What this unlocks, and what it does not.** It means progressive disclosure is
+real on the *cost* side: text moved out of `SKILL.md` into a sibling file stops
+being charged on every invocation. The obvious candidate is
+`implement-slice`'s `### 6. Capture Instincts` — 7,908 of that file's 23,176 bytes
+(34%), paid once per slice (~22.8k tok per 8-slice feature) for a step that
+no-ops unless one of its triggers fired.
+
+It does **not** establish the behavioural half: that an agent told to read a
+sibling file reliably does so. That is unmeasured, and the failure mode is the bad
+kind — instinct capture degrading silently while every surface still reports
+success. Any such split must therefore be fail-visible (the step states plainly
+that it could not read its procedure) and must be measured with a live eval case
+before it ships, not assumed from this result.

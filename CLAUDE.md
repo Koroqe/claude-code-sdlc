@@ -91,6 +91,12 @@ configure the harness. Never reuse a published number.
 - **Budgets are hard caps.** ≤16 agents, ≤10 skills, ≤12 hook **ids**. Current: 15 / 7 / **12** —
   hooks are AT the ceiling with no slot left, so a thirteenth requires retiring one. Ids, not
   registrations: `pre:edit:read-guard` listens on two events and is one hook.
+- **Instruction text has a budget too**, and it is the one actually charged per session:
+  `node scripts/ci/validate-context-budget.js --report`. Ceilings are in bytes because
+  `claude plugin details` scores the *installed* cache, not the working tree — it cannot tell you
+  whether a cut worked until after you have shipped it. Conversion is measured, not assumed
+  (tokens ≈ bytes / 2.78, `docs/findings/context-cost-calibration.md`). Weight before you cut:
+  `implement-slice` is paid once **per slice**, so a byte there costs ~8× a byte in `merge-ready`.
 - **Every validator must fail on a seeded broken fixture**, pinned to an exact problem count. A check
   that only ever passes is not evidence.
 - **Measure Claude Code's behaviour; do not read it off the docs.** Several documented claims have
