@@ -131,6 +131,30 @@ function runGrader(grader, parsed, filesWritten) {
             '/ — ' + (hit ? 'found' : 'absent'),
         };
       }
+      // A rule that a harness can satisfy in more than one legitimate way must be
+      // graded that way, or the eval measures the path rather than the rule.
+      // Measured 2026-08-26: the full-tier branch of src/claude.md mandates the
+      // Phase 1 DELIVERABLES (docs/PRD.md, docs/use-cases/*) and names the agents
+      // that produce them -- it never mandates a literal Skill invocation. A run
+      // that wrote both documents inline, because the headless eval environment
+      // has no Agent tool available, was scored as a routing failure by a grader
+      // pinned to the Skill tool. The run had complied; the grader had not read
+      // the rule. `any_of` passes when ANY sub-grader passes.
+      case 'any_of': {
+        const subs = (Array.isArray(grader.graders) ? grader.graders : [])
+          .map((g) => runGrader(g, parsed, filesWritten));
+        if (subs.length === 0) {
+          return { name, pass: false, detail: 'any_of with no sub-graders never passes' };
+        }
+        const hit = subs.find((r) => r.pass);
+        return {
+          name,
+          pass: Boolean(hit),
+          detail: hit
+            ? 'satisfied by: ' + hit.name
+            : 'no alternative satisfied — ' + subs.map((r) => r.name + ' (' + r.detail + ')').join('; '),
+        };
+      }
       default:
         return { name, pass: false, detail: 'unknown grader type: ' + String(grader.type) };
     }

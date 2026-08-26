@@ -23,11 +23,22 @@
       "match": "not_contains"
     },
     {
-      "name": "correctness: routed to the full-tier pipeline",
-      "type": "tool_used",
-      "tool": "Skill",
-      "input_match": "develop-feature|bootstrap-feature",
-      "min": 1
+      "name": "correctness: took the documentation-first full-tier path",
+      "type": "any_of",
+      "graders": [
+        {
+          "name": "invoked the pipeline skill",
+          "type": "tool_used",
+          "tool": "Skill",
+          "input_match": "develop-feature|bootstrap-feature",
+          "min": 1
+        },
+        {
+          "name": "produced the Phase 1 PRD deliverable",
+          "type": "file_written",
+          "pattern": "docs/PRD\\.md"
+        }
+      ]
     }
   ],
   "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist. timeoutSeconds raised to 420: at maxTurns=10 a run averages ~158s and one hit the 240s default, which the runner used to report as three grader failures rather than a killed run.",

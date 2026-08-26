@@ -131,4 +131,34 @@ c.equal('gradeCase: reports every grader result',
 c.ok('gradeCase: a case with NO graders cannot pass vacuously',
   !gradeCase({ graders: [] }, parseStream(stream([text('anything')])), []).pass);
 
+// --- any_of: a rule satisfiable more than one way ------------------------
+// Guards the real regression this combinator was built for: a full-tier run that
+// produced the mandated deliverable inline (no Agent tool available in headless
+// mode) must not be scored as a routing failure.
+const skillRun = parseStream(stream([text('tier: full'), tool('Skill', { command: 'develop-feature' })]));
+const inlineRun = parseStream(stream([text('tier: full'), tool('Write', { file_path: 'docs/PRD.md' })]));
+const neitherRun = parseStream(stream([text('tier: full'), tool('Read', {})]));
+const anyOf = {
+  name: 'documentation-first path', type: 'any_of', graders: [
+    { name: 'invoked the pipeline skill', type: 'tool_used', tool: 'Skill', input_match: 'develop-feature', min: 1 },
+    { name: 'produced the PRD deliverable', type: 'file_written', pattern: 'docs/PRD\\.md' },
+  ],
+};
+c.ok('any_of: passes on the first alternative (invoked the skill)',
+  runGrader(anyOf, skillRun, []).pass);
+c.ok('any_of: passes on the second alternative (wrote the deliverable)',
+  runGrader(anyOf, inlineRun, ['docs/PRD.md']).pass);
+c.ok('any_of: SEEDED BROKEN — fails when NO alternative is satisfied',
+  !runGrader(anyOf, neitherRun, []).pass);
+c.ok('any_of: names which alternative satisfied it',
+  runGrader(anyOf, skillRun, []).detail.indexOf('invoked the pipeline skill') !== -1);
+c.ok('any_of: reports every alternative when all fail',
+  runGrader(anyOf, neitherRun, []).detail.indexOf('produced the PRD deliverable') !== -1);
+c.ok('any_of: SEEDED BROKEN — an empty alternative list cannot pass vacuously',
+  !runGrader({ type: 'any_of', graders: [] }, skillRun, []).pass);
+c.ok('any_of: a missing graders array cannot pass vacuously',
+  !runGrader({ type: 'any_of' }, skillRun, []).pass);
+c.ok('any_of: nests — an inner any_of still resolves',
+  runGrader({ type: 'any_of', graders: [anyOf] }, inlineRun, ['docs/PRD.md']).pass);
+
 c.finish();

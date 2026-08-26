@@ -38,13 +38,10 @@ Read `.claude/scratchpad.md`'s `## Tier:` field:
   make `quick` a synonym for "unreviewed"; keeping them is what stops that. This sentence is the
   justification for the `quick` tier existing at all, not an incidental detail.
 
-**Residual risk — `## Tier:` is repo-controlled state.** `.claude/scratchpad.md` is a tracked file, so a
-hostile repository could pre-commit `## Tier: quick` to downgrade a *standalone* `/merge-ready` run before
-`bootstrap-feature` ever gets a chance to set the field itself. This is mitigated, not eliminated: the
-skipped gates are always rendered as explicit `SKIPPED (tier: quick)` rows in the output table (see "Never
-silently omit a row" above), Gate 2 (Code Review) and Gate 3 (Security Audit) still run against the diff
-regardless of tier, and `bootstrap-feature` re-owns and resets the `## Tier:` field on every
-pipeline-driven init. Recorded here as a known residual so it stays visible, not because it is resolved.
+**Residual risk — `## Tier:` is repo-controlled state.** `.claude/scratchpad.md` is tracked, so a hostile
+repository could pre-commit `## Tier: quick` to downgrade a *standalone* run. Mitigated, not eliminated,
+by the rules above: explicit `SKIPPED (tier: quick)` rows, and Gate 2/Gate 3 running regardless of tier.
+Full record: `docs/PRD.md` FR-4.7.
 
 **Gate 2/3 quick-tier delegation carve-out.** For a `quick`-tier run, the Gate 2 and Gate 3 delegation
 prompts to `code-reviewer`/`security-auditor` MUST state, verbatim, **before the review request**:
@@ -70,9 +67,12 @@ Check preamble excluded it before it ever started.
 **`Gates: N/9` progress line.** After each gate reaches a terminal state (PASS, FAIL, or
 `SKIPPED (tier: quick)`), write or refresh a `Gates: N/9` line in `.claude/scratchpad.md` — `N` is the
 count of gates that have reached a terminal state so far — following the existing `Gate 6 attempts: N/3`
-precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`, to make this update** — the
-shipped `pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite of the
-scratchpad.
+precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`** (Write convention above).
+
+**Write convention — applies to every file this skill mutates.** Mutate `.claude/scratchpad.md`,
+`.claude/instincts.md` and `CHANGELOG.md` with `Edit`, never a whole-file `Write`: the shipped
+`pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite. Creating a file that
+does not exist yet is the sole exception — `Write` it once, `Edit` it thereafter.
 
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
@@ -329,8 +329,7 @@ before that budget's final attempt, specifically for these two gates. Gate 6's s
 
 **Persisted attempt counters (survive context compaction), mirroring the Gate 6 precedent above exactly:**
 - After every Gate 4 attempt (the initial run and each rerun), write `Gate 4 attempts: N/3` to
-  `.claude/scratchpad.md` via `Edit`, never a whole-file `Write` — the shipped `pre:write:shrink-guard`
-  fires on `Write` only and would deny a shrinking rewrite of the scratchpad.
+  `.claude/scratchpad.md` via `Edit`, never a whole-file `Write` (Write convention above).
 - After every Gate 5 attempt (the initial run and each rerun), write `Gate 5 attempts: N/3` to
   `.claude/scratchpad.md` via `Edit`, identically.
 - Before deciding whether to retry either gate, **read its counter back from the file** — never rely on
@@ -432,10 +431,9 @@ meaning, skip the capture and name the skip in this step's output — never forc
 through silently.
 
 **Lazy creation.** If `.claude/instincts.md` does not exist when this step first needs to write, create
-it from `templates/instincts.md`'s scaffold via `Write` — the file does not yet exist, so
-`pre:write:shrink-guard` does not apply — then append the new entry via `Edit`. Every subsequent
-mutation of an existing entry or heading in this file, here or in Consolidate Instincts below, uses
-`Edit`, never a whole-file `Write`.
+it from `templates/instincts.md`'s scaffold via `Write` — the file does not yet exist, so the Write
+convention's creation exception applies — then append the new entry via `Edit`. Every subsequent mutation
+of an entry or heading in this file, here or in Consolidate Instincts below, uses `Edit`.
 
 ## Finalization: Changelog Entry
 
@@ -479,10 +477,9 @@ run that does not reach MERGE READY (the unconditional per-gate capture step ear
 ran) remain in the store, unconsolidated, until a later run for the same feature actually reaches MERGE
 READY.
 
-Execute in this exact order. Every mutation below is via `Edit`, never a whole-file `Write` — the
-shipped `pre:write:shrink-guard` fires on `Write` only and would deny a shrinking rewrite of the store,
-and this file is now self-reinforcing context, so a whole-file reconstruction that silently drops most
-of it is worse than losing an ordinary document.
+Execute in this exact order. Every mutation below is via `Edit`, never a whole-file `Write` (Write
+convention above): this file is self-reinforcing context, so a whole-file rewrite that silently drops
+most of it is worse than losing an ordinary document.
 
 1. **Increment the counter.** `Edit` `## Meta`'s `Feature counter` to exactly its current value `+1`.
    Never on a single-gate rerun, never on a NOT MERGE READY outcome (gating above).
@@ -494,15 +491,12 @@ of it is worse than losing an ordinary document.
    itself performs no separate recomputation.
 
 3. **C2, stated verbatim — an invariant governing every step that touches `Confidence:` (steps 2, 5
-   and 7), not an action of its own.** Nothing is edited at this position; the numbering is retained
-   only because steps 2 and 7 cite "step 3's formula" by number.
-   The formula `min(0.9, 0.3 + 0.2 × (occurrences − 1))`, clamped to
+   and 7), not an action of its own.** Nothing is edited at this position; the number is retained
+   because steps 2 and 7 cite "step 3's formula". The formula `min(0.9, 0.3 + 0.2 × (occurrences − 1))`, clamped to
    `[0.3, 0.9]`, is recomputed **ONLY at a new-occurrence event** and **OVERWRITES** any decayed value.
    Between occurrences, confidence moves only via decay (step 5 below) — never via this formula. A new
    occurrence always wins over any prior decay: recomputing from the formula on a fresh occurrence
-   discards whatever the decayed value was. Without this precedence stated explicitly, two readers
-   implement two different stores — one where decay is permanent damage a later occurrence cannot
-   repair, and one (the correct one) where a fresh occurrence resets the number outright.
+   discards whatever the decayed value was — decay is never permanent damage.
 
 4. **Confirming re-stamp — runs AFTER the increment (step 1), so the post-increment value is what
    survives.** For every entry that received a confirming event this Finalization (FR-4.3: a new
@@ -546,19 +540,10 @@ fail the merge; the merge remains MERGE READY.
 This step runs at the same Finalization point as the changelog entry above, immediately after it, and
 is gated identically: **only on a MERGE READY outcome**, never on NOT MERGE READY.
 
-**Why this step exists — merging is not shipping.**
-
-For anything distributed, consumers receive whatever the distribution channel *advertises*. If the
-advertised identity does not move, the merge reaches nobody, and every surface reports success. This
-harness learned it the expensive way and the record is worth keeping: ten commits of agents, skills
-and hooks merged to `main` while `.claude-plugin/marketplace.json` still advertised `4.0.0`, so
-`claude plugin update` told every existing install *"already at the latest version"* and delivered
-none of it. Nothing was red. The code was merged, CI was green, the version strings were perfectly
-consistent with each other — and consistency is not freshness.
-
-Note also what would NOT have fixed it: cutting a git tag. A tag is documentation of a release. The
-advertised version is the release. Tagging a stale version produces a repository that looks published
-and an install base that receives nothing.
+**Why this step exists — merging is not shipping.** Consumers receive whatever the distribution
+channel *advertises*; if the advertised identity does not move, the merge reaches nobody and every
+surface still reports success. Consistency is not freshness, and a git tag is documentation of a
+release, not the release.
 
 **Steps:**
 
