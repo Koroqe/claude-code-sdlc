@@ -1,0 +1,40 @@
+{
+  "description": "implement-slice's pre-flight tracer gate must REFUSE a non-tracer slice while an unbuilt **Tracer:** yes slice exists. Graded on the rule as written \u2014 no TDD work on slice 2 \u2014 NOT on 'no writes at all': recording a blocker in the scratchpad is behaviour the harness's own scratchpad rule requires, and an earlier version of this case wrongly failed the run for doing it.",
+  "prompt": "/claude-code-sdlc:implement-slice Slice 2",
+  "maxTurns": 6,
+  "seed": {
+    ".claude/scratchpad.md": "# Scratchpad\n\n## Feature: widget-export\n\n## Tier: full\n\n## Branch: feat/widget-export\n\n## Status: implementing wave 1 slice 1/2\n\n## Plan\n\n### Wave 1\n- [ ] Slice 1: end-to-end skeleton of the export path\n  - **Tracer:** yes\n  - Files: src/export.js\n  - Changes: minimal end-to-end export returning a fixed row\n  - Verify: `node -e \"require('./src/export.js')\"`\n  - Done when: the module loads and returns one row\n\n### Wave 2\n- [ ] Slice 2: add CSV formatting\n  - Files: src/format.js\n  - Changes: format rows as CSV\n  - Verify: `node -e \"require('./src/format.js')\"`\n  - Done when: rows render as CSV\n\n## Blockers\n\n(none)\n",
+    "src/export.js": "// not implemented yet\n",
+    "CLAUDE.md": "# widget-export\n\nTypecheck: `node -e \"0\"`\n"
+  },
+  "graders": [
+    {
+      "name": "protocol: acknowledged the tracer gate",
+      "type": "regex",
+      "pattern": "tracer"
+    },
+    {
+      "name": "correctness: refused to proceed",
+      "type": "regex",
+      "pattern": "refus|must be implemented first|cannot proceed|before retrying|blocks Slice 2|not.{0,20}proceed"
+    },
+    {
+      "name": "correctness: named the blocking tracer slice",
+      "type": "regex",
+      "pattern": "Slice 1"
+    },
+    {
+      "name": "correctness: wrote no slice-2 source file",
+      "type": "file_written",
+      "pattern": "src/format\\.js",
+      "match": "not_contains"
+    },
+    {
+      "name": "correctness: delegated no TDD work",
+      "type": "tool_used",
+      "tool": "Agent",
+      "max": 0
+    }
+  ],
+  "runs": 3
+}

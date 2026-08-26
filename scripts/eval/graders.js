@@ -82,8 +82,15 @@ function runGrader(grader, parsed, filesWritten) {
         };
       }
       case 'tool_used': {
-        const min = typeof grader.min === 'number' ? grader.min : 1;
-        const max = typeof grader.max === 'number' ? grader.max : Infinity;
+        // `max: 0` is the idiom for "this tool must NOT be used". Defaulting
+        // min to 1 made that unsatisfiable — it asked for "1..0" and every such
+        // grader failed no matter what the agent did, which reads exactly like
+        // a real finding. Measured 2026-08-25: two eval cases reported a
+        // confident 0/3 purely from this. When a max is given and no min is,
+        // the floor is 0.
+        const hasMax = typeof grader.max === 'number';
+        const min = typeof grader.min === 'number' ? grader.min : (hasMax ? 0 : 1);
+        const max = hasMax ? grader.max : Infinity;
         const matches = parsed.toolUses.filter((t) => {
           if (t.name !== grader.tool) return false;
           if (!grader.input_match) return true;

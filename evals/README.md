@@ -35,6 +35,36 @@ itself.** A harness with no oracle cannot tell an improvement from a regression 
   `~/.claude/claude.md` against `src/claude.md` and aborts if they differ, because otherwise you are
   measuring the old text and will not know it. This caught a real drift the first time it ran.
 
+## Cases run N times, and a case is green only when every run is
+
+`runs` in `case.json` (default 1; the shipped cases use 2-4). The suite reports `k/N run(s)` and a
+case passes only when `k == N` — a gating rule that holds two times in three is not holding.
+
+This was not the original design and it earned its place immediately: `skill-tracer-gate-refuses`
+failed on one run and passed on the very next with identical inputs. A single-run suite reports that
+as PASS or FAIL by coin flip, which is worse than useless for deciding whether a change helped — the
+one question this eval exists to answer. When a case fails, the runner now also saves the failing
+run's `assistantText` and `toolUses` into the results JSON, because twice the only way to tell a real
+finding from a starved run was to read the transcript.
+
+## Grade the rule as written, not a proxy for it
+
+Every false result this suite has produced came from a grader encoding something subtly different
+from the rule:
+
+- `no_edits` on the tracer-gate case failed a run where the model refused **correctly** and then
+  recorded the blocker in the scratchpad — behaviour the harness's own scratchpad rule *requires*.
+  The rule is "no TDD work on slice 2", so the grader is now `file_written: src/format.js,
+  not_contains`.
+- Grading merge-ready's final `SKIPPED (tier: quick)` table failed purely on the turn budget: the
+  table prints only after every gate finishes. The tier decision is observable much earlier in
+  *which agents run*, so the grader now checks that instead.
+- `tool_used` with `max: 0` — the must-not-be-used idiom — was unsatisfiable, because `min` defaulted
+  to 1 and the grader asked for "1..0". Two cases reported a confident 0/3 from this alone.
+
+Running tally: **five false negatives from this suite, zero true findings from a grader bug.** The
+harness was right every time. That is the calibration to carry into reading any failure here.
+
 ## Two measured traps, both of which produced false results before being fixed
 
 1. **A sandboxed `HOME` silently destroys the run.** Isolating `HOME` to seed a private memory layer

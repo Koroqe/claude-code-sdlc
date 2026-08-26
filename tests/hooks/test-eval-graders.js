@@ -78,6 +78,16 @@ c.ok('tool_used: SEEDED BROKEN — fails for a tool never used',
   !runGrader({ type: 'tool_used', tool: 'WebFetch' }, twoEdits, []).pass);
 c.ok('tool_used: max bound is enforced',
   !runGrader({ type: 'tool_used', tool: 'Edit', max: 1 }, twoEdits, []).pass);
+// `max: 0` — the must-not-be-used idiom. This was broken on first write: min
+// defaulted to 1, so the grader asked for "1..0" and failed unconditionally,
+// which looked like a real finding in two cases before anyone checked.
+c.ok('tool_used: max:0 PASSES when the tool was never used',
+  runGrader({ type: 'tool_used', tool: 'WebFetch', max: 0 }, twoEdits, []).pass);
+c.ok('tool_used: SEEDED BROKEN — max:0 FAILS when the tool was used',
+  !runGrader({ type: 'tool_used', tool: 'Edit', max: 0 }, twoEdits, []).pass);
+c.ok('tool_used: an explicit min still wins over the max-implied floor',
+  !runGrader({ type: 'tool_used', tool: 'WebFetch', min: 1, max: 3 }, twoEdits, []).pass);
+
 c.ok('tool_used: input_match narrows to the right call',
   runGrader({ type: 'tool_used', tool: 'Edit', input_match: 'b\\.js' }, twoEdits, []).pass);
 c.ok('tool_used: SEEDED BROKEN — input_match that matches nothing fails',

@@ -137,10 +137,42 @@ function runCase(spec) {
       spawnError: r.error ? String(r.error.message) : null,
       transcriptChars: (r.stdout || '').length,
       assistantText: parsed.assistantText,
+      toolUses: parsed.toolUses.map((t) => ({ name: t.name, input: t.input })),
     };
   } finally {
     rimraf(proj);
   }
+}
+
+/**
+ * Run one case `runs` times and report the pass RATE, not a coin flip.
+ *
+ * Measured 2026-08-25: `skill-tracer-gate-refuses` failed on one run (the model
+ * edited a file despite correctly refusing in prose) and passed on the very next
+ * one, same inputs. A single-run suite reports that as PASS or FAIL at random,
+ * which is worse than useless for deciding whether a change helped — the thing
+ * this eval exists to decide. Every serious harness in the field repeats cases
+ * for exactly this reason. A case is green only when EVERY run is green: a
+ * gating rule that holds two times in three is not holding.
+ */
+function runCaseRepeated(spec) {
+  const runs = Math.max(1, spec.runs || 1);
+  const attempts = [];
+  for (let i = 0; i < runs; i += 1) attempts.push(runCase(spec));
+  const passed = attempts.filter((a) => a.pass).length;
+  const firstFailure = attempts.find((a) => !a.pass);
+  return {
+    name: spec.name,
+    pass: passed === runs,
+    runs,
+    passedRuns: passed,
+    elapsedMs: attempts.reduce((n, a) => n + a.elapsedMs, 0),
+    graders: (firstFailure || attempts[0]).graders,
+    spawnError: (firstFailure || attempts[0]).spawnError,
+    transcriptChars: attempts[0].transcriptChars,
+    assistantText: firstFailure ? firstFailure.assistantText : undefined,
+    toolUses: firstFailure ? firstFailure.toolUses : undefined,
+  };
 }
 
 function main() {
@@ -158,7 +190,8 @@ function main() {
   if (dryRun) {
     process.stdout.write('would run ' + cases.length + ' case(s):\n');
     for (const c of cases) {
-      process.stdout.write('  ' + c.name + '  (maxTurns=' + (c.maxTurns || 3) +
+      process.stdout.write('  ' + c.name + '  (runs=' + (c.runs || 1) +
+        ', maxTurns=' + (c.maxTurns || 3) +
         ', graders=' + (c.graders || []).length + ')\n');
     }
     process.exit(0);
@@ -171,9 +204,10 @@ function main() {
   const results = [];
   for (const spec of cases) {
     process.stdout.write('· ' + spec.name + ' … ');
-    const res = runCase(spec);
+    const res = runCaseRepeated(spec);
     results.push(res);
-    process.stdout.write((res.pass ? 'PASS' : 'FAIL') + '  (' +
+    process.stdout.write((res.pass ? 'PASS' : 'FAIL') + '  ' +
+      res.passedRuns + '/' + res.runs + ' run(s)  (' +
       Math.round(res.elapsedMs / 1000) + 's)\n');
     if (!res.pass) {
       for (const g of res.graders.filter((x) => !x.pass)) {
@@ -189,8 +223,16 @@ function main() {
   fs.writeFileSync(outFile, JSON.stringify({
     ranAt: stamp,
     cases: results.map((r) => ({
-      name: r.name, pass: r.pass, elapsedMs: r.elapsedMs,
+      name: r.name, pass: r.pass, runs: r.runs, passedRuns: r.passedRuns,
+      elapsedMs: r.elapsedMs,
       graders: r.graders, transcriptChars: r.transcriptChars,
+      // On failure, keep what the model actually said and did. Twice now a
+      // confident-looking FAIL has turned out to be the instrument starving the
+      // run rather than the harness misbehaving, and both times the only way to
+      // tell was to read the transcript. Saving it on failure makes the next
+      // diagnosis a file read instead of a re-run.
+      toolUses: r.pass ? undefined : r.toolUses,
+      assistantText: r.pass ? undefined : r.assistantText,
     })),
   }, null, 2) + '\n');
 
@@ -201,4 +243,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { listCases, runCase, assertMemoryLayerCurrent };
+module.exports = { listCases, runCase, runCaseRepeated, assertMemoryLayerCurrent };

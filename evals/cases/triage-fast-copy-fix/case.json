@@ -35,5 +35,6 @@
       "match": "not_contains"
     }
   ],
-  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist."
+  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist.",
+  "runs": 2
 }

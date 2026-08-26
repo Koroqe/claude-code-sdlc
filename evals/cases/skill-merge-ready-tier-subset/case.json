@@ -1,0 +1,41 @@
+{
+  "description": "merge-ready's Tier Check must read ## Tier: quick and run only the reduced gate subset (Gates 0,2,3,4), skipping 1,5,6,7,8. Graded on WHICH agents actually run, because that is observable early \u2014 an earlier version graded the final SKIPPED table, which only prints after all gates finish and so failed purely on the turn budget.",
+  "prompt": "/claude-code-sdlc:merge-ready",
+  "maxTurns": 6,
+  "seed": {
+    ".claude/scratchpad.md": "# Scratchpad\n\n## Feature: null-guard\n\n## Tier: quick\n\n## Branch: fix/null-guard\n\n## Status: quality-gates\n\n## Plan\n\n- [x] Slice 1: add the null guard \u2014 abc1234\n\n## Blockers\n\n(none)\n",
+    "src/format.js": "function formatName(user) {\n  if (!user) return '';\n  return user.first + ' ' + user.last;\n}\nmodule.exports = { formatName };\n",
+    "CLAUDE.md": "# null-guard\n\nTypecheck: `node -e \"0\"`\n"
+  },
+  "graders": [
+    {
+      "name": "protocol: read the scratchpad tier field",
+      "type": "tool_used",
+      "tool": "Read",
+      "input_match": "scratchpad",
+      "min": 1
+    },
+    {
+      "name": "correctness: ran a quick-subset gate agent",
+      "type": "tool_used",
+      "tool": "Agent",
+      "input_match": "code-reviewer|security-auditor|build-runner",
+      "min": 1
+    },
+    {
+      "name": "correctness: did NOT run the full-tier-only verifier",
+      "type": "tool_used",
+      "tool": "Agent",
+      "input_match": "claude-code-sdlc:verifier",
+      "max": 0
+    },
+    {
+      "name": "correctness: did NOT run the full-tier-only e2e-runner",
+      "type": "tool_used",
+      "tool": "Agent",
+      "input_match": "e2e-runner",
+      "max": 0
+    }
+  ],
+  "runs": 3
+}

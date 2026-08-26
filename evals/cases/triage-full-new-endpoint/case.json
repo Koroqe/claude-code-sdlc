@@ -1,7 +1,7 @@
 {
-  "description": "A new API endpoint is a full-forcing signal (FR-1.3a) regardless of how small it looks.",
+  "description": "A new API endpoint is a full-forcing signal (FR-1.3a) regardless of how small it looks. Graded on BOTH the stated tier and the routing decision: measured 2026-08-25, one run routed correctly to develop-feature/bootstrap-feature but spent every turn on tool calls and emitted no text, so the tier was never spoken. Routing is the decision; the statement is the protocol. Checking only one of them hides half the behaviour.",
   "prompt": "Add a POST /api/subscribe endpoint that stores an email address.",
-  "maxTurns": 6,
+  "maxTurns": 10,
   "seed": {
     "src/server.js": "const routes = [];\nmodule.exports = { routes };\n"
   },
@@ -21,7 +21,15 @@
       "type": "regex",
       "pattern": "tier:\\s*(fast|quick)",
       "match": "not_contains"
+    },
+    {
+      "name": "correctness: routed to the full-tier pipeline",
+      "type": "tool_used",
+      "tool": "Skill",
+      "input_match": "develop-feature|bootstrap-feature",
+      "min": 1
     }
   ],
-  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist."
+  "_note": "maxTurns=6 deliberately: measured 2026-08-24, maxTurns=2 starved two cases into a FALSE failure (the tier was never stated because the run was cut off, not because Triage misfired). A too-tight turn budget manufactures defects that do not exist.",
+  "runs": 4
 }
