@@ -1,14 +1,16 @@
 # Scratchpad
 
-## Feature: none active
+## Feature: context-budget + eval-instrument hardening (round 3)
 
-## Tier: n/a
+## Tier: n/a — harness self-work, not a pipeline feature
 
-## Branch: main
+## Branch: feat/eval-multirun
 
-## Status: idle
+## Status: implementing — 4 commits, sweep green (18 validators + 25 suites), 4.8.0 bumped, unmerged
 
-## Version: 4.6.0 shipped and delivered (user scope + both live project scopes). Next bump is a real one.
+## Version: 4.7.0 shipped and delivered. **4.8.0 bumped but NOT released** — the merge-ready cut is a
+delivered-file change, so validate-release-readiness demanded the bump before merge. Release it or the
+cut reaches nobody.
 
 ## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
 
@@ -50,6 +52,42 @@ Prior gate detail: 7/9 (Gate 0 PASS; Gate 1 PASS; Gate 3 PASS ×2 — main diff 
 Follow-up (below reporting bar, from Gate 3 rerun): tests/hooks/test-gitignore-hygiene.js inherits process.env wholesale — GIT_CONFIG_GLOBAL + HOME neutralize the config surfaces, but an exported XDG_CONFIG_HOME still points git at a developer's real ~/.config/git/ignore. Adding XDG_CONFIG_HOME: sandboxHome (and clearing GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE) closes it. Evidence-integrity hardening, not security; deliberately NOT committed mid-gate to avoid invalidating the in-flight Gate 2/3 re-reviews.
 Gate 4 attempts: 1/3
 Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED — 2 Level-4 gaps, both "ran once manually, not persisted". --gaps replan closed both: R1 a8be3e2 tests/hooks/test-gitignore-hygiene.js (15 checks, seeded-broken → 6 precise failures), R2 1576d70 tests/hooks/test-install-messaging.js (32 checks, 4 sandboxed install.sh runs, seeded-broken → exit 1) + README counts 16/22. Sweep 16/16 + 22/22. Attempt 2 running with Gates 2+3 re-run over the replan commits per the Auto-Fix Protocol.)
+
+## Round 3 — what landed on this branch (all measured)
+
+- **Context budget is now a hard cap** (`scripts/ci/validate-context-budget.js`, `--report`), the
+  fourth budget alongside agents/skills/hooks. Ceilings are in BYTES because `claude plugin details`
+  scores the INSTALLED cache, not the working tree — it cannot score a cut until after that cut has
+  shipped, which is why this item sat unbuilt in the queue. Conversion measured across 9 components:
+  **tokens ≈ bytes / 2.78** (`docs/findings/context-cost-calibration.md`). 12 checks, seeded-broken
+  trees pinned to exact problem counts (1 and 3).
+- **The multiplier nobody had counted.** `implement-slice` is paid once PER SLICE, so a byte there
+  costs ~8x a byte in `merge-ready`. Weighted total for an 8-slice feature: **~147k tok** of
+  instruction text. The first version of that table wrongly listed `verifier` as per-slice (it is
+  Gate 6 only, once per feature) and overstated the total by ~44k — corrected by reading which agents
+  each skill actually invokes, and the error is recorded rather than quietly fixed.
+- **Progressive disclosure is real on the cost side.** A 20 KB sibling file in a skill directory moved
+  NEITHER the always-on (~1,155) nor the on-invoke (~920) number — only `SKILL.md` is charged. This
+  makes `implement-slice`'s `### 6. Capture Instincts` (7,908 of 23,176 bytes, 34%, ~22.8k tok/feature
+  for a step that usually no-ops) the largest single remaining prize. **The behavioural half is
+  UNMEASURED** — probe ready at `scratchpad/probe-sibling-read.sh`. Do not ship the split on the cost
+  result alone; the failure mode is silent.
+- **merge-ready cut by 1,190 bytes** — a war story already told in CLAUDE.md, a third copy of a
+  residual-risk record already in PRD FR-4.7, one C2 meta-justification, and 3 of 4 restatements of
+  the shrink-guard rationale (the imperative survives verbatim at every point of use).
+- **Eval instrument: two more traps found, both fixed.** (3) A killed run is now
+  `INCONCLUSIVE — run errored, not graded`: a 240s timeout under `maxTurns: 10` had produced two
+  confident behavioural failures whose real cause was the ETIMEDOUT line beneath them. `timeoutSeconds`
+  must be raised whenever `maxTurns` is. (4) **Headless `claude -p` has no Agent tool** — a run said so
+  outright and produced the full-tier deliverables inline. No deny rule exists in settings; it is a
+  property of the mode. Any grader expecting a spawned agent measures the sandbox.
+- **New `any_of` grader combinator.** The full-tier branch mandates the Phase 1 DELIVERABLES and names
+  the agents that produce them — it never mandates a literal skill invocation. The run scored as a
+  routing failure had complied. 41 grader checks, mutation-tested (forcing `pass: true` trips the
+  seeded-broken check).
+
+**Running tally: seven false negatives from the eval, zero true findings from a grader bug.** The
+harness has been right every time. Carry that calibration into reading any eval failure.
 
 ## Blockers
 
