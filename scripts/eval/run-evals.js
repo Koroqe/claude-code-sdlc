@@ -234,6 +234,10 @@ function main() {
     if (!res.pass) {
       for (const g of res.graders.filter((x) => !x.pass)) {
         process.stdout.write('    ✗ ' + g.name + ' — ' + g.detail + '\n');
+        // Nine of this suite's failures were grader defects, not findings. When a
+        // relaxed form of the same grader would have passed, say so before the
+        // reader starts debugging the harness.
+        if (g.diagnosis) process.stdout.write('      ⚠ ' + g.diagnosis + '\n');
       }
       if (res.spawnError) process.stdout.write('    ✗ spawn: ' + res.spawnError + '\n');
     }

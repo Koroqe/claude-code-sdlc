@@ -15,7 +15,7 @@
  * A grader that only ever passes is not evidence.
  */
 
-const { parseStream, runGrader, gradeCase } = require('../../scripts/eval/graders.js');
+const { parseStream, runGrader, gradeCase, diagnose } = require('../../scripts/eval/graders.js');
 const { Checks } = require('./harness');
 
 const c = new Checks('eval graders');
@@ -203,5 +203,36 @@ c.ok('tier regex: SEEDED BROKEN — an emphasised cheap tier no longer evades th
   !runGrader(TIER_CHEAP, parseStream(stream([text('tier: `quick` — small change')])), []).pass);
 c.ok('tier regex: the negative grader still passes on a genuinely full-tier run',
   runGrader(TIER_CHEAP, realWorld, []).pass);
+
+// --- near-miss diagnostics ------------------------------------------------
+// These fire on the three shapes that actually produced false findings here.
+// They must annotate a failure, never convert it into a pass.
+const emphasised = parseStream(stream([text('**Step 7 — tier: `full` — FR-1.3(a)**')]));
+const strict = { name: 'tier is full', type: 'regex', pattern: 'tier:\\s*full' };
+c.ok('diagnose: flags an emphasis near-miss',
+  (diagnose(strict, emphasised, []) || '').indexOf('NEAR MISS') === 0);
+c.ok('diagnose: the verdict is untouched — a failing grader still fails',
+  !gradeCase({ graders: [strict] }, emphasised, []).pass);
+c.ok('diagnose: the hint is attached to the failing grader result',
+  (gradeCase({ graders: [strict] }, emphasised, []).graders[0].diagnosis || '').indexOf('emphasis') !== -1);
+c.ok('diagnose: silent when the pattern genuinely does not appear',
+  diagnose(strict, parseStream(stream([text('just fixing it')])), []) === null);
+c.ok('diagnose: silent when the grader passed on its own terms',
+  !gradeCase({ graders: [{ type: 'regex', pattern: 'tier:[`*_\\s]*full' }] }, emphasised, []).graders[0].diagnosis);
+
+const editedInstead = parseStream(stream([text('done'), tool('Edit', { file_path: 'docs/PRD.md' })]));
+c.ok('diagnose: flags a sibling-tool near-miss',
+  (diagnose({ type: 'tool_used', tool: 'Write', input_match: 'docs/PRD', min: 1 }, editedInstead, []) || '')
+    .indexOf('different tool matched') !== -1);
+c.ok('diagnose: does NOT flag a sibling tool for a must-not-be-used grader',
+  diagnose({ type: 'tool_used', tool: 'Write', input_match: 'docs/PRD', max: 0 }, editedInstead, []) === null);
+
+c.ok('diagnose: flags an attempted-but-blocked write',
+  (diagnose({ type: 'file_written', pattern: 'docs/PRD\\.md' },
+    parseStream(stream([text('denied'), tool('Write', { file_path: 'docs/PRD.md' })])), []) || '')
+    .indexOf('ATTEMPTED') !== -1);
+c.ok('diagnose: silent when no write of that path was even attempted',
+  diagnose({ type: 'file_written', pattern: 'docs/PRD\\.md' },
+    parseStream(stream([text('nothing')])), []) === null);
 
 c.finish();

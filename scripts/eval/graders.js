@@ -171,11 +171,78 @@ function runGrader(grader, parsed, filesWritten) {
   }
 }
 
+/**
+ * Why a failing grader gets a second look before it is believed.
+ *
+ * Nine of this suite's failures have been grader defects rather than harness
+ * findings, and they cluster into three shapes that are mechanically detectable:
+ *
+ *   1. The pattern was too strict for how the model formats prose. `tier:\s*full`
+ *      missed `` tier: `full` `` — a fully compliant statement — because `\s`
+ *      does not span a backtick.
+ *   2. The rule was satisfiable by a sibling tool. A grader wanting `Write` sees
+ *      zero uses because the run reached for `Edit`.
+ *   3. The effect was blocked while the attempt was correct. Headless `-p`
+ *      denies writes on some runs, so a file the agent genuinely tried to create
+ *      never appears on disk.
+ *
+ * Each of those reads exactly like a real behavioural finding in the output. So
+ * when a grader fails, retry it under a relaxation and, if the relaxed form
+ * passes, say so loudly. This does NOT change the verdict — a failing grader
+ * still fails, because silently widening a rule to make it green is how an eval
+ * stops being evidence. It only annotates the failure with the reason it is most
+ * likely to be the instrument's fault.
+ */
+function diagnose(grader, parsed, filesWritten) {
+  if (!grader || typeof grader !== 'object') return null;
+  try {
+    if (grader.type === 'regex' && grader.match !== 'not_contains') {
+      const hay = targetText(parsed, grader.target);
+      // Strip markdown emphasis and collapse whitespace, then retest unchanged.
+      const relaxed = String(hay).replace(/[`*_~]/g, '').replace(/\s+/g, ' ');
+      if (new RegExp(grader.pattern, grader.flags || 'i').test(relaxed)) {
+        return 'NEAR MISS — matches once markdown emphasis is stripped. The run probably complied ' +
+          'and the pattern is too strict; widen it (e.g. `tier:[`*_\\s]*full`) rather than filing this.';
+      }
+    }
+    if (grader.type === 'tool_used' && grader.input_match) {
+      const others = parsed.toolUses.filter((t) => {
+        try { return new RegExp(grader.input_match, 'i').test(JSON.stringify(t.input)); }
+        catch (err) { return false; }
+      });
+      const wanted = new RegExp('^(?:' + grader.tool + ')$');
+      const siblings = [...new Set(others.filter((t) => !wanted.test(t.name)).map((t) => t.name))];
+      const min = typeof grader.min === 'number' ? grader.min : (typeof grader.max === 'number' ? 0 : 1);
+      if (min >= 1 && siblings.length) {
+        return 'NEAR MISS — a different tool matched the same input: ' + siblings.join(', ') +
+          '. If either tool satisfies the rule, widen `tool` to an alternation.';
+      }
+    }
+    if (grader.type === 'file_written' && grader.match !== 'not_contains') {
+      const re = new RegExp(grader.pattern, 'i');
+      const attempted = parsed.toolUses.some((t) =>
+        /^(Write|Edit|NotebookEdit)$/.test(t.name) && re.test(JSON.stringify(t.input)));
+      if (attempted) {
+        return 'NEAR MISS — the write was ATTEMPTED but no file appeared. Headless `-p` denies writes ' +
+          'to the sandbox on some runs; grade the attempt, not the effect.';
+      }
+    }
+  } catch (err) { return null; }
+  return null;
+}
+
 /** Grade a whole case. Returns { pass, graders: [...] }. */
 function gradeCase(spec, parsed, filesWritten) {
   const graders = (spec && Array.isArray(spec.graders) ? spec.graders : [])
-    .map((g) => runGrader(g, parsed, filesWritten));
+    .map((g) => {
+      const res = runGrader(g, parsed, filesWritten);
+      if (!res.pass) {
+        const hint = diagnose(g, parsed, filesWritten);
+        if (hint) res.diagnosis = hint;
+      }
+      return res;
+    });
   return { pass: graders.length > 0 && graders.every((g) => g.pass), graders };
 }
 
-module.exports = { parseStream, runGrader, gradeCase, targetText };
+module.exports = { parseStream, runGrader, gradeCase, targetText, diagnose };
