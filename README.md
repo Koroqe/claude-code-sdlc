@@ -509,7 +509,7 @@ Two traps worth knowing:
 ## How the harness checks itself
 
 A harness that enforces quality has to be held to it. This repo ships **18 CI validators** and
-**25 hook test files**, run by GitHub Actions across four jobs on every push.
+**26 hook test files**, run by GitHub Actions across four jobs on every push.
 
 The rule that matters: **every validator must fail on a deliberately broken asset, not merely pass on
 a good one.** Each has seeded fixtures pinned to an exact expected problem count, so a check cannot
