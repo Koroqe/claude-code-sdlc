@@ -16,11 +16,6 @@
       "min": 1
     },
     {
-      "name": "correctness: recognised the quick tier",
-      "type": "regex",
-      "pattern": "tier:[`*_\\s]*quick"
-    },
-    {
       "name": "correctness: applied the reduced gate subset",
       "type": "any_of",
       "graders": [
@@ -35,6 +30,11 @@
           "name": "named a full-tier-only gate as skipped",
           "type": "regex",
           "pattern": "SKIPPED[^\\n]{0,40}quick|Gate\\s*[1567][^\\n]{0,40}SKIP"
+        },
+        {
+          "name": "stated the tier in prose",
+          "type": "regex",
+          "pattern": "tier:[`*_\\s]*quick"
         }
       ]
     },
@@ -55,5 +55,5 @@
   ],
   "runs": 3,
   "timeoutSeconds": 420,
-  "_note": "Graded so it cannot pass on a dead run: the two max:0 Agent graders are vacuous in a sandbox with no Agent tool, so the tier decision is also asserted positively in prose. Measured 2026-08-26 \u2014 requiring an Agent spawn scored this case 0/3 purely on Agent availability."
+  "_note": "The quick-tier decision is graded by its OBSERVABLE effects, not by prose. Measured 2026-08-26: a run that read the scratchpad, spawned the quick-subset gate agents and ran neither verifier nor e2e-runner -- correct on every count -- never used the word 'tier' in 748 characters of reply. merge-ready renders 'SKIPPED (tier: quick)' only in its final table, which a bounded maxTurns never reaches, so a prose requirement here re-creates the turn-budget trap in trap 2. Prose is kept as one alternative among three, never as the sole requirement."
 }

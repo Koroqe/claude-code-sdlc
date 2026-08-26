@@ -74,7 +74,7 @@ from the rule:
   signals and written both documents inline — it complied. Use `any_of` when a rule is satisfiable
   more than one legitimate way.
 
-Running tally: **nine false negatives from this suite, zero true findings from a grader bug.** The
+Running tally: **ten false negatives from this suite, zero true findings from a grader bug.** The
 harness was right every time. That is the calibration to carry into reading any failure here.
 
 ## Five measured traps, all of which produced false results before being fixed
@@ -83,9 +83,16 @@ harness was right every time. That is the calibration to carry into reading any 
    also strips the CLI's credentials: every case exits in ~1 s with `Not logged in`, and the suite
    reports a confident `0/4` that is purely an artifact. The runner therefore uses the real `HOME`
    and gates on the freshness check above instead.
-2. **A too-tight `maxTurns` manufactures defects.** At `maxTurns: 2`, two cases failed
+2. **A too-tight `maxTurns` manufactures defects — and this one recurs.** At `maxTurns: 2`, two cases failed
    `protocol: stated a tier` — not because Triage misfired, but because the run was cut off before it
    spoke. At `maxTurns: 6` both pass. **Before believing a failure, raise the budget and re-run.**
+
+   It bit again on 2026-08-26 in a subtler form. `skill-merge-ready-tier-subset` was given a prose
+   grader for the quick-tier decision; a run that read the scratchpad, spawned the quick-subset gate
+   agents and ran neither `verifier` nor `e2e-runner` — correct on every count — never used the word
+   "tier" in 748 characters. `merge-ready` renders `SKIPPED (tier: quick)` only in its final table,
+   which a bounded `maxTurns` never reaches. **Prefer behavioural evidence to narration**: prose is
+   now one alternative of three, never the sole requirement.
 
 3. **`timeoutSeconds` must be raised whenever `maxTurns` is.** Raising `maxTurns` from 6 to 10 pushed
    a case's runs past the 240 s default timeout. The killed run produced no transcript, so every
