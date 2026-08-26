@@ -12,11 +12,14 @@ Delivery confirmed: user scope 4.7.0 -> 4.8.0, this repo's project scope 4.6.0 -
 ## Version: **4.8.0 shipped and delivery-confirmed** (2026-08-26 01:15 UTC). Sweep 18 validators +
 26 suites green on main; eval 15/15.
 
-**Stale project-scope installs remain, NOT touched (other projects, outside working dirs):**
-`claude plugin list` shows several project-scope entries still on **4.0.0** — a version that does not
-load at all (the `plugin.json` "hooks" defect fixed in 4.4.0), so those projects are running with no
-hooks and no warning. `/Users/aleksei/Documents/Projects.nosync/Restaba` is the one still on disk.
-Fix per project: `cd <project> && claude plugin update claude-code-sdlc@claude-code-sdlc --scope project`.
+**Install state, verified against the full `claude plugin list` (not inferred):** user 4.8.0, this
+repo's project scope 4.8.0, `Restaba` 4.6.0 — live and one release behind, updatable with
+`cd Restaba && claude plugin update claude-code-sdlc@claude-code-sdlc --scope project` (not done here:
+outside this session's working directories). The five remaining `4.0.0` project rows are registry
+entries for directories that no longer exist (`booka` plus four `/private/tmp` test projects); they
+cannot be updated and are harmless — do not chase them ([[claude-cli-environment]]).
+An earlier draft of this note called Restaba a broken 4.0.0 install. That was wrong: it was read off
+the row count rather than the listing, which is the same mistake the eval instrument kept making.
 
 ## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
 
