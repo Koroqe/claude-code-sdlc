@@ -128,13 +128,32 @@ function runCase(spec) {
       }
     })(proj, '');
 
+    // A run the harness killed (timeout, spawn failure) produced no transcript to
+    // grade. Grading it anyway manufactures findings: every content grader
+    // reports "absent" and the output reads exactly like a behavioural failure.
+    // Measured 2026-08-26 — a 240s timeout on a maxTurns:10 case produced three
+    // confident grader failures whose real cause was one line further down.
+    // An errored run is INCONCLUSIVE: it cannot pass, and it must not pretend to
+    // explain itself.
+    const spawnError = r.error ? String(r.error.message) : null;
+    if (spawnError) {
+      return {
+        name: spec.name, pass: false, errored: true, graders: [],
+        elapsedMs: elapsed, spawnError,
+        transcriptChars: (r.stdout || '').length,
+        assistantText: parsed.assistantText,
+        toolUses: parsed.toolUses.map((t) => ({ name: t.name, input: t.input })),
+      };
+    }
+
     const graded = gradeCase(spec, parsed, written);
     return {
       name: spec.name,
       pass: graded.pass,
+      errored: false,
       graders: graded.graders,
       elapsedMs: elapsed,
-      spawnError: r.error ? String(r.error.message) : null,
+      spawnError: null,
       transcriptChars: (r.stdout || '').length,
       assistantText: parsed.assistantText,
       toolUses: parsed.toolUses.map((t) => ({ name: t.name, input: t.input })),
@@ -160,12 +179,14 @@ function runCaseRepeated(spec) {
   const attempts = [];
   for (let i = 0; i < runs; i += 1) attempts.push(runCase(spec));
   const passed = attempts.filter((a) => a.pass).length;
-  const firstFailure = attempts.find((a) => !a.pass);
+  const errored = attempts.filter((a) => a.errored).length;
+  const firstFailure = attempts.find((a) => !a.pass && !a.errored) || attempts.find((a) => !a.pass);
   return {
     name: spec.name,
     pass: passed === runs,
     runs,
     passedRuns: passed,
+    erroredRuns: errored,
     elapsedMs: attempts.reduce((n, a) => n + a.elapsedMs, 0),
     graders: (firstFailure || attempts[0]).graders,
     spawnError: (firstFailure || attempts[0]).spawnError,
@@ -207,8 +228,9 @@ function main() {
     const res = runCaseRepeated(spec);
     results.push(res);
     process.stdout.write((res.pass ? 'PASS' : 'FAIL') + '  ' +
-      res.passedRuns + '/' + res.runs + ' run(s)  (' +
-      Math.round(res.elapsedMs / 1000) + 's)\n');
+      res.passedRuns + '/' + res.runs + ' run(s)' +
+      (res.erroredRuns ? '  [' + res.erroredRuns + ' INCONCLUSIVE — run errored, not graded]' : '') +
+      '  (' + Math.round(res.elapsedMs / 1000) + 's)\n');
     if (!res.pass) {
       for (const g of res.graders.filter((x) => !x.pass)) {
         process.stdout.write('    ✗ ' + g.name + ' — ' + g.detail + '\n');
@@ -224,6 +246,7 @@ function main() {
     ranAt: stamp,
     cases: results.map((r) => ({
       name: r.name, pass: r.pass, runs: r.runs, passedRuns: r.passedRuns,
+      erroredRuns: r.erroredRuns,
       elapsedMs: r.elapsedMs,
       graders: r.graders, transcriptChars: r.transcriptChars,
       // On failure, keep what the model actually said and did. Twice now a
