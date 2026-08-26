@@ -229,5 +229,80 @@ for (const d of denials) {
   c.ok('reason references no external document', text.indexOf('error-recovery.md') === -1);
 }
 
+// --- REGRESSION: judge the repo git will ACTUALLY act on ------------------
+//
+// The branch check resolved the branch from the hook's cwd — the session's
+// working directory — not from the directory the command targets. That is
+// wrong in both directions.
+//
+// The false-ALLOW is the dangerous half: a session rooted on a feature branch
+// could `cd` into a second repo sitting on main and commit there unchallenged.
+//
+// The false-DENY is the loud half. Committing to a second repo from a session
+// rooted elsewhere was refused as "on main" no matter how correct the target
+// branch was, and the only way past it is the escape — which disables EVERY
+// other check in this guard for that call: message shape, attribution, bulk
+// add, push. A guard that routinely forces its own bypass is worse than one
+// that never fired.
+
+r = bash('cd ' + mainRepo + ' && git commit -m "feat(core): x"', featRepo);
+c.ok('cd into a main-branch repo is refused', denied(r), reason(r));
+c.contains('and the reason names the TARGET branch', reason(r), 'main');
+
+r = bash('cd ' + featRepo + ' && git commit -m "feat(core): x"', mainRepo);
+c.ok('cd into a feature-branch repo is allowed', !denied(r), reason(r));
+
+// `git -C` says the same thing without moving the shell.
+r = bash('git -C ' + mainRepo + ' commit -m "feat(core): x"', featRepo);
+c.ok('git -C into a main-branch repo is refused', denied(r), reason(r));
+
+r = bash('git -C ' + featRepo + ' commit -m "feat(core): x"', mainRepo);
+c.ok('git -C into a feature-branch repo is allowed', !denied(r), reason(r));
+
+// A relative cd resolves against whatever cwd is in force at that point.
+r = bash(
+  'cd ' + path.basename(mainRepo) + ' && git commit -m "feat(core): x"',
+  path.dirname(mainRepo)
+);
+c.ok('a relative cd is resolved', denied(r), reason(r));
+
+// Order matters: a cd AFTER the commit cannot retroactively move it.
+r = bash('git commit -m "feat(core): x" && cd ' + mainRepo, featRepo);
+c.ok('a trailing cd does not affect the commit before it', !denied(r), reason(r));
+
+// Two hops: the last one wins.
+r = bash(
+  'cd ' + mainRepo + ' && cd ' + featRepo + ' && git commit -m "feat(core): x"',
+  mainRepo
+);
+c.ok('the final cd is the one that counts', !denied(r), reason(r));
+
+// An unresolvable cd must fail OPEN on the branch check rather than judge the
+// wrong repo — and must say so, because a silently skipped check is
+// indistinguishable from a check that passed.
+r = bash('cd "$TARGET_DIR" && git commit -m "feat(core): x"', mainRepo);
+c.ok('an unresolvable cd does not deny on the branch check', !denied(r), reason(r));
+c.contains(
+  'and the skip is announced',
+  (r.json && r.json.systemMessage) || '',
+  'branch check skipped'
+);
+
+// Losing the directory must not disable the checks that never needed it. This
+// is what stops the fix from becoming a way to launder a bad commit.
+r = bash('cd "$TARGET_DIR" && git commit -m "nope"', featRepo);
+c.ok('cwd-independent checks still run after an unresolvable cd', denied(r));
+c.contains('and it is the message shape that refused', reason(r), 'not conventional');
+
+r = bash('cd ' + featRepo + ' && git add -A', mainRepo);
+c.ok('bulk add is still refused after a cd', denied(r));
+
+r = bash('cd ' + featRepo + ' && git push origin main', mainRepo);
+c.ok('push is still refused after a cd', denied(r));
+
+// A cd to somewhere that is not a repo at all: nothing to judge, so allow.
+r = bash('cd ' + scratch + ' && git commit -m "feat(core): x"', mainRepo);
+c.ok('a cd out of any repo does not deny on the branch check', !denied(r), reason(r));
+
 rimraf(scratch);
 c.finish();
