@@ -97,3 +97,39 @@ kind — instinct capture degrading silently while every surface still reports
 success. Any such split must therefore be fail-visible (the step states plainly
 that it could not read its procedure) and must be measured with a live eval case
 before it ships, not assumed from this result.
+
+## The behavioural half: an agent told to read a sibling file does read it
+
+**Measured 2026-08-26, Claude Code 2.1.237, 3/3 runs.** Temporarily appended a
+mandatory "read `probe-procedure.md` in this skill's own directory" step to the
+installed cache's cheapest skill, put a distinctive token in that sibling file,
+invoked the skill headless three times, and grepped each transcript for the token.
+
+```
+run 1: token FOUND — sibling file was read
+run 2: token FOUND — sibling file was read
+run 3: token FOUND — sibling file was read
+RESULT: 3/3 runs read the sibling file
+```
+
+Cache restored and verified byte-identical to the repo afterwards. Probe script:
+`scratchpad/probe-sibling-read.sh`.
+
+### What this does and does not license
+
+Both halves are now measured: text moved out of `SKILL.md` stops being charged
+(cost), and an agent instructed to read the sibling file does so (behaviour).
+Progressive disclosure is viable for this harness.
+
+It is still **not** sufficient to ship the `implement-slice` split on. The probe
+asked an idle agent to read one short file and echo a token. The real case asks a
+mid-slice agent, immediately after a commit, to read a 7.9 KB procedure and follow
+it exactly — under load, at the point where skipping a step is cheapest. Those are
+different questions, and the failure mode of the second is silent: instinct
+capture degrades while every surface still reports success.
+
+So the split, when it is made, must be **fail-visible** — the step states plainly
+that it could not read its procedure rather than improvising a capture — and must
+keep the trigger tests inline, so the deferred read happens only on the rare turn
+where a trigger actually fired. Deliberately not shipped in the same change as the
+measurement that enabled it.
