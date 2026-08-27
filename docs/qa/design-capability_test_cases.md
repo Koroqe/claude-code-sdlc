@@ -107,6 +107,7 @@ to `design-reviewer`'s `## Preview` command execution.
 | TC-5.2 | UC-5-A1 | FIXTURE | Light-theme-only project captures light only, and the report does not overclaim a dark-mode check | Fixture project supporting only light theme | Invoke `design-reviewer` | Report lists only mobile+desktop/light captures; no claim of a dark-mode check appears |
 | TC-5.3 | UC-5-E1 | FIXTURE | Playwright available but capture fails → falls through to chain step 3 | Fixture where the app fails to boot under the generic Playwright invocation | Invoke `design-reviewer` | Report notes the Playwright capture attempt and its failure, then falls through to code-level review, including the literal `no visual evidence — reviewed at code level` line |
 | TC-5.4 | UC-5-EC1 | FIXTURE | Changed routes not determinable from diff → captures inferable routes and states the basis | Fixture with an ambiguous diff (e.g. a shared layout file touched, no page file changed) | Invoke `design-reviewer` | Report states which routes were captured and on what basis; does not silently report zero routes with no explanation |
+| TC-5.5 | UC-5-E2 | FIXTURE | Playwright available but project NOT in `~/.claude/sdlc-trusted-projects` → step 2 skipped, no execution, falls through to chain step 3 | Fixture project with Playwright present as a dependency, no `## Preview` section, project absent from the trust registry | Invoke `design-reviewer` | Playwright is never invoked; report contains the literal line `step 2 skipped: project not trusted` and falls through to chain step 3, including `no visual evidence — reviewed at code level` |
 
 ---
 
@@ -429,6 +430,7 @@ across FR-1.1, FR-3.1/FR-3.4, and all of FR-4.
 | UC-5-A1 | TC-5.2 |
 | UC-5-E1 | TC-5.3 |
 | UC-5-EC1 | TC-5.4 |
+| UC-5-E2 | TC-5.5 |
 | UC-6 Primary Flow | TC-6.1 |
 | UC-6 Error Flows | None documented in the use-case source itself ("reaching step 3 is itself the fallback outcome, not an error state") — no test case added, consistent with the use case's own reasoning |
 | UC-6-EC1 | TC-6.2 |
@@ -477,9 +479,9 @@ reasoning (UC-2-A1, UC-6 Error Flows, UC-20 Error Flows) rather than padded with
 | Kind | Count | Automatable in this repo's CI today |
 |---|---|---|
 | STATIC | 57 | Yes — 57/57. Runnable via `node scripts/ci/validate-*.js`, `node tests/hooks/test-stop-gate-evidence.js`, and equivalent grep/file-read/git-diff checks, with zero agent invocations (TC-S.33 is the one shell-level integration exception noted as BEHAVIORAL but scriptable) |
-| FIXTURE | 51 | No — 0/51 today. Each requires a live, single-**agent** invocation — `design-reviewer` only (resolvable as `agents/design-reviewer.md`) — against a committed fixture; this repo has no LLM-invocation harness to script that. `design-foundation` is a **skill**, not an agent, so its runs are BEHAVIORAL, never FIXTURE (see Section 1). Fixture contents and expected outputs are specified precisely enough for a human reviewer or a future eval harness to execute exactly as written. All 51 rows carry the bare `FIXTURE` literal in the Kind column (no "(negative)"/"(security-shaped)"/etc. suffix) so `scripts/ci/validate-fixture-manifest.js`'s literal-string match resolves every one; any such qualifier is instead stated in the row's own Test Case description |
+| FIXTURE | 52 | No — 0/52 today. Each requires a live, single-**agent** invocation — `design-reviewer` only (resolvable as `agents/design-reviewer.md`) — against a committed fixture; this repo has no LLM-invocation harness to script that. `design-foundation` is a **skill**, not an agent, so its runs are BEHAVIORAL, never FIXTURE (see Section 1). Fixture contents and expected outputs are specified precisely enough for a human reviewer or a future eval harness to execute exactly as written. All 52 rows carry the bare `FIXTURE` literal in the Kind column (no "(negative)"/"(security-shaped)"/etc. suffix) so `scripts/ci/validate-fixture-manifest.js`'s literal-string match resolves every one; any such qualifier is instead stated in the row's own Test Case description |
 | BEHAVIORAL | 22 | No — 0/22 today (except TC-S.33, a plain Bash-scriptable `install.sh --init-project` integration check, which IS automatable and is the one BEHAVIORAL case that could run in CI as ordinary shell testing). The remaining 21 require driving `/merge-ready`, `/bootstrap-feature`, or `/design-foundation` through a real multi-step, multi-agent run and observing the aggregate outcome |
-| **Total** | **130** | **58/130 (≈44.6%) automatable in CI today** |
+| **Total** | **131** | **58/131 (≈44.3%) automatable in CI today** |
 
 This feature's STATIC share is far higher than `verification-review-upgrade_test_cases.md`'s
 ≈24.5% precedent because this feature adds a large amount of genuinely mechanical wiring (version

@@ -148,14 +148,15 @@
 ## UC-5: Fallback Chain Step 2 — No `## Preview`, Playwright Available
 
 **Actor**: `design-reviewer`
-**Preconditions**: `.claude/rules/design.md` either does not exist, or exists but has no `## Preview` section (or the section has no usable launch command); the consuming project has Playwright available (e.g. as a dependency or configured test runner)
+**Preconditions**: `.claude/rules/design.md` either does not exist, or exists but has no `## Preview` section (or the section has no usable launch command); the consuming project has Playwright available (e.g. as a dependency or configured test runner); the project is listed in the trust registry `~/.claude/sdlc-trusted-projects` — Playwright also executes repo-controlled code (it loads the project's own config), so this step requires the same trust-registry pass as chain step 1
 **Trigger**: Gate 8 delegation; chain step 1 is unavailable
 
 ### Primary Flow (Happy Path)
 1. `design-reviewer` determines chain step 1 is unavailable (no declared preview recipe).
 2. It confirms Playwright is available in the project.
-3. It performs a generic capture of the routes changed by this feature, at mobile and desktop widths, in both light and dark themes where the project supports both.
-4. It views the captures with `Read` and proceeds with the audit exactly as in UC-1 steps 5-7, noting in the report that the evidence source was an automated generic capture (not a project-declared recipe).
+3. It confirms the project is listed in `~/.claude/sdlc-trusted-projects` (a fresh read, same trust check as chain step 1).
+4. It performs a generic capture of the routes changed by this feature, at mobile and desktop widths, in both light and dark themes where the project supports both.
+5. It views the captures with `Read` and proceeds with the audit exactly as in UC-1 steps 5-7, noting in the report that the evidence source was an automated generic capture (not a project-declared recipe).
 
 **Postconditions**: the report identifies which evidence source was used (generic Playwright capture) and lists the widths/themes captured; PASS/FAIL verdict issued.
 
@@ -164,6 +165,7 @@
 
 ### Error Flows
 - **UC-5-E1: Playwright is available but the capture itself fails** (e.g. the app doesn't boot under the generic invocation) — falls through to chain step 3 (UC-6), fail-visibly, per UC-4-E1's pattern.
+- **UC-5-E2: project is not listed in `~/.claude/sdlc-trusted-projects`** — `design-reviewer` does NOT run Playwright, even though it is available; it reports the literal line `step 2 skipped: project not trusted` and falls through to chain step 3 (UC-6) — never an unguarded execution.
 
 ### Edge Cases
 - **UC-5-EC1: changed routes cannot be determined from the diff** — `design-reviewer` captures the routes it can reasonably infer (e.g. from new/modified page files) and notes in the report which routes were captured and on what basis; it does not silently capture zero routes without saying so.
@@ -570,7 +572,8 @@ None distinct — refusal is the correct terminal outcome for chain step 1 in th
 | Scenario | Chain step reached | Literal required line | UC |
 |---|---|---|---|
 | `## Preview` declared, project trusted, launch succeeds | 1 | none required (screenshots referenced) | UC-1 |
-| No `## Preview`, Playwright available | 2 | none required (capture widths/themes noted) | UC-5 |
+| No `## Preview`, Playwright available, project trusted | 2 | none required (capture widths/themes noted) | UC-5 |
+| No `## Preview`, Playwright available, project untrusted | falls through to 3 | `step 2 skipped: project not trusted` | UC-5-E2 |
 | No `## Preview`, no Playwright | 3 | `no visual evidence — reviewed at code level` | UC-6 |
 | Chain step 1 command fails/times out | falls through to 2 or 3 | per step reached | UC-12 |
 | Capture produces unreadable image | falls through to next step | per step reached | UC-13 |

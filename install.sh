@@ -155,9 +155,11 @@ OPTIONS:
   --uninstall        Remove the files this harness installed
   --restore <dir>    Restore ~/.claude from one of this installer's backups
   --trust-project [path]
-                     Allow the hooks to run this project's CLAUDE.md-declared
-                     typecheck/format commands (defaults to the current
-                     directory). Untrusted projects only ever get a report.
+                     Allow this project's declared commands to run: the
+                     CLAUDE.md typecheck/format commands (hooks) and the
+                     .claude/rules/design.md preview commands (Gate 8 review).
+                     Defaults to the current directory. Untrusted projects
+                     only ever get a report.
   --profile <name>   Rewrite agents/*.md model: frontmatter to one of
                      quality | balanced | budget | inherit. Requires --local.
                      See MODEL PROFILES below.
@@ -560,8 +562,9 @@ trust_project() {
 
   if [ ! -f "$registry" ]; then
     {
-      printf '%s\n' '# Projects whose CLAUDE.md-declared typecheck and format commands the'
-      printf '%s\n' '# claude-code-sdlc hooks may execute. One absolute path per line.'
+      printf '%s\n' '# Projects whose declared commands claude-code-sdlc may execute: the'
+      printf '%s\n' '# CLAUDE.md typecheck/format commands (hooks) and the .claude/rules/'
+      printf '%s\n' '# design.md preview commands (Gate 8 review). One absolute path per line.'
       printf '%s\n' '#'
       printf '%s\n' '# Add a project with: bash install.sh --trust-project [path]'
       printf '%s\n' '# Remove one by deleting its line.'
@@ -573,7 +576,7 @@ trust_project() {
 
   printf '%s\n' "$resolved" >> "$registry"
   log_ok "Trusted: $resolved"
-  log_info "Its declared typecheck/format commands may now run automatically at the end of a response."
+  log_info "Its declared typecheck/format commands may now run automatically at the end of a response, and its declared design-preview commands may run during Gate 8 review."
 }
 
 # ----------------------------------------------------------------------------

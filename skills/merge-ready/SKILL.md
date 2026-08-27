@@ -204,7 +204,9 @@ produce no `docs/digest-index.md` row.
 `SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above. `N/A` means the
 applicability check ran and found no user-facing changes — never conflate the two.
 
-Delegate to `design-reviewer` agent:
+Delegate to `design-reviewer` agent. A `refused: project not trusted` line in its report is a
+designed outcome — never a failure for the Auto-Fix Protocol; trust-registry writes are
+human-only, outside any session.
 - [ ] Visual consistency with the project's declared design system (`.claude/rules/design.md`)
 - [ ] All component states (loading, error, empty, success)
 - [ ] Responsive behavior

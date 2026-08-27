@@ -72,6 +72,8 @@
       "Write(~/.claude/settings.json)",
       "Edit(~/.claude/sdlc-trusted-projects)",
       "Write(~/.claude/sdlc-trusted-projects)",
+      "Bash(*sdlc-trusted-projects*)",
+      "Bash(*--trust-project*)",
       "Edit(.git/**)",
       "Write(.git/**)",
       "Read(.env)",

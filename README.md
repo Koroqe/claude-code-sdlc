@@ -450,12 +450,15 @@ startup. See
 
 ### Running project commands is opt-in, per project
 
-`stop:typecheck-format` executes a command declared in your project's
-`CLAUDE.md`. That execution is spawned by the hook engine, so the permission
-system never sees it — which means cloning a repository and letting one
-response finish would otherwise be enough to run a command of its choosing.
+Two channels execute project-declared commands: `stop:typecheck-format` runs a
+command declared in your project's `CLAUDE.md` (spawned by the hook engine, so
+the permission system never sees it), and `design-reviewer` may run a
+`## Preview` command declared in `.claude/rules/design.md` during Gate 8
+review (behind its own command-shape gate). Either way, cloning a repository
+would otherwise be enough to run a command of its choosing.
 
-So it only runs in projects you have explicitly registered:
+So both channels only run in projects you have explicitly registered — one
+registration covers both, and `SDLC_EXEC_PROJECT_COMMANDS=0` disables both:
 
 ```bash
 bash install.sh --trust-project          # trust the current directory

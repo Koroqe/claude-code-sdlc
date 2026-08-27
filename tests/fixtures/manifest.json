@@ -690,6 +690,14 @@
       "expect": "Report states which routes were captured and on what basis; does not silently report zero routes with no explanation"
     },
     {
+      "id": "TC-5.5",
+      "agent": "design-reviewer",
+      "qaDoc": "docs/qa/design-capability_test_cases.md",
+      "fixture": null,
+      "note": "needs a committed fixture project with Playwright present as a dependency, no ## Preview section, and the project absent from a seeded trust registry; none committed yet",
+      "expect": "Playwright is never invoked; report contains the literal line 'step 2 skipped: project not trusted' and falls through to chain step 3, including 'no visual evidence — reviewed at code level'"
+    },
+    {
       "id": "TC-6.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
