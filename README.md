@@ -23,7 +23,7 @@ claude plugin list   # expect claude-code-sdlc — Scope: user, Status: ✔ enab
 ```
 
 Open a new session in any project and the harness is active — user-scope enablement loads the
-plugin everywhere (measured on Claude Code 2.1.237: all 15 agents resolve and hooks fire in a
+plugin everywhere (measured on Claude Code 2.1.237: all 16 agents resolve and hooks fire in a
 fresh directory with no per-project setup).
 
 ---
@@ -107,7 +107,7 @@ Either of these gives you the plugin but **not** the memory layer. See below for
 
 | Layer | What it holds | How it installs |
 |---|---|---|
-| Plugin | 15 agents, 7 skills, hooks | `claude plugin install` |
+| Plugin | 16 agents, 8 skills, hooks | `claude plugin install` |
 | Memory | `~/.claude/claude.md`, `~/.claude/rules/*.md` | copied by `install.sh` |
 
 Claude Code loads `~/.claude/claude.md` and `~/.claude/rules/*.md` as **user memory** on every
@@ -258,6 +258,7 @@ request that merely *says* "quick" or "trivial" is still triaged normally.
 | `planner` | Breaks features into 5-9 executable slices with verification commands |
 | `plan-critic` | Adversarially critiques the plan before implementation — hedging, wave assignment, file-path verification |
 | `security-auditor` | Vulnerability audit, auth boundaries |
+| `design-reviewer` | Gate 8 UI/UX review — visual evidence chain with a trust-gated preview, accessibility and motion audit, design-token authority |
 | `test-writer` | TDD — tests before implementation |
 | `e2e-runner` | End-to-end tests from use-case scenarios |
 | `code-reviewer` | Quality, security, architecture compliance |
@@ -271,7 +272,7 @@ request that merely *says* "quick" or "trivial" is still triaged normally.
 
 ## Commands
 
-7 skills ship in the plugin. Five are the primary, autonomous pipeline; two (`/sdlc-fast`, `/sdlc-quick`) are override-only entry points a developer types explicitly to overrule the pipeline's own triage verdict — never invoked by the pipeline itself, and never required for a run to complete.
+8 skills ship in the plugin. Five are the primary, autonomous pipeline; two (`/sdlc-fast`, `/sdlc-quick`) are override-only entry points a developer types explicitly to overrule the pipeline's own triage verdict — never invoked by the pipeline itself, and never required for a run to complete; one (`/design-foundation`) generates a project's design declaration on demand.
 
 | Command | What It Does |
 |---------|-------------|
@@ -280,6 +281,7 @@ request that merely *says* "quick" or "trivial" is still triaged normally.
 | `/implement-slice` | Next TDD slice — tests first, implement, verify, commit |
 | `/merge-ready` | All 9 quality gates |
 | `/context-refresh` | Rebuild session context from scratchpad |
+| `/design-foundation` | Generate the project's `.claude/rules/design.md` design declaration |
 | `/sdlc-fast <description>` | Override-only — bypass triage, run fast-tier execution directly |
 | `/sdlc-quick <description>` | Override-only — bypass triage, run quick-tier execution directly |
 
@@ -399,7 +401,7 @@ observable as a byproduct of happening, and cannot be forged by claiming harder.
 writes about its own work would just be another self-report.
 
 It is deliberately narrow: it blocks a MERGE READY verdict when **no subagent ran at all**.
-`/merge-ready` delegates to six agents, so zero invocations is not a borderline reading. It does not
+`/merge-ready` delegates to seven agents, so zero invocations is not a borderline reading. It does not
 match individual `Gate N: PASS` lines to individual agents for the blocking decision — a guard that
 fires wrongly on honest work gets switched off and then protects nothing. Alongside the unchanged
 decision it emits an advisory `systemMessage` naming which gate agents were observed in same-session
@@ -546,14 +548,14 @@ Agents are tiered by task complexity to reduce cost:
 
 | Tier | Agents | Rationale |
 |------|--------|-----------|
-| `opus` | `architect`, `planner`, `plan-critic`, `security-auditor` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
+| `opus` | `architect`, `planner`, `plan-critic`, `security-auditor`, `design-reviewer` | Output cascades through the pipeline; mistakes aren't catchable by automated verification |
 | `sonnet` | all other 11 agents | Structured/mechanical work with well-defined output formats; downstream gates catch any quality issues |
 
 This static split is what shipped as the `quality` profile below. It is no longer meant to be changed by hand-editing frontmatter — see **Model Profiles** for the supported way.
 
 ### Model Profiles
 
-`agents/*.md`'s `model:` field is a rewrite target, not a hand-edit target: `install.sh --local --profile <name>` atomically rewrites the `model:` frontmatter line of all 15 agent files at once, to one of four profiles.
+`agents/*.md`'s `model:` field is a rewrite target, not a hand-edit target: `install.sh --local --profile <name>` atomically rewrites the `model:` frontmatter line of all 16 agent files at once, to one of four profiles.
 
 | Role | `quality` | `balanced` | `budget` | `inherit` |
 |---|---|---|---|---|
@@ -561,6 +563,7 @@ This static split is what shipped as the `quality` profile below. It is no longe
 | `plan-critic` | opus | sonnet | sonnet | inherit |
 | `planner` | opus | opus | sonnet | inherit |
 | `security-auditor` | opus | opus | opus | inherit |
+| `design-reviewer` | opus | opus | opus | inherit |
 | `ba-analyst` | sonnet | sonnet | sonnet | inherit |
 | `build-runner` | sonnet | haiku | haiku | inherit |
 | `code-reviewer` | sonnet | sonnet | sonnet | inherit |
@@ -573,7 +576,7 @@ This static split is what shipped as the `quality` profile below. It is no longe
 | `test-writer` | sonnet | sonnet | haiku | inherit |
 | `verifier` | sonnet | sonnet | sonnet | inherit |
 
-`quality` is the shipped baseline — identical, role for role, to the Model Tiers table above. `security-auditor` stays `opus` under every profile: no downstream gate catches a missed vulnerability the way `plan-critic`'s adversarial review and Gate 6's replan loop now catch a bad `architect`/`planner` call, so it never gets the same discount.
+`quality` is the shipped baseline — identical, role for role, to the Model Tiers table above. `security-auditor` and `design-reviewer` stay `opus` under every profile: no downstream gate catches a missed vulnerability — or a silently shipped accessibility defect — the way `plan-critic`'s adversarial review and Gate 6's replan loop now catch a bad `architect`/`planner` call, so neither gets the same discount.
 
 ```bash
 bash install.sh --local --profile quality    # explicit shipped baseline
@@ -583,7 +586,7 @@ bash install.sh --local --profile inherit    # every agent inherits the host's d
 bash install.sh --local --profile budget --dry-run   # preview only — changes nothing
 ```
 
-`--profile` rewrites the `model:` line of all 15 agent files in place. It refuses to run when
+`--profile` rewrites the `model:` line of all 16 agent files in place. It refuses to run when
 `agents/` has uncommitted changes, since a clean checkout can undo the rewrite with
 `git checkout -- agents/` and a dirty one cannot. `--dry-run` previews regardless, and
 `SDLC_ALLOW_DIRTY_PROFILE=1` overrides deliberately.
@@ -591,9 +594,9 @@ bash install.sh --local --profile budget --dry-run   # preview only — changes 
 
 `--profile` requires `--local` — it rewrites the plugin-source checkout `/plugin marketplace add <path>` points at, and a non-`--local` run's source is a temporary clone deleted before the process exits, so the rewrite would be silently discarded there. It cannot be combined with `--uninstall`, `--restore`, `--init-project`, or `--trust-project`.
 
-The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 15 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 14-of-15 rewritten.
+The rewrite touches only the `model:` line — `name`, `description`, `tools`, `effort:`, and the rest of every file are byte-identical before and after. It is two-phase: all 16 files are validated before any of them is written, so a malformed file leaves the whole tree unchanged rather than 15-of-16 rewritten.
 
-**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 15 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
+**Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 16 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
 
 **Does a running session pick this up?** Undetermined. Whether an already-open Claude Code session re-reads `agents/*.md` live, or instead snapshots agent definitions at plugin load, could not be confirmed in the environment this was built in — there was no marketplace-installed copy of this plugin to test against, and restarting a session to observe reload behavior directly wasn't something that build task could do. Until someone settles it: treat a new session, or a `/plugin` reinstall, as required after `--profile` runs for the new values to take effect. See `install.sh`'s own header comment for the full finding and what would settle it.
 

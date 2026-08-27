@@ -16,6 +16,7 @@ This workflow mirrors a professional software development team:
 | QA Lead | `qa-planner` | Test cases in `docs/qa/<feature>_test_cases.md` |
 | Tech Lead | `planner` | Implementation plan (5-9 slices) |
 | Security Engineer | `security-auditor` | Security review for sensitive slices |
+| Design Reviewer | `design-reviewer` | Gate 8 UI/UX review — visual evidence chain, accessibility, motion, and token authority |
 | Developer | `test-writer` | TDD test implementation |
 | QA Engineer | `e2e-runner` | E2E tests from use-case scenarios |
 | Code Reviewer | `code-reviewer` | Code quality and standards |
@@ -131,6 +132,7 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 - `/implement-slice` — Single TDD slice (step 2, one iteration)
 - `/merge-ready` — Quality gates (step 3)
 - `/context-refresh` — Rebuild session context from scratchpad
+- `/design-foundation` — Generate the project's `.claude/rules/design.md` design declaration (subject-grounded tokens, motion scale, preview recipe); run when a project has UI work and no declaration yet
 - `/sdlc-fast <description>` — **Override-only.** Bypasses Triage (Phase 0) above entirely and runs Fast Tier Execution (FR-3) directly against the supplied description; FR-2 escalation still applies once running. Never invoked by the pipeline itself, never required for a run to complete.
 - `/sdlc-quick <description>` — **Override-only.** Bypasses Triage (Phase 0) above entirely and runs Quick Tier Execution (FR-4) directly against the supplied description; FR-2.2 escalation still applies once running. Never invoked by the pipeline itself, never required for a run to complete.
 

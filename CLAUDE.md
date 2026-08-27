@@ -88,7 +88,9 @@ configure the harness. Never reuse a published number.
 
 ## Working Rules
 
-- **Budgets are hard caps.** ≤16 agents, ≤10 skills, ≤12 hook **ids**. Current: 15 / 7 / **12** —
+- **Budgets are hard caps.** ≤16 agents, ≤10 skills, ≤12 hook **ids**. Current: **16** / 8 / **12** —
+  agents AND hooks are both AT their ceilings now (the 16th slot went to `design-reviewer`,
+  deliberately — a seventeenth agent requires retiring one), and for hooks —
   hooks are AT the ceiling with no slot left, so a thirteenth requires retiring one. Ids, not
   registrations: `pre:edit:read-guard` listens on two events and is one hook.
 - **Instruction text has a budget too**, and it is the one actually charged per session:
