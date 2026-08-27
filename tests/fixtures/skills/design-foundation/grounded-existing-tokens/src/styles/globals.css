@@ -1,0 +1,21 @@
+/* Stallledger design tokens — the single source of truth for color.
+   Any new styling must reference these custom properties, not raw hex values. */
+
+:root {
+  --color-market-green: #3e7a4c;   /* primary brand — actions, active nav */
+  --color-crate-brown: #8a6240;    /* secondary — headers, accents */
+  --color-parchment: #f7f3ea;      /* page background */
+  --color-ink: #2b2a26;            /* body text */
+  --color-ripe-red: #b8442f;       /* warnings, low-stock badges */
+}
+
+body {
+  background: var(--color-parchment);
+  color: var(--color-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  margin: 0;
+}
+
+a {
+  color: var(--color-market-green);
+}
