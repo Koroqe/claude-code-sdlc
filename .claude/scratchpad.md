@@ -6,7 +6,7 @@
 
 ## Branch: feat/design-capability
 
-## Status: implementing wave 4 slice 8/8
+## Status: quality-gates
 
 ## Plan
 
@@ -42,8 +42,9 @@ Slice 6 red-phase: scaffold_cp grep 0 + stale "5 pipeline skills" line captured 
 - [x] Slice 7: bootstrap-feature design-precheck paragraph (+405B of 645, with the explicit unattended marker per Slice 5 handoff) + implement-slice UI-token bullet (+162B of 324) — 3a7e667. Red: design.md grep 0 on both files pre-edit. Budgets post-edit: bootstrap 13,760/14,000; implement-slice 23,338/23,500. attempts 1/3, deviations none.
 Slice 7 red-phase: grep -c design.md → 0 on both files before edit
 
-### Wave 4
-- [ ] Slice 8: README/src/claude.md/CLAUDE.md budgets line/QA-row documentation closure
+### Wave 4 [COMPLETE]
+- [x] Slice 8: README (13 edits: counts, agent+profile tables, 8-skills sentence 5+2+1, seven-delegates line, opus rationale extended to design-reviewer) + src/claude.md (roster row + /design-foundation command) + CLAUDE.md budgets 16/8/12 agents-at-ceiling + QA TC-FR10-1 row → 16 — b0095a5. Verify: versions 4.9.0 bumped-not-tagged, \b15\b sweep leaves only legitimate hits, fixtures untouched+clean, leakage grep 0 over full diff. attempts 1/3, deviations none.
+Slice 8 red-phase: \b15\b sweep captured 8 genuine stale count claims pre-edit
 
 Deviation rule fires this feature: rule1=2 rule2=16 rule3=1 rule4=0
 (rule2 #16, Slice 6: print_footer's second skills enumeration aligned with the SKILLS AVAILABLE edit — free.)
