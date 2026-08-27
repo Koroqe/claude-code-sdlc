@@ -1,0 +1,140 @@
+diff --git a/src/components/Panel.jsx b/src/components/Panel.jsx
+new file mode 100644
+index 0000000..170cd40
+--- /dev/null
++++ b/src/components/Panel.jsx
+@@ -0,0 +1,57 @@
++import { useEffect, useRef } from 'react';
++import './panel.css';
++
++const FOCUSABLE =
++  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
++
++export function Panel({ open, title, children, onClose }) {
++  const panelRef = useRef(null);
++  const previouslyFocused = useRef(null);
++
++  useEffect(() => {
++    if (!open) return undefined;
++    previouslyFocused.current = document.activeElement;
++    const panel = panelRef.current;
++    const first = panel.querySelector(FOCUSABLE);
++    if (first) first.focus();
++
++    function onKeyDown(event) {
++      if (event.key === 'Escape') {
++        onClose();
++        return;
++      }
++      if (event.key !== 'Tab') return;
++      const focusable = panel.querySelectorAll(FOCUSABLE);
++      if (focusable.length === 0) return;
++      const firstEl = focusable[0];
++      const lastEl = focusable[focusable.length - 1];
++      if (event.shiftKey && document.activeElement === firstEl) {
++        event.preventDefault();
++        lastEl.focus();
++      } else if (!event.shiftKey && document.activeElement === lastEl) {
++        event.preventDefault();
++        firstEl.focus();
++      }
++    }
++
++    document.addEventListener('keydown', onKeyDown);
++    return () => {
++      document.removeEventListener('keydown', onKeyDown);
++      if (previouslyFocused.current) previouslyFocused.current.focus();
++    };
++  }, [open, onClose]);
++
++  if (!open) return null;
++  return (
++    <aside ref={panelRef} className="panel" role="dialog" aria-modal="true" aria-label={title}>
++      <div className="panel-accent" aria-hidden="true" />
++      <header className="panel-header">
++        <h2 className="panel-title">{title}</h2>
++        <button type="button" className="panel-close" onClick={onClose}>
++          Close
++        </button>
++      </header>
++      <div className="panel-body">{children}</div>
++    </aside>
++  );
++}
+diff --git a/src/components/panel.css b/src/components/panel.css
+new file mode 100644
+index 0000000..239b560
+--- /dev/null
++++ b/src/components/panel.css
+@@ -0,0 +1,71 @@
++.panel {
++  position: fixed;
++  top: 0;
++  right: 0;
++  bottom: 0;
++  width: min(420px, 100vw);
++  background: var(--color-surface);
++  color: var(--color-ink);
++  border-left: 1px solid var(--color-border);
++  transform: translateX(0);
++  opacity: 1;
++  transition:
++    transform 300ms var(--ease-out),
++    opacity var(--duration-standard) var(--ease-out);
++}
++
++.panel.is-entering {
++  transform: translateX(24px);
++  opacity: 0;
++}
++
++.panel-accent {
++  height: 4px;
++  background: linear-gradient(90deg, #6366f1, #8b5cf6);
++}
++
++.panel-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 8px;
++  padding: 16px;
++  border-bottom: 1px solid var(--color-border);
++}
++
++.panel-title {
++  margin: 0;
++  font-size: 20px;
++  color: var(--color-ink);
++}
++
++.panel-close {
++  min-width: 44px;
++  min-height: 44px;
++  padding: 8px 16px;
++  background: var(--color-accent);
++  color: var(--color-on-accent);
++  border: none;
++  border-radius: 6px;
++  transition: background-color var(--duration-quick) var(--ease-out);
++}
++
++.panel-close:focus-visible {
++  outline: 2px solid var(--color-accent);
++  outline-offset: 2px;
++}
++
++.panel-body {
++  padding: 16px;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .panel {
++    /* Keep the opacity feedback; remove only the travel. */
++    transition: opacity var(--duration-standard) var(--ease-out);
++  }
++
++  .panel.is-entering {
++    transform: none;
++  }
++}
