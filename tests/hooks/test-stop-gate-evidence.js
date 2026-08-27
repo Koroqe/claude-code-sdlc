@@ -202,15 +202,16 @@ const FULL = () => ({
   'security-auditor': rec('security-auditor'),
   'build-runner': rec('build-runner'),
   'verifier': rec('verifier'),
+  'design-reviewer': rec('design-reviewer'),
 });
 
-// TC-C1: all four allowlist records, each carrying the Stop payload's session.
+// TC-C1: all five allowlist records, each carrying the Stop payload's session.
 let d = caseDir();
 seedWaveResults(d, FULL());
 r = stopIn(d, verdictWithSubagent());
-c.ok('TC-C1: allowed with all four records seeded', !blocked(r), reason(r));
-c.contains('TC-C1: names all four observed', sysmsg(r),
-  'observed: code-reviewer, security-auditor, build-runner, verifier');
+c.ok('TC-C1: allowed with all five records seeded', !blocked(r), reason(r));
+c.contains('TC-C1: names all five observed', sysmsg(r),
+  'observed: code-reviewer, security-auditor, build-runner, verifier, design-reviewer');
 c.contains('TC-C1: states it is advisory', sysmsg(r), 'advisory');
 c.contains('TC-C1: not-observed side is none', sysmsg(r), 'no same-session wave-record found for: none');
 
@@ -221,7 +222,7 @@ r = stopIn(d, verdictWithSubagent());
 c.ok('TC-C2: partial records still allowed', !blocked(r), reason(r));
 c.contains('TC-C2: observed side names the two recorded', sysmsg(r), 'observed: code-reviewer, build-runner');
 c.contains('TC-C2: not-observed side names the gap', sysmsg(r),
-  'no same-session wave-record found for: security-auditor, verifier');
+  'no same-session wave-record found for: security-auditor, verifier, design-reviewer');
 
 // TC-C3 / TC-C10: records with NO agent_type key — graceful degradation.
 d = caseDir();
@@ -229,8 +230,8 @@ seedWaveResults(d, { one: rec(undefined), two: rec(undefined) });
 r = stopIn(d, verdictWithSubagent());
 c.ok('TC-C3: typeless records never change the allow outcome', !blocked(r), reason(r));
 c.contains('TC-C3: observed side is none', sysmsg(r), 'observed: none');
-c.contains('TC-C3: all four fall to not-observed', sysmsg(r),
-  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier');
+c.contains('TC-C3: all five fall to not-observed', sysmsg(r),
+  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier, design-reviewer');
 
 // TC-C4: no verdict claimed — no enrichment, no systemMessage, records or not.
 d = caseDir();
@@ -304,7 +305,7 @@ seedWaveResults(d, { p1: rec('sdlc:code-reviewer'), p2: rec('x:y:verifier') });
 r = stopIn(d, verdictWithSubagent());
 c.contains('M8: one plugin prefix stripped, literal matched', sysmsg(r), 'observed: code-reviewer');
 c.contains('M8: double-prefixed name matches nothing', sysmsg(r),
-  'no same-session wave-record found for: security-auditor, build-runner, verifier');
+  'no same-session wave-record found for: security-auditor, build-runner, verifier, design-reviewer');
 
 // TC-C13 (M4): more than 64 entries — enrichment skipped ENTIRELY, no message.
 d = caseDir();
@@ -362,7 +363,7 @@ r = stopIn(d, verdictWithSubagent());
 c.ok('TC-C17: cross-session record never reaches the observed side',
   observedSide(r).indexOf('code-reviewer') === -1, sysmsg(r));
 c.contains('TC-C17: output identical to a zero-same-session scan', sysmsg(r),
-  'observed: none — no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier');
+  'observed: none — no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier, design-reviewer');
 
 // TC-C18: record with NO session_id — never admitted (undefined === undefined
 // must not match), not-observed side is the full allowlist complement.
@@ -371,8 +372,8 @@ seedWaveResults(d, { 'code-reviewer': rec('code-reviewer', { session_id: undefin
 r = stopIn(d, verdictWithSubagent());
 c.ok('TC-C18: sessionless record never observed',
   observedSide(r).indexOf('code-reviewer') === -1, sysmsg(r));
-c.contains('TC-C18: all four named not-observed', sysmsg(r),
-  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier');
+c.contains('TC-C18: all five named not-observed', sysmsg(r),
+  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier, design-reviewer');
 
 // TC-C19: records exist but none share the Stop payload's session.
 d = caseDir();
@@ -382,8 +383,8 @@ seedWaveResults(d, stale);
 r = stopIn(d, verdictWithSubagent());
 c.ok('TC-C19: stale-session records still allow', !blocked(r), reason(r));
 c.contains('TC-C19: observed side is none', sysmsg(r), 'observed: none');
-c.contains('TC-C19: all four named not-observed', sysmsg(r),
-  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier');
+c.contains('TC-C19: all five named not-observed', sysmsg(r),
+  'no same-session wave-record found for: code-reviewer, security-auditor, build-runner, verifier, design-reviewer');
 
 // M1: Stop payload WITHOUT session_id — enrichment skipped entirely, even
 // when a sessionless record sits there (undefined === undefined never admits).

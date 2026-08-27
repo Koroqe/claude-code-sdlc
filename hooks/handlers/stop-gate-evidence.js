@@ -67,7 +67,7 @@
  * MAX_RECORD_FILES entries — MORE than that and enrichment is skipped
  * entirely, because a truncated scan must never name a genuinely-ran agent as
  * not-observed — and each file is stat-gated at MAX_RECORD_BYTES before any
- * read. Nothing record-derived ever reaches the output: only the four fixed
+ * read. Nothing record-derived ever reaches the output: only the five fixed
  * allowlist literals appear. Enrichment runs strictly AFTER every decision
  * guard and fails open to "no message" — no filesystem access can precede or
  * perturb the deny.
@@ -85,7 +85,7 @@ const ESCAPE = 'SDLC_ALLOW_UNEVIDENCED_GATES';
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /** The only names that may ever appear in the advisory message. */
-const GATE_AGENTS = ['code-reviewer', 'security-auditor', 'build-runner', 'verifier'];
+const GATE_AGENTS = ['code-reviewer', 'security-auditor', 'build-runner', 'verifier', 'design-reviewer'];
 const MAX_RECORD_FILES = 64;
 const MAX_RECORD_BYTES = 64 * 1024;
 const MAX_MESSAGE = 400;
@@ -162,7 +162,7 @@ function scan(text) {
 /**
  * Map a record's agent_type onto the fixed allowlist, or null. At most ONE
  * leading `<prefix>:` plugin prefix is stripped, then the remainder must be
- * strictly `===` one of the four literals — never startsWith/includes/RegExp
+ * strictly `===` one of the five literals — never startsWith/includes/RegExp
  * over record content, so nothing hostile can partial-match its way in.
  */
 function gateAgentName(value) {
