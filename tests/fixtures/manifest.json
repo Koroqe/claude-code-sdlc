@@ -701,40 +701,40 @@
       "id": "TC-6.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture project with no ## Preview section (or no design.md) and no Playwright available, to force chain step 3; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture: full design.md token declaration (accent #1c6e5f, 120ms/180ms ease-out scale) with no preview-recipe section, plus a focus-trap-less modal, a transition-all 400ms ease-in dropdown, a ~2.1:1-contrast parallel-token CTA, and an entrance animation with no reduced-motion handling; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency, so chain step 3 is forced",
       "expect": "Report contains the exact substring 'no visual evidence \u2014 reviewed at code level' (literal match); a Before|After|Why table and PASS/FAIL verdict are still present"
     },
     {
       "id": "TC-6.2",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "reuses TC-6.1's fixture (no ## Preview or design.md, no Playwright); none committed yet \u2014 checks the literal string is never paraphrased",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "reuses TC-6.1's committed fixture (design.md present with tokens, no preview-recipe section, seeded code-level violations) to check the literal string is never paraphrased; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Exact string 'no visual evidence \u2014 reviewed at code level' is present; a paraphrased variant like 'reviewed without screenshots' appearing INSTEAD OF the exact string is a failing result"
     },
     {
       "id": "TC-6.3",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture project with no .claude/rules/design.md at all and no Playwright, to exercise both the missing-design.md and code-level-only facts together; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/no-design-md/",
+      "note": "committed fixture: a small orders page + stylesheet with outline:none and no replacement focus style, and NO .claude/ directory at all, so the missing-design.md fact and the code-level-only fact must both surface; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Report states both facts separately: the absence of design.md (per UC-9) and the literal code-level-only line (per UC-6) \u2014 neither fact substitutes for the other"
     },
     {
       "id": "TC-9.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture project with user-facing changes and no .claude/rules/design.md anywhere in the tree; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/no-design-md/",
+      "note": "committed fixture: user-facing order-list changes (removed focus outline, no replacement) with no .claude/rules/design.md anywhere in the tree, forcing a universal-floor-only review with an explicit absence note; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Report contains an explicit standalone note of the missing declaration file (e.g. 'no .claude/rules/design.md found \u2014 reviewed against the universal floor only'), separate from the evidence-chain-step line; PASS/FAIL verdict issued"
     },
     {
       "id": "TC-9.3",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture project WITH .claude/rules/design.md but no ## Preview section, to prove the 'no design.md at all' note is never emitted here; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture WITH a full .claude/rules/design.md token declaration but no preview-recipe section, proving the 'no design.md at all' note is never emitted for this case; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "The 'no design.md found' string does NOT appear; instead the UC-19 'tokens declared, no preview recipe' framing appears \u2014 the two absence conditions are never conflated into one string"
     },
     {
@@ -781,8 +781,8 @@
       "id": "TC-14.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture with a modal missing focus trapping, a dropdown using transition: all 400ms ease-in, and a CTA under WCAG AA contrast, all three violations present together; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture with all three violations together: Modal.jsx misses focus trapping/restore/Esc, Dropdown.css uses transition: all 400ms ease-in, and Cta.jsx hardcodes #7c3aed on a near-tone #a78bfa background (~2.1:1, under WCAG AA); invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Findings table has one row per violation; severity ranking places a11y focus-trap and contrast issues above the motion-easing issue; verdict line reads FAIL"
     },
     {
@@ -813,8 +813,8 @@
       "id": "TC-16.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture design.md declaring --color-accent: #1c6e5f plus a diff hardcoding #7c3aed for the same functional role; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture: design.md declares --color-accent: #1c6e5f as the sole primary-action accent while Cta.jsx hardcodes #7c3aed for that same functional role (parallel-token reuse case); invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Finding's Before column shows the hardcoded #7c3aed; After column names the existing --color-accent token; Why explains the parallel-system risk"
     },
     {
@@ -845,8 +845,8 @@
       "id": "TC-18.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture with a card entrance transition and no prefers-reduced-motion handling anywhere in its CSS/JS; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture: Card.css carries an entrance transform/opacity animation with no prefers-reduced-motion handling anywhere in the fixture's CSS/JS; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Finding reports the missing handling; Why cites the reduced-motion rule, stating reduced motion retains opacity/color feedback while removing travel/scale/parallax/overshoot"
     },
     {
@@ -861,24 +861,24 @@
       "id": "TC-18.3",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture with no ## Preview and no Playwright (forcing chain step 3) that also contains an animation lacking reduced-motion handling; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture forcing chain step 3 (design.md without a preview-recipe section, no capture tooling) that also contains Card.css's animation lacking reduced-motion handling, so the code-level-only caveat cannot suppress this check; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Report contains both the mandatory 'no visual evidence \u2014 reviewed at code level' line AND the reduced-motion finding \u2014 the code-level-only caveat does not suppress this check"
     },
     {
       "id": "TC-19.1",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "needs a committed fixture design.md with full token/taste sections but no ## Preview heading at all; none committed yet",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "committed fixture: design.md carries full token/taste sections (colors, two font roles, 120ms/180ms motion scale, spacing basis, signature element) but no preview-recipe heading at all, so token authority holds while the evidence tier falls through; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Audit findings reference the project's own declared tokens (e.g. a parallel-token finding using real token names); evidence tier is chain step 2 or 3 per whichever is available"
     },
     {
       "id": "TC-19.2",
       "agent": "design-reviewer",
       "qaDoc": "docs/qa/design-capability_test_cases.md",
-      "fixture": null,
-      "note": "reuses TC-19.1's fixture (design.md with tokens, no ## Preview); none committed yet \u2014 verifies the absence-note wording is distinct from UC-9's 'no design.md' string",
+      "fixture": "tests/fixtures/agents/design-reviewer/tokens-declared-no-preview/",
+      "note": "reuses TC-19.1's committed fixture (design.md with tokens, no preview-recipe section) to verify the absence-note wording is distinct from UC-9's 'no design.md' string; invariant: no ## Preview heading, no Playwright dependency, no trust-registry dependency",
       "expect": "Report notes specifically that design.md exists but lacks ## Preview \u2014 wording distinct from UC-9's 'no design.md found' string"
     },
     {

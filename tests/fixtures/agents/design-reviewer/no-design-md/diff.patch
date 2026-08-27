@@ -1,0 +1,58 @@
+diff --git a/src/pages/OrdersPage.jsx b/src/pages/OrdersPage.jsx
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/src/pages/OrdersPage.jsx
+@@ -0,0 +1,19 @@
++import './orders.css';
++
++export function OrdersPage({ orders }) {
++  return (
++    <main className="orders-page">
++      <h1>Open orders</h1>
++      <ul className="orders-list">
++        {orders.map((order) => (
++          <li key={order.id} className="orders-row">
++            <a className="orders-link" href={`/orders/${order.id}`}>
++              {order.reference}
++            </a>
++            <span className="orders-total">{order.total}</span>
++          </li>
++        ))}
++      </ul>
++    </main>
++  );
++}
+diff --git a/src/pages/orders.css b/src/pages/orders.css
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/src/pages/orders.css
+@@ -0,0 +1,27 @@
++.orders-page {
++  max-width: 720px;
++  margin: 0 auto;
++  padding: 24px 16px;
++}
++
++.orders-list {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++}
++
++.orders-row {
++  display: flex;
++  justify-content: space-between;
++  padding: 12px 0;
++  border-bottom: 1px solid #e2e0dc;
++}
++
++.orders-link {
++  color: #1d4ed8;
++  text-decoration: none;
++}
++
++.orders-link:focus {
++  outline: none;
++}

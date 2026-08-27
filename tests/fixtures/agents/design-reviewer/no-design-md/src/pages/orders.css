@@ -1,0 +1,27 @@
+.orders-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.orders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.orders-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e0dc;
+}
+
+.orders-link {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.orders-link:focus {
+  outline: none;
+}
