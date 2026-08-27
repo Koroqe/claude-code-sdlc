@@ -1,16 +1,44 @@
 # Scratchpad
 
-## Feature: context-budget + eval-instrument hardening (round 3)
+## Feature: design-capability — design-engineering capability (design-reviewer agent runs Gate 8, design-foundation skill, templates/rules/design.md)
 
-## Tier: n/a — harness self-work, not a pipeline feature
+## Tier: full
 
-## Branch: feat/eval-multirun
+## Branch: feat/design-capability
 
-## Status: RELEASED — 4.8.0 merged to main (a5f114f), pushed, tagged v4.8.0, metadata synced.
-Delivery confirmed: user scope 4.7.0 -> 4.8.0, this repo's project scope 4.6.0 -> 4.8.0.
+## Status: implementing wave 1 slice 1/8
 
-## Version: **4.8.0 shipped and delivery-confirmed** (2026-08-26 01:15 UTC). Sweep 18 validators +
-26 suites green on main; eval 15/15.
+## Plan
+
+Full plan with all fields (verify commands, done-conditions, pre-review flags, revision notes):
+`/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/97b082c8-0eea-45f6-80c0-bd50e6b3014a/scratchpad/design-capability-plan.md`
+Research brief (vendored-content source, same dir): `design-capability-research-brief.md`
+Feature: PRD §14. Docs: docs/use-cases/design-capability_use_cases.md (21 UCs),
+docs/qa/design-capability_test_cases.md (128 TCs). Architecture: PASS with conditions (all folded
+into PRD §14 + plan). Critic: 2 loops, 30 findings (8 BLOCKER, 10 WARNING, 12 INFO) — all
+BLOCKER/WARNING fixed; loop 2 had zero BLOCKERs. Docs committed: 3c91342.
+**AC-9 constraint: no reference to the user's private validation project in any tracked file** —
+identifier check run by the orchestrator from session context, identifiers never written down.
+
+### Wave 1
+- [ ] Slice 1 (Tracer): design-reviewer stub (code-level path only, no command execution) + model-profiles.js row + install.sh AGENT_ROLES/3 case arms/banner + six-source count consistency + 4.9.0 bump + explicit 14000 ceiling + merge-ready Gate 8 delegation (≤577B, overrun=FAILED) — pre-review: architect
+
+### Wave 2
+- [ ] Slice 2: design-reviewer full evidence chain + FR-1.9 trust gate + vendored audit knowledge (≤12000 target / 14000 cap) — pre-review: security-auditor
+- [ ] Slice 3: GATE_AGENTS fifth entry + test-stop-gate-evidence five-name assertions
+- [ ] Slice 4: templates/rules/design.md (8 sections, Preview trust note) — pre-review: security-auditor (light)
+- [ ] Slice 5: skills/design-foundation/SKILL.md + affirmative CEILINGS entry (one commit) — pre-review: architect
+
+### Wave 3
+- [ ] Slice 6: install.sh scaffold_cp for design.md + remaining count claims (sandboxed --local --no-plugin verify)
+- [ ] Slice 7: bootstrap-feature conditional line (≤645B) + implement-slice one sentence (≤324B)
+
+### Wave 4
+- [ ] Slice 8: README/src/claude.md/CLAUDE.md budgets line/QA-row documentation closure
+
+Deviation rule fires this feature: rule1=0 rule2=0 rule3=0 rule4=0
+
+## Version: last shipped **4.8.0** (2026-08-26, delivery-confirmed); this branch bumps to 4.9.0 in Slice 1 (bumped-not-tagged is the documented mid-development state).
 
 **Install state, verified against the full `claude plugin list` (not inferred):** user 4.8.0, this
 repo's project scope 4.8.0, `Restaba` 4.6.0 — live and one release behind, updatable with
@@ -20,6 +48,10 @@ entries for directories that no longer exist (`booka` plus four `/private/tmp` t
 cannot be updated and are harmless — do not chase them ([[claude-cli-environment]]).
 An earlier draft of this note called Restaba a broken 4.0.0 install. That was wrong: it was read off
 the row count rather than the listing, which is the same mistake the eval instrument kept making.
+
+## Blockers
+
+(none for this feature)
 
 ## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
 
@@ -112,11 +144,7 @@ Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED — 2 Level-4 gaps,
 **Running tally: ten false negatives from the eval, zero true findings from a grader bug.** The
 harness has been right every time. Carry that calibration into reading any eval failure.
 
-## Blockers
-
-(none for this feature)
-
-Project-level notes carried over:
+## Project-level notes carried over
 - **Behavioural eval shipped (2026-08-24).** `node scripts/eval/run-evals.js`. Baseline: **4/4 Triage
   cases pass**. Grading logic unit-tested free in the sweep (30 checks, 8 seeded-broken). Read
   `evals/README.md` before believing a failure — two instrument bugs produced confident false results
