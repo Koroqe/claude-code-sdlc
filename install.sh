@@ -45,7 +45,7 @@ set -euo pipefail
 # Model profiles (--profile) — spike finding (FR-7.6)
 #
 # `install.sh --local --profile <quality|balanced|budget|inherit>` rewrites
-# the `model:` frontmatter line of all 15 files under agents/ to a per-role
+# the `model:` frontmatter line of all 16 files under agents/ to a per-role
 # value (see model_for_role() below; README.md's "Model Profiles" section
 # carries the full table).
 #
@@ -178,13 +178,13 @@ for the full quality/balanced/budget/inherit table):
   bash install.sh --local --profile inherit    # every agent inherits the host default
   bash install.sh --local --profile budget --dry-run   # preview only
 
-  Rewrites only the model: frontmatter line of all 15 files under agents/ —
+  Rewrites only the model: frontmatter line of all 16 files under agents/ —
   every other line, in every file, is byte-identical before and after.
-  Two-phase: all 15 are validated before any of them is written, so a
-  malformed file leaves the whole tree unchanged rather than 14-of-15
+  Two-phase: all 16 are validated before any of them is written, so a
+  malformed file leaves the whole tree unchanged rather than 15-of-16
   rewritten. Writes .sdlc-model-profile at the repo root (gitignored — a
   local artifact, never committed) naming the profile applied, only after
-  all 15 files are rewritten. Cannot combine with --uninstall, --restore,
+  all 16 files are rewritten. Cannot combine with --uninstall, --restore,
   --init-project, or --trust-project.
 
   Whether an already-running Claude Code session picks up a rewrite without
@@ -197,7 +197,7 @@ WHAT GETS INSTALLED (~/.claude/):
 
 WHAT DOES NOT COME FROM HERE:
   agents/          16 specialized agents — ship in the plugin
-  skills/          5 pipeline skills    — ship in the plugin
+  skills/          8 pipeline skills    — ship in the plugin
 
   Install the plugin from a Claude Code session:
     /plugin marketplace add <path-or-repo>
@@ -214,7 +214,8 @@ UPGRADING FROM v3.x:
 
 WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
-  .claude/rules/              Architecture, security, testing rules
+  .claude/rules/              Architecture, security, design, testing rules
+  .claude/rules/design.md     Design declaration template (tokens, motion, preview)
   .claude/scratchpad.md       Session state persistence
   .claude/settings.json       Permissions config (incl. statusLine)
   .claude/statusline.js       Statusline renderer template (copied, not run)
@@ -236,6 +237,9 @@ SKILLS AVAILABLE (after installing the plugin):
   /implement-slice    Implement next TDD slice
   /merge-ready        Run all quality gates
   /context-refresh    Rebuild session context
+  /design-foundation  Generate the project's design declaration
+  /sdlc-fast          Override-only: bypass triage, fast-tier edit
+  /sdlc-quick         Override-only: bypass triage, quick-tier slice
 HELPEOF
 }
 
@@ -889,17 +893,17 @@ model_for_role() {
 # ----------------------------------------------------------------------------
 # Model profile rewrite (--profile)
 #
-# Rewrites the `model:` frontmatter line of all 15 agents/*.md files to the
+# Rewrites the `model:` frontmatter line of all 16 agents/*.md files to the
 # value model_for_role() assigns that role under the chosen profile.
 #
 # Two-phase, mirroring install_user_config()'s existing "preflight EVERY
 # entry before copying any of them" discipline: every file is preflighted
 # into its own same-directory temp file first (mktemp beside its target, the
 # write_receipt() precedent, so the later `mv` is a same-filesystem rename
-# and therefore atomic); only after all 15 preflights succeed does a second
+# and therefore atomic); only after all 16 preflights succeed does a second
 # pass `mv` any of them into place. A preflight failure removes every temp
 # file already staged — never leaking earlier files — and exits non-zero
-# with the real tree completely untouched, never N of 15.
+# with the real tree completely untouched, never N of 16.
 # ----------------------------------------------------------------------------
 cleanup_profile_tempfiles() {
   local t
@@ -921,7 +925,7 @@ frontmatter_model_of() {
   ' "$1"
 }
 
-# Written only after all 15 rewrites succeed, via the identical
+# Written only after all 16 rewrites succeed, via the identical
 # temp-then-mv pattern write_receipt() already uses for .sdlc-receipt — an
 # interrupted or partially-failed rewrite must never leave a receipt
 # claiming a profile that was not fully applied.
@@ -938,7 +942,7 @@ write_profile_receipt() {
 
 # Refuse to rewrite agents/*.md over uncommitted work.
 #
-# --profile rewrites the `model:` frontmatter line of all 15 agent files in
+# --profile rewrites the `model:` frontmatter line of all 16 agent files in
 # place. On a clean checkout that is trivially reversible with
 # `git checkout -- agents/`. Over uncommitted changes it is not: the user's own
 # edits to those files are gone, and the two-phase atomic commit below makes it
@@ -962,7 +966,7 @@ profile_refuse_dirty_tree() {
 
   log_error "agents/ has uncommitted changes; refusing to rewrite it with --profile."
   echo ""
-  echo "  --profile rewrites the model: line of all 15 agent files in place. On a"
+  echo "  --profile rewrites the model: line of all 16 agent files in place. On a"
   echo "  clean checkout that is reversible with 'git checkout -- agents/'. Over"
   echo "  uncommitted work it is not."
   echo ""
@@ -1017,7 +1021,7 @@ do_profile() {
     return 0
   fi
 
-  # Phase 1 — preflight all 15 into same-directory temp files. Nothing under
+  # Phase 1 — preflight all 16 into same-directory temp files. Nothing under
   # agents/ is written by this loop.
   for role in "${AGENT_ROLES[@]}"; do
     file="${role}.md"
@@ -1070,7 +1074,7 @@ do_profile() {
     mv_targets+=("$src")
   done
 
-  # Phase 2 — every one of the 15 preflighted cleanly; commit them all. Each
+  # Phase 2 — every one of the 16 preflighted cleanly; commit them all. Each
   # `mv` is a same-filesystem rename (the temp file lives beside its
   # target), so this phase cannot itself degrade into a partial, non-atomic
   # copy.
@@ -1447,7 +1451,7 @@ install_plugin() {
 
   # Re-measured on Claude Code 2.1.237 (docs/findings/remeasurement-2.1.237.md
   # §1): a user-scope enable DOES load the plugin — a fresh directory with no
-  # project-scope install resolved all 15 agents and fired hooks under
+  # project-scope install resolved all 16 agents and fired hooks under
   # user-scope enablement alone. The enable call below is the normal path.
   # Project-scope install remains available purely as optional version pinning,
   # never as an activation step.
@@ -1496,6 +1500,8 @@ scaffold_project() {
   scaffold_cp "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md" ".claude/rules/architecture.md (template)"
 
   scaffold_cp "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md" ".claude/rules/security.md (template)"
+
+  scaffold_cp "$SCRIPT_DIR/templates/rules/design.md" ".claude/rules/design.md" ".claude/rules/design.md (template)"
 
   scaffold_cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md" ".claude/rules/testing.md (template)"
 
@@ -1570,7 +1576,8 @@ EOF
   echo "    2. Fill in .claude/rules/architecture.md"
   echo "    3. Fill in .claude/rules/security.md"
   echo "    4. Fill in .claude/rules/testing.md"
-  echo "    5. Start a Claude Code session and describe a feature"
+  echo "    5. Fill in .claude/rules/design.md (or run /design-foundation to generate it)"
+  echo "    6. Start a Claude Code session and describe a feature"
   echo ""
 }
 
@@ -1599,6 +1606,9 @@ print_footer() {
   echo "    /implement-slice    Implement next TDD slice"
   echo "    /merge-ready        Run all quality gates"
   echo "    /context-refresh    Rebuild session context"
+  echo "    /design-foundation  Generate the project's design declaration"
+  echo "    /sdlc-fast          Override-only: bypass triage, fast-tier edit"
+  echo "    /sdlc-quick         Override-only: bypass triage, quick-tier slice"
   echo ""
 
   if [ "$INIT_PROJECT" = false ]; then
@@ -1617,7 +1627,7 @@ print_footer() {
 
 # Deliberately the last output of a successful run. Re-measured on Claude
 # Code 2.1.237 (docs/findings/remeasurement-2.1.237.md §1): user-scope
-# enablement alone loads all 15 agents in a fresh directory, so no
+# enablement alone loads all 16 agents in a fresh directory, so no
 # per-project step remains. This block tells the user how to VERIFY the
 # install, and names the project-scope install as optional version pinning.
 print_next_step() {
