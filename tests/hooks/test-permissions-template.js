@@ -59,6 +59,12 @@ const requiredDenies = [
   'Write(.git/**)',
   'Edit(~/.claude/sdlc-trusted-projects)',
   'Write(~/.claude/sdlc-trusted-projects)',
+  // The self-grant route: an agent must not be able to run the installer
+  // (whose --trust-project writes the registry). Prefix form per this
+  // template's own documented Bash-rule semantics — a leading-glob form
+  // like Bash(*--trust-project*) has no documented meaning and is inert.
+  'Bash(bash install.sh:*)',
+  'Bash(sh install.sh:*)',
 ];
 for (const entry of requiredDenies) {
   c.ok('deny contains ' + entry, deny.indexOf(entry) !== -1);

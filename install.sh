@@ -570,8 +570,15 @@ trust_project() {
       printf '%s\n' '# Remove one by deleting its line.'
       printf '%s\n' '#'
       printf '%s\n' '# Only add projects whose code you would run anyway. A listed project can'
-      printf '%s\n' '# execute whatever its CLAUDE.md declares.'
+      printf '%s\n' '# execute whatever its CLAUDE.md and .claude/rules/design.md declare.'
     } > "$registry"
+  else
+    # Pre-4.9.0 registries were written when the grant covered typecheck/format
+    # only; 4.9.0 added the Gate 8 design-preview channel to the same grant.
+    # The header is user-owned once written, so notify rather than rewrite.
+    if grep -q 'typecheck and format commands the' "$registry" 2>/dev/null; then
+      log_info "Note: your trusted-projects registry predates 4.9.0 — every listed project's grant now also covers its declared design-preview commands at Gate 8 (one registration, both channels; SDLC_EXEC_PROJECT_COMMANDS=0 disables both)."
+    fi
   fi
 
   printf '%s\n' "$resolved" >> "$registry"
