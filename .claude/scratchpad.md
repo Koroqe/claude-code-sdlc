@@ -6,7 +6,7 @@
 
 ## Branch: feat/design-capability
 
-## Status: implementing wave 3 slices 6-7/8
+## Status: implementing wave 4 slice 8/8
 
 ## Plan
 
@@ -36,14 +36,17 @@ Slice 4 red-phase: heading verify loop → FAILED (MISSING: Design System Source
 - [x] Slice 5: skills/design-foundation/SKILL.md + CEILINGS 6500 (measured 5470 +10% → next 500) in one commit — 85e20a5. Red: 7 skills/no ceiling captured pre-implementation. Architect pre-review PASS (nested spawn), 2 WARNINGs + 3 INFOs fixed pre-commit. attempts 1/3, deviations none. Handoff → Slice 7: bootstrap-feature's trigger line must pass an explicit unattended marker.
 Slice 5 red-phase: validate-skills at 7 dirs + absent ceiling grep → captured pre-implementation
 
-### Wave 3
-- [ ] Slice 6: install.sh scaffold_cp for design.md + remaining count claims (sandboxed --local --no-plugin verify)
-- [ ] Slice 7: bootstrap-feature conditional line (≤645B) + implement-slice one sentence (≤324B)
+### Wave 3 [COMPLETE — 2 parallel subagents, both PASS]
+- [x] Slice 6: install.sh scaffold_cp + CREATES/Next-steps/8-skills listings + 15-hit count sweep (all agent-count claims, zero non-count) — 1447de0. Sandboxed init diff byte-identical. attempts 1/3, deviations (rule2,1: print_footer skills enum aligned — a second user-visible enumeration the plan missed).
+Slice 6 red-phase: scaffold_cp grep 0 + stale "5 pipeline skills" line captured pre-edit
+- [x] Slice 7: bootstrap-feature design-precheck paragraph (+405B of 645, with the explicit unattended marker per Slice 5 handoff) + implement-slice UI-token bullet (+162B of 324) — 3a7e667. Red: design.md grep 0 on both files pre-edit. Budgets post-edit: bootstrap 13,760/14,000; implement-slice 23,338/23,500. attempts 1/3, deviations none.
+Slice 7 red-phase: grep -c design.md → 0 on both files before edit
 
 ### Wave 4
 - [ ] Slice 8: README/src/claude.md/CLAUDE.md budgets line/QA-row documentation closure
 
-Deviation rule fires this feature: rule1=2 rule2=15 rule3=1 rule4=0
+Deviation rule fires this feature: rule1=2 rule2=16 rule3=1 rule4=0
+(rule2 #16, Slice 6: print_footer's second skills enumeration aligned with the SKILLS AVAILABLE edit — free.)
 (rule2 #6-#15, from Slice 2's report: 10 security-review auto-adds on the trust gate — ungated-Playwright gating, per-command gate coverage, exact whole-line registry match, outcome splitting, fenced+labeled display, fence-escape closure, fall-through retarget, timeout bound, named targets, singular alignment. All free; rule2 instinct already captured this feature — same-feature recapture, no increment.)
 (rule1 #2, from Slice 4's report: template first draft omitted the Aesthetic Direction heading — own verify loop caught it, free. rule1 threshold 2 reached → folded as a same-feature recapture of consumer-contract-check-before-review: both rule1 fires are the same author-against-literal-contract miss that instinct already records; no occurrence increment within one feature, no new slug minted.)
 (rule2 #3-#5, from Slice 4's report: security-auditor WARNINGs on the template — grant-shaped implicature removed, trust/shape note rescoped to all declared commands, additive-only ban-list guard added; all free auto-adds pre-commit.)
