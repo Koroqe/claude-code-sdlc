@@ -85,13 +85,13 @@ Report, verbatim:
 
 ## Evidence Chain
 
-- **Step 1 (declared preview): skipped** — no `.claude/rules/design.md` found in the project root (`/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/no-design-md/.claude/rules/design.md` does not exist). Audit performed against the universal quality floor only. Falling through.
+- **Step 1 (declared preview): skipped** — no `.claude/rules/design.md` found in the project root (`tests/fixtures/agents/design-reviewer/no-design-md/.claude/rules/design.md` does not exist). Audit performed against the universal quality floor only. Falling through.
 - **Step 2 (generic Playwright capture): skipped** — Playwright is not available in this project (no `package.json`, no Playwright config or dependency anywhere in the project tree). Falling through.
 - **Step 3 (code-level review): performed** on the two changed files from `diff.patch`: `src/pages/OrdersPage.jsx` and `src/pages/orders.css`.
 
 no visual evidence — reviewed at code level
 
-**Evidence source for every conclusion below:** code-level reading of `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/no-design-md/src/pages/OrdersPage.jsx` and `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/no-design-md/src/pages/orders.css`. Both files serve the single changed route (the orders page); no per-route source split applies.
+**Evidence source for every conclusion below:** code-level reading of `tests/fixtures/agents/design-reviewer/no-design-md/src/pages/OrdersPage.jsx` and `tests/fixtures/agents/design-reviewer/no-design-md/src/pages/orders.css`. Both files serve the single changed route (the orders page); no per-route source split applies.
 
 ## Findings
 
@@ -135,8 +135,8 @@ Report, verbatim:
 ## Gate 8 (UI/UX) — Design Review
 
 **Scope** (from `diff.patch`): two new files —
-- `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/conformant-low-severity/src/components/Panel.jsx`
-- `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/conformant-low-severity/src/components/panel.css`
+- `tests/fixtures/agents/design-reviewer/conformant-low-severity/src/components/Panel.jsx`
+- `tests/fixtures/agents/design-reviewer/conformant-low-severity/src/components/panel.css`
 
 ### Evidence chain
 
@@ -194,13 +194,13 @@ Report, verbatim:
 
 ## Evidence Chain
 
-- **Step 1 — declared preview:** no `.claude/rules/design.md` found in the project root (`/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/reduced-motion-overcorrection/`). Audited against the universal quality floor only; fell through.
+- **Step 1 — declared preview:** no `.claude/rules/design.md` found in the project root (`tests/fixtures/agents/design-reviewer/reduced-motion-overcorrection/`). Audited against the universal quality floor only; fell through.
 - **Step 2 — generic Playwright capture:** skipped — Playwright is not available in the project (no `package.json`, no `node_modules`, no `playwright` binary on PATH). Fell through.
 - **Step 3 — code-level review:** performed on the one changed UI file from `diff.patch`: `src/components/card.css` (new file, 28 lines).
 
 no visual evidence — reviewed at code level
 
-All findings below rest on code-level evidence from `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc/tests/fixtures/agents/design-reviewer/reduced-motion-overcorrection/src/components/card.css`.
+All findings below rest on code-level evidence from `tests/fixtures/agents/design-reviewer/reduced-motion-overcorrection/src/components/card.css`.
 
 ## Findings (highest severity first)
 
