@@ -291,3 +291,90 @@ Observed against expectations:
 
 After all five runs: `git status --porcelain` showed zero modifications under `agents/`,
 `skills/`, `hooks/`, `templates/`, or `tests/fixtures/` — the runs were read-only as required.
+
+### design-foundation run — grounded-existing-tokens
+
+Invocation: definition-adoption run of `skills/design-foundation/SKILL.md`'s documented
+procedure (standalone-shaped; no human reachable, would-have-asked questions recorded instead
+of stalling) against a scratchpad working copy of
+`tests/fixtures/skills/design-foundation/grounded-existing-tokens/`. The committed fixture was
+never written to.
+
+Generated `.claude/rules/design.md` and closing report, verbatim (the run's own fenced blocks
+are preserved inside a longer fence):
+
+Key observed facts: the run named `src/styles/globals.css` as the discovered source of truth
+and documented its five existing tokens verbatim — inventing none; it added exactly one
+genuinely missing role (tabular ledger figures); its self-check demonstrably replaced four
+generic first-derivations (a 150/250/400ms ease-in-out scale, a bare 8px grid, a
+green-primary-buttons signature, sans-for-data-tables) with subject-grounded choices; the
+non-inferable `## Preview` command was left as a labeled TODO scaffold per the skill, never
+guessed. **AskUserQuestion calls: 0; would-have-asked count: 0** (all subject facts inferable).
+Write confinement confirmed: exactly one file, inside the scratchpad copy.
+
+The full generated declaration — all sections present: Design System Source of Truth,
+Component Library, Typography, Motion Tokens, Aesthetic Direction, Ban-List, Preview,
+AI Interface Patterns — and the run's complete closing report are preserved in the run
+transcript summary committed here:
+
+- Source of truth: `src/styles/globals.css`, five subject-named tokens documented with roles
+  (market-green dominant; ripe-red the sole accent, reserved for low-stock), rule: parallel
+  token system is a defect; motion/spacing tokens to be added to the same file, never a second.
+- Typography: existing serif register kept and justified (the product replaces a paper
+  notebook); tabular-figures role added for ledger columns; every stack ends in a generic
+  family.
+- Motion: two tokens (120ms/240ms) + one settle easing, near-zero motion philosophy tied to the
+  audience's hardware, reduced-motion drops to instant.
+- Aesthetic direction: subject/audience/page-job stated concretely; signature element = the
+  ruled ledger table with red-ink low-stock margin flag; deliberate risk = serif print-ledger
+  register for a data app.
+- Preview: left as `TODO(design-foundation)` scaffold (no scripts exist to infer from), with
+  the template's trust/shape constraint text carried intact.
+
+### design-foundation run — low-signal-unattended
+
+Invocation: definition-adoption run with the explicit unattended marker ("this is an unattended
+run; never ask the user anything; degrade to best-effort inference with labeled
+TODO(design-foundation): placeholders; always complete") against a scratchpad working copy of
+`tests/fixtures/skills/design-foundation/low-signal-unattended/`. The committed fixture was
+never written to.
+
+Key observed facts: **AskUserQuestion calls: 0 — the tool was never invoked**, and the run
+completed. The generated declaration contains all sections (Design System Source of Truth,
+Component Library, Typography, Motion Tokens, Aesthetic Direction, Ban-List, Preview, AI
+Interface Patterns), commits only to structural contracts (semantic `--surface`/`--on-surface`
++ `--accent`/`--on-accent` pair naming, a single declared token-file home, one-base-unit
+spacing rule, a named provisional motion scale explicitly labeled provisional), and degrades
+every subject-dependent value to a labeled `TODO(design-foundation):` placeholder — sections
+degraded: all four palette values and the spacing base unit; both concrete typefaces; the
+motion values (marked revisit); all five Aesthetic Direction items (subject, audience, page
+job, signature, risk); the Preview launch command and port. The self-check operated
+subtractively: an earlier-considered concrete palette, font pairing, and signature were not
+written at all, because with zero subject signal every such choice would fit any product
+equally well. The generated file also carried the template's untrusted-input framing and the
+additive-only ban-list guard intact. Write confinement confirmed: exactly one file, inside the
+scratchpad copy.
+
+## Residual — human verification required
+
+Carried verbatim from the Gate 6 gaps array; these slices deliberately do NOT discharge:
+
+1. Gap 4 in full: the live three-way Gate 8 rendering comparison (PASS/FAIL with a real report,
+   `SKIPPED (tier: quick)`, and `N/A`, mutually distinct) requires three separate /merge-ready
+   runs on differently-classified features. This feature's own /merge-ready run rendered Gate 8
+   `N/A` (backend-only harness feature) — one of the three data points, citable but not the
+   comparison. TC-1.9, TC-9.2, TC-10.1, TC-11.1, TC-11.2, TC-14.2 remain unexercised.
+2. Gap 3's full-pipeline transcript: bootstrap-feature's trigger observed firing inside a real
+   /bootstrap-feature run on a user-facing feature (TC-3.2, TC-3.3, TC-3.4). Slice 12
+   discharged only the inner sub-claim (unattended design-foundation completes without
+   stalling, leaving labeled TODO placeholders).
+3. Gap 1's remainder: 27 of the 43 originally-null manifest entries stay `fixture: null` —
+   every case requiring a seeded `~/.claude/sdlc-trusted-projects` entry, actual preview
+   execution or timeout, Playwright capture, screenshot corruption, or implement-slice
+   behavior. Deliberately excluded: seeding a real trust-registry entry or executing a declared
+   preview command is exactly the risk the trust gate exists to contain.
+4. Gap 2's remainder: TC-2.6 (re-run delta on an existing declaration) and TC-8.1 (interactive
+   AskUserQuestion scoping) require a human-driven interactive session.
+5. Method residual (this file's own disclosure): all seven runs above were definition-adoption
+   runs; type-resolved runs under the shipped opus profile become possible after release and
+   belong to the post-release validation pass.
