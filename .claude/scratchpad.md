@@ -7,6 +7,13 @@
 ## Branch: feat/design-capability
 
 ## Status: quality-gates
+Gates: 9/9 — MERGE READY. Gate 0 PASS; Gate 1 PASS; Gate 2 PASS ×3 (full diff; fix commits 509f9bb+7bf7e5e; replan commits — 1 MEDIUM follow-up below); Gate 3 FAIL→fixed→PASS attempt 2, replan-commit audit PASS (2 CRITICAL + 2 MEDIUM all closed); Gate 4 PASS (18/18, 26/26/1373); Gate 5 PASS (5/5 probes, 73 live cases out of scope); Gate 6 VERIFIED passed:true gaps:[] hvr:[] on attempt 3/3, freshness confirmed 2026-08-27 23:36 (replan slices 9-12 + user-sanctioned 4.9.0 pre-release local install → five TYPE-RESOLVED design-reviewer dispatches persisted in docs/findings/design-capability-live-runs.md; measured en route: headless claude -p on 2.1.237 now HAS the Agent tool, superseding the 2026-08-26 finding — record in docs/findings at next touch); Gate 7 PASS after Auto-Fix (trust-gate wording aligned, digest §14 row); Gate 8 N/A. Post-Gate Instinct Capture: 3 entries (new-channel-inherits-existing-controls [security], prd-tracks-security-hardening, preinstall-to-exercise-new-agent-types — all Gate Auto-Fix).
+Follow-up (below blocking bar, from Gate 2 re-review): pre-4.9.0 registries whose owners never re-run --trust-project get no proactive notice of the widened grant — the 7bf7e5e notice fires only inside trust_project(). Candidate fix: one-time session:start:spine vintage note or install-time migration notice. Not blocking: scope disclosed in README/--help/changelog; both CRITICALs structurally closed.
+Gate 3 attempts: 1/3
+Gate 4 attempts: 1/3
+Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED, 4 broad Level-4 gaps → replan slices 9-12 executed: 5 design-reviewer fixtures + 16 manifest fills + 7 live runs persisted in docs/findings/design-capability-live-runs.md + 2 design-foundation fixture repos. Gates 2+3 re-ran over all replan commits: both PASS. Attempt 2 [fresh 17:41, well-formed]: PRESENT_BEHAVIOR_UNVERIFIED again — L1-L3 PASS, evidence spot-checked GENUINE, but Level 4's strict standard requires a real dispatch of the registered agent TYPE, which cannot exist until the 4.9.0 plugin ships — structurally circular pre-release. Rule 4 escalation to the developer: ship-with-documented-residual vs local pre-release install for type-resolved attempt 3 vs hold.)
+Gate 3 rerun (attempt 2): PASS — all 4 findings verified resolved; 2 non-blocking MEDIUMs (inert leading-glob denies; stale pre-4.9 registry headers) fixed as prescribed in 7bf7e5e (prefix-form denies + requiredDenies + upgrade notice). Gate 2 re-review extended to cover 509f9bb + 7bf7e5e.
+Replan appended (slices 9-12, waves 5-8): 9-10 fixture authoring dispatched; 11 (live design-reviewer runs ×5) and 12 (design-foundation runs ×2 on scratchpad copies) follow; 4 named residues stay in human_verification_required.
 
 ## Plan
 
@@ -46,7 +53,8 @@ Slice 7 red-phase: grep -c design.md → 0 on both files before edit
 - [x] Slice 8: README (13 edits: counts, agent+profile tables, 8-skills sentence 5+2+1, seven-delegates line, opus rationale extended to design-reviewer) + src/claude.md (roster row + /design-foundation command) + CLAUDE.md budgets 16/8/12 agents-at-ceiling + QA TC-FR10-1 row → 16 — b0095a5. Verify: versions 4.9.0 bumped-not-tagged, \b15\b sweep leaves only legitimate hits, fixtures untouched+clean, leakage grep 0 over full diff. attempts 1/3, deviations none.
 Slice 8 red-phase: \b15\b sweep captured 8 genuine stale count claims pre-edit
 
-Deviation rule fires this feature: rule1=2 rule2=16 rule3=1 rule4=0
+Deviation rule fires this feature: rule1=2 rule2=17 rule3=1 rule4=0
+(rule2 #17, Gate 7 cascade: doc-updater's new TC-5.5 (FIXTURE) had no manifest entry — the consumer-contract instinct's exact pattern, caught by running the validator immediately; entry added, free. Same-feature recapture, no increment.)
 (rule2 #16, Slice 6: print_footer's second skills enumeration aligned with the SKILLS AVAILABLE edit — free.)
 (rule2 #6-#15, from Slice 2's report: 10 security-review auto-adds on the trust gate — ungated-Playwright gating, per-command gate coverage, exact whole-line registry match, outcome splitting, fenced+labeled display, fence-escape closure, fall-through retarget, timeout bound, named targets, singular alignment. All free; rule2 instinct already captured this feature — same-feature recapture, no increment.)
 (rule1 #2, from Slice 4's report: template first draft omitted the Aesthetic Direction heading — own verify loop caught it, free. rule1 threshold 2 reached → folded as a same-feature recapture of consumer-contract-check-before-review: both rule1 fires are the same author-against-literal-contract miss that instinct already records; no occurrence increment within one feature, no new slug minted.)

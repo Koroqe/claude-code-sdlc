@@ -2,11 +2,41 @@
 
 ## Meta
 
-Feature counter: 2
+Feature counter: 3
 
 ## Prevention Rules
 
 ## Instincts Log
+
+### new-channel-inherits-existing-controls
+Confidence: 0.3
+Category: security
+Pattern: agents/design-reviewer.md
+Rule: WHEN adding an execution channel gated by an existing consent mechanism, honor every kill switch and disclosure that mechanism already carries — a channel that reuses a grant silently widens it
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: design-capability)
+Last confirmed at: 3
+Retires at: 13
+
+### prd-tracks-security-hardening
+Confidence: 0.3
+Category: general
+Pattern: docs/PRD.md
+Rule: WHEN a pre-review hardens an implementation beyond the PRD's wording, align the PRD in the same slice — otherwise Gate 7 finds the drift at merge time
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: design-capability)
+Last confirmed at: 3
+Retires at: 13
+
+### preinstall-to-exercise-new-agent-types
+Confidence: 0.3
+Category: general
+Pattern: agents/*.md
+Rule: WHEN a feature ships a new agent or skill, exercise the registered type pre-release via a local working-tree plugin install — the old installed cache cannot dispatch a type it predates
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: design-capability)
+Last confirmed at: 3
+Retires at: 13
 
 ### consumer-contract-check-before-review
 Confidence: 0.3
@@ -15,8 +45,8 @@ Pattern: docs/qa/*_test_cases.md
 Rule: WHEN authoring an artifact a validator parses, match the consumer's literal contract (exact enum strings, required framing) — decorated labels pass human eyes and fail literal matchers
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: design-capability)
-Last confirmed at: 2
-Retires at: 12
+Last confirmed at: 3
+Retires at: 13
 
 ### manual-verification-must-be-persisted
 Confidence: 0.3

@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-27
+
+### Design-Engineering Capability — 23:42 UTC
+**Summary:** The pipeline can now judge and guide how things look and feel, not just whether the code works — a new specialist reviews visual design, accessibility, and motion quality, and can help a project establish its own design system from scratch.
+**Details:** Adds a design specialist that reviews UI changes for consistency, accessibility, and motion quality — viewing a live preview when it safely can, falling back automatically, and always disclosing which it used. Adds a companion tool that generates a project's own design guidelines grounded in its actual product rather than a generic template. Two rounds of security review hardened how previews are launched, closing gaps a first pass missed. Version 4.9.0.
+**Technical details:** Ships a 16th agent (`design-reviewer`) delegated into merge-ready's Gate 8, running a fail-visible three-step visual-evidence chain — project-declared preview (gated by a machine-local, human-populated trust registry plus a command-shape allowlist and an explicit kill switch), Playwright fallback under the same trust gate, then disclosed code-level review — against vendored, paraphrased accessibility/motion/anti-slop rules. Adds an 8th skill (`/design-foundation`) that generates a project's `.claude/rules/design.md` via subject-grounding, token derivation, and self-check, with a non-blocking unattended mode; a matching project template ships via `install.sh --init-project`. Wired into bootstrap-feature and implement-slice. No screens, endpoints, schema, or deployment changes to this repository itself — it reviews and helps generate UI in consuming projects.
+
 ## 2026-08-26
 
 ### Harness self-correction, round three — 01:15 UTC
