@@ -8,6 +8,16 @@ Feature counter: 2
 
 ## Instincts Log
 
+### consumer-contract-check-before-review
+Confidence: 0.3
+Category: general
+Pattern: docs/qa/*_test_cases.md
+Rule: WHEN authoring an artifact a validator parses, match the consumer's literal contract (exact enum strings, required framing) — decorated labels pass human eyes and fail literal matchers
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: design-capability)
+Last confirmed at: 2
+Retires at: 12
+
 ### manual-verification-must-be-persisted
 Confidence: 0.3
 Category: general

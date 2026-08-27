@@ -6,7 +6,7 @@
 
 ## Branch: feat/design-capability
 
-## Status: implementing wave 1 slice 1/8
+## Status: implementing wave 3 slices 6-7/8
 
 ## Plan
 
@@ -20,14 +20,21 @@ BLOCKER/WARNING fixed; loop 2 had zero BLOCKERs. Docs committed: 3c91342.
 **AC-9 constraint: no reference to the user's private validation project in any tracked file** —
 identifier check run by the orchestrator from session context, identifiers never written down.
 
-### Wave 1
-- [ ] Slice 1 (Tracer): design-reviewer stub (code-level path only, no command execution) + model-profiles.js row + install.sh AGENT_ROLES/3 case arms/banner + six-source count consistency + 4.9.0 bump + explicit 14000 ceiling + merge-ready Gate 8 delegation (≤577B, overrun=FAILED) — pre-review: architect
+### Wave 1 [COMPLETE]
+- [x] Slice 1 (Tracer): design-reviewer stub + model-profiles row + install.sh 3 arms + six-source count consistency + 4.9.0 bump + 14000 ceiling + Gate 8 delegation (+179B of 577) — d155273. Verify PASSED: 6 red probes flipped green, model_for_role executed live (opus/opus/opus/inherit), sweep 18/18 validators + 26/26 suites (1409 checks). Architect pre-review: PASS, 5 action items all applied pre-commit (untrusted-data framing line, PRD ceiling/count reconciliation, 8 decorated-FIXTURE rows normalized + registered, plan Slices 6/8 lists corrected). Tracer gate: SATISFIED.
+Slice 1 build-runner attempts: 1/3
+Slice 1 red-phase: 6 pre-implementation probes → ALL FAILED as expected (see line above Wave 1)
 
-### Wave 2
-- [ ] Slice 2: design-reviewer full evidence chain + FR-1.9 trust gate + vendored audit knowledge (≤12000 target / 14000 cap) — pre-review: security-auditor
-- [ ] Slice 3: GATE_AGENTS fifth entry + test-stop-gate-evidence five-name assertions
-- [ ] Slice 4: templates/rules/design.md (8 sections, Preview trust note) — pre-review: security-auditor (light)
-- [ ] Slice 5: skills/design-foundation/SKILL.md + affirmative CEILINGS entry (one commit) — pre-review: architect
+### Wave 2 [COMPLETE — 4 parallel subagents, all PASS, post-wave orchestrator sweep green]
+- [x] Slice 2: design-reviewer full evidence chain + FR-1.9 trust gate + vendored audit knowledge — 770446f, 10,431/14,000 B. Red: 4 refusal/registry strings absent pre-implementation (fallback line declared already-present from Slice 1). Security pre-review: 2 rounds (nested spawn) — round 1 FAIL with 3 BLOCKERs (ungated Playwright step, screenshot-command coverage, registry prefix-match bypass), round 2 PASS after fence-escape BLOCKER + fall-through retarget; all 7+3 findings fixed pre-commit. attempts 1/3, deviations (security,10) all rule2 free.
+Slice 2 red-phase: refusal-string greps → FAILED (0 matches ×4) before implementation
+NOTE for Gate 7/doc-updater: chain step 2 (Playwright) is now trust-gated — an addition vs FR-1.3's bare "Playwright available" wording, mandated by security pre-review under FR-1.9.4's never-unguarded-execution clause; align PRD wording at docs closure.
+- [x] Slice 3: GATE_AGENTS fifth entry + test-stop-gate-evidence five-name assertions — 0ef46e1. Red: test-first, 7 five-name assertions failed against unchanged handler. Negative check (TC-S.25) reproduced red in scratch copy. attempts 1/3, deviations none.
+Slice 3 red-phase: node tests/hooks/test-stop-gate-evidence.js → FAILED (7 assertions) before handler edit
+- [x] Slice 4: templates/rules/design.md (8 sections, Preview trust note) — 0e5d392. Red: heading loop failed on nonexistent file. Security pre-review PASS (nested spawn worked), 3 WARNINGs fixed pre-commit. attempts 1/3, deviations (rule1,1)+(rule2,3).
+Slice 4 red-phase: heading verify loop → FAILED (MISSING: Design System Source of Truth) before authoring
+- [x] Slice 5: skills/design-foundation/SKILL.md + CEILINGS 6500 (measured 5470 +10% → next 500) in one commit — 85e20a5. Red: 7 skills/no ceiling captured pre-implementation. Architect pre-review PASS (nested spawn), 2 WARNINGs + 3 INFOs fixed pre-commit. attempts 1/3, deviations none. Handoff → Slice 7: bootstrap-feature's trigger line must pass an explicit unattended marker.
+Slice 5 red-phase: validate-skills at 7 dirs + absent ceiling grep → captured pre-implementation
 
 ### Wave 3
 - [ ] Slice 6: install.sh scaffold_cp for design.md + remaining count claims (sandboxed --local --no-plugin verify)
@@ -36,7 +43,11 @@ identifier check run by the orchestrator from session context, identifiers never
 ### Wave 4
 - [ ] Slice 8: README/src/claude.md/CLAUDE.md budgets line/QA-row documentation closure
 
-Deviation rule fires this feature: rule1=0 rule2=2 rule3=1 rule4=0
+Deviation rule fires this feature: rule1=2 rule2=15 rule3=1 rule4=0
+(rule2 #6-#15, from Slice 2's report: 10 security-review auto-adds on the trust gate — ungated-Playwright gating, per-command gate coverage, exact whole-line registry match, outcome splitting, fenced+labeled display, fence-escape closure, fall-through retarget, timeout bound, named targets, singular alignment. All free; rule2 instinct already captured this feature — same-feature recapture, no increment.)
+(rule1 #2, from Slice 4's report: template first draft omitted the Aesthetic Direction heading — own verify loop caught it, free. rule1 threshold 2 reached → folded as a same-feature recapture of consumer-contract-check-before-review: both rule1 fires are the same author-against-literal-contract miss that instinct already records; no occurrence increment within one feature, no new slug minted.)
+(rule2 #3-#5, from Slice 4's report: security-auditor WARNINGs on the template — grant-shaped implicature removed, trust/shape note rescoped to all declared commands, additive-only ban-list guard added; all free auto-adds pre-commit.)
+(rule1 #1: orchestrator's own instinct capture wrote a 212-char Rule: line breaching D1's 200-char allowlist — caught by Slice 3's subagent sweep, regenerated at 192 chars, free.)
 (rule2 #1: architect pre-review flagged the tracer stub reads project-supplied design.md with a Bash grant and no untrusted-data framing before Slice 2's trust gate — one guard sentence added, free.)
 (rule2 #2: architect pre-review flagged 8 decorated-Kind QA rows ("FIXTURE (negative)" etc.) invisible to validate-fixture-manifest's literal Kind match — normalized to bare FIXTURE + 8 manifest entries added, free. rule2 threshold 2 reached → Trigger 2 instinct capture due at step 6.)
 (rule3 #1: bootstrap docs commit 3c91342 broke validate-fixture-manifest — 55 FIXTURE TCs in the new QA doc unregistered; 12 of them misclassified (they invoke the design-foundation SKILL, reclassified→BEHAVIORAL by qa-planner), remaining 43 registered in tests/fixtures/manifest.json with fixture:null+note, folded into Slice 1's commit because the validator requires agents/design-reviewer.md to exist. 1 retry cost against Slice 1.)
