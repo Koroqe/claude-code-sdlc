@@ -57,6 +57,9 @@ const CEILINGS = {
   'skills/sdlc-fast/SKILL.md': 12500,
   'skills/sdlc-quick/SKILL.md': 9000,
   'skills/context-refresh/SKILL.md': 3200,
+  // FR-3.4 affirmative ceiling: measured 5,470 B + 10% = 6,017, rounded up to
+  // the next multiple of 500.
+  'skills/design-foundation/SKILL.md': 6500,
   'agents/planner.md': 24000,
   'agents/verifier.md': 18000,
   // Explicit, planned ceiling above the 12,000 default: the full vendored
