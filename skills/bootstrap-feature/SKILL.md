@@ -33,6 +33,8 @@ Known limitation: this preflight only fires when this skill is invoked explicitl
 
 Every feature follows this pipeline before any code is written. Each step is performed by a specialized agent role.
 
+**Design declaration precheck:** when the feature is user-facing AND `.claude/rules/design.md` does not exist, run `design-foundation` (or instruct the developer to) before the documentation phases proceed, stating explicitly in the invocation that it is an **unattended** run — its non-blocking path keys off that marker. If the developer declines, proceed anyway — never block this pipeline on it.
+
 **Entering from a quick→full escalation (FR-2.4(d)):** when this workflow is invoked because a `quick`-tier run escalated to `full` — rather than being invoked directly for a brand-new feature — the delegation prompts for Steps 1 through 5 below MUST additionally supply the already-completed work (the escalated slice's `Files:`/`Changes:` and its commit hash) as context, so `prd-writer`/`ba-analyst`/`architect`/`qa-planner` document it accurately rather than purely prospectively. By the time this workflow is invoked in this case, `.claude/scratchpad.md`'s `## Tier:` field already reads `full` — the escalation's own mandatory tier-rewrite step ran before this workflow was ever invoked, never after.
 
 ### Step 1: Product Manager — PRD Documentation

@@ -100,6 +100,7 @@ Delegate to `test-writer` agent:
 - Follow the project structure as defined in CLAUDE.md
 - Keep route handlers thin, business logic in services/data layer
 - If this slice edits 4+ files: run the project's typecheck command after every 3 file edits before continuing (per error-recovery rules)
+- When a slice touches UI files: read `.claude/rules/design.md` and extend its declared tokens — introduce no color, font, or duration value not declared there
 
 ### 4. Verify
 
