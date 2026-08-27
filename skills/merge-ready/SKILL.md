@@ -201,9 +201,11 @@ produce no `docs/digest-index.md` row.
 
 ## Gate 8: UI/UX (if user-facing changes)
 
-`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above.
+`SKIPPED (tier: quick)` under `## Tier: quick` — see Tier Check above. `N/A` means the
+applicability check ran and found no user-facing changes — never conflate the two.
 
-- [ ] Visual consistency with project's design system
+Delegate to `design-reviewer` agent:
+- [ ] Visual consistency with the project's declared design system (`.claude/rules/design.md`)
 - [ ] All component states (loading, error, empty, success)
 - [ ] Responsive behavior
 - [ ] User feedback for actions (toasts, indicators)

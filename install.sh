@@ -75,7 +75,7 @@ set -euo pipefail
 # class of drift this feature exists to close (PRD Section 10.1).
 # ----------------------------------------------------------------------------
 
-VERSION="4.8.0"
+VERSION="4.9.0"
 REPO_URL="https://github.com/Koroqe/claude-code-sdlc.git"
 REPO_SLUG="Koroqe/claude-code-sdlc"
 PLUGIN_NAME="claude-code-sdlc"
@@ -98,11 +98,11 @@ NO_PLUGIN=false
 MANIFEST_OWNS=()
 MANIFEST_LEGACY=()
 
-# The 15 agent roles --profile rewrites, in FR-8.1's table order. Populated
+# The 16 agent roles --profile rewrites, in FR-8.1's table order. Populated
 # by neither load_manifest() nor any manifest file — model_for_role()'s case
 # arms are this feature's own source of truth, deliberately independent of
 # the memory-layer manifest, which never mentions agents/ at all.
-AGENT_ROLES=(architect plan-critic planner security-auditor ba-analyst build-runner code-reviewer debugger doc-updater e2e-runner prd-writer qa-planner refactor-cleaner test-writer verifier)
+AGENT_ROLES=(architect plan-critic planner security-auditor design-reviewer ba-analyst build-runner code-reviewer debugger doc-updater e2e-runner prd-writer qa-planner refactor-cleaner test-writer verifier)
 
 # Staged temp files for the current --profile preflight pass. Cleared by
 # cleanup_profile_tempfiles() on any preflight failure and after a
@@ -196,7 +196,7 @@ WHAT GETS INSTALLED (~/.claude/):
   .sdlc-receipt    Record of exactly what this install placed
 
 WHAT DOES NOT COME FROM HERE:
-  agents/          15 specialized agents — ship in the plugin
+  agents/          16 specialized agents — ship in the plugin
   skills/          5 pipeline skills    — ship in the plugin
 
   Install the plugin from a Claude Code session:
@@ -823,7 +823,7 @@ build_removal_set() {
 # Model profile table (FR-8.1)
 #
 # One `<profile>:<role>) echo <model> ;;` case arm per profile/role pair,
-# plus a single `inherit:*) echo inherit ;;` wildcard standing in for all 15
+# plus a single `inherit:*) echo inherit ;;` wildcard standing in for all 16
 # inherit rows. This exact shape is a contract, not a style choice: a later
 # validator text-parses these arms (never executes this file) and asserts
 # they byte-compare against scripts/ci/lib/model-profiles.js's copy of the
@@ -837,6 +837,7 @@ model_for_role() {
     quality:plan-critic) echo opus ;;
     quality:planner) echo opus ;;
     quality:security-auditor) echo opus ;;
+    quality:design-reviewer) echo opus ;;
     quality:ba-analyst) echo sonnet ;;
     quality:build-runner) echo sonnet ;;
     quality:code-reviewer) echo sonnet ;;
@@ -852,6 +853,7 @@ model_for_role() {
     balanced:plan-critic) echo sonnet ;;
     balanced:planner) echo opus ;;
     balanced:security-auditor) echo opus ;;
+    balanced:design-reviewer) echo opus ;;
     balanced:ba-analyst) echo sonnet ;;
     balanced:build-runner) echo haiku ;;
     balanced:code-reviewer) echo sonnet ;;
@@ -867,6 +869,7 @@ model_for_role() {
     budget:plan-critic) echo sonnet ;;
     budget:planner) echo sonnet ;;
     budget:security-auditor) echo opus ;;
+    budget:design-reviewer) echo opus ;;
     budget:ba-analyst) echo sonnet ;;
     budget:build-runner) echo haiku ;;
     budget:code-reviewer) echo sonnet ;;

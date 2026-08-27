@@ -59,6 +59,11 @@ const CEILINGS = {
   'skills/context-refresh/SKILL.md': 3200,
   'agents/planner.md': 24000,
   'agents/verifier.md': 18000,
+  // Explicit, planned ceiling above the 12,000 default: the full vendored
+  // audit knowledge (Slice 2) targets ~12,000 but must never force a silent
+  // content cut or an unplanned validator edit. Overrunning 14,000 is a
+  // FAILED slice, never a further raise.
+  'agents/design-reviewer.md': 14000,
 };
 // Every other agent: none is near this today (next largest is debugger at ~9.1k).
 const DEFAULT_AGENT_CEILING = 12000;

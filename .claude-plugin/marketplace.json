@@ -11,8 +11,8 @@
     {
       "name": "claude-code-sdlc",
       "source": "./",
-      "description": "Turn Claude Code into an autonomous software development team \u2014 15 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
-      "version": "4.8.0",
+      "description": "Turn Claude Code into an autonomous software development team \u2014 16 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
+      "version": "4.9.0",
       "license": "MIT",
       "category": "workflow",
       "tags": [

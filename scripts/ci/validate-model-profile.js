@@ -61,7 +61,7 @@ const RECEIPT_FILE = '.sdlc-model-profile';
 // `install.sh`'s `model_for_role()` uses (FR-10.3) — a contract, not a
 // style choice, per that function's own header comment.
 const CASE_ARM_RE = /^\s*([a-z][a-z0-9-]*):([a-z][a-z0-9-]*)\)\s*echo\s+([a-z][a-z0-9.-]*)\s*;;\s*$/;
-// The single `inherit:*) echo inherit ;;` wildcard standing in for all 14
+// The single `inherit:*) echo inherit ;;` wildcard standing in for all 16
 // `inherit` rows.
 const WILDCARD_RE = /^\s*inherit:\*\)\s*echo\s+inherit\s*;;\s*$/;
 // A line that LOOKS like it is trying to be a case arm (opens with
@@ -94,7 +94,7 @@ function isScaffoldingLine(line) {
 // FR-10.3's full expected matrix: every non-`inherit` profile x every role
 // `scripts/ci/lib/model-profiles.js` knows about. `inherit` rows are excluded
 // on purpose — they are covered by the single `inherit:*)` wildcard arm, not
-// by 14 individual `inherit:<role>)` arms.
+// by 16 individual `inherit:<role>)` arms.
 function expectedTripleKeys() {
   const keys = new Set();
   for (const profile of profiles.PROFILES) {
@@ -223,7 +223,7 @@ function checkInstallTable(v, root) {
   if (!wildcardSeen) {
     v.error(
       rel,
-      "model_for_role() body has no 'inherit:*) echo inherit ;;' wildcard arm — all 14 inherit:<role> rows are effectively missing (FR-10.3)"
+      "model_for_role() body has no 'inherit:*) echo inherit ;;' wildcard arm — all 16 inherit:<role> rows are effectively missing (FR-10.3)"
     );
   }
 

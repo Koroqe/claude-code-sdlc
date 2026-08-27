@@ -2,10 +2,10 @@
 
 **Turn Claude Code into a full software development team.**
 
-15 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
+16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.8.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.9.0-green.svg)]()
 
 ---
 
@@ -247,7 +247,7 @@ request that merely *says* "quick" or "trivial" is still triaged normally.
 
 ---
 
-## The 15 Agents
+## The 16 Agents
 
 | Agent | Role |
 |-------|------|

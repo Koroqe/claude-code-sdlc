@@ -36,7 +36,11 @@ identifier check run by the orchestrator from session context, identifiers never
 ### Wave 4
 - [ ] Slice 8: README/src/claude.md/CLAUDE.md budgets line/QA-row documentation closure
 
-Deviation rule fires this feature: rule1=0 rule2=0 rule3=0 rule4=0
+Deviation rule fires this feature: rule1=0 rule2=2 rule3=1 rule4=0
+(rule2 #1: architect pre-review flagged the tracer stub reads project-supplied design.md with a Bash grant and no untrusted-data framing before Slice 2's trust gate — one guard sentence added, free.)
+(rule2 #2: architect pre-review flagged 8 decorated-Kind QA rows ("FIXTURE (negative)" etc.) invisible to validate-fixture-manifest's literal Kind match — normalized to bare FIXTURE + 8 manifest entries added, free. rule2 threshold 2 reached → Trigger 2 instinct capture due at step 6.)
+(rule3 #1: bootstrap docs commit 3c91342 broke validate-fixture-manifest — 55 FIXTURE TCs in the new QA doc unregistered; 12 of them misclassified (they invoke the design-foundation SKILL, reclassified→BEHAVIORAL by qa-planner), remaining 43 registered in tests/fixtures/manifest.json with fixture:null+note, folded into Slice 1's commit because the validator requires agents/design-reviewer.md to exist. 1 retry cost against Slice 1.)
+Slice 1 red-phase: 6 probes (model_for_role arm, TABLE row, agent file, Gate 8 delegation grep, design.md referent grep, ceiling entry) → ALL FAILED as expected; sweep baseline green except the pre-existing fixture-manifest failure above.
 
 ## Version: last shipped **4.8.0** (2026-08-26, delivery-confirmed); this branch bumps to 4.9.0 in Slice 1 (bumped-not-tagged is the documented mid-development state).
 

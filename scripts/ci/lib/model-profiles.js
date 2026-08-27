@@ -13,10 +13,11 @@
  * they agree, by parsing `install.sh` as text and byte-comparing the
  * extracted triples against `TABLE` below.
  *
- * The `quality` column equals the shipped baseline (FR-8.2) — 4 `opus`
- * roles (architect, plan-critic, planner, security-auditor), 11 `sonnet`
- * roles (the rest) — which is what lets an absent `.sdlc-model-profile`
- * receipt (FR-9.3) be validated identically to a receipt reading `quality`.
+ * The `quality` column equals the shipped baseline (FR-8.2) — 5 `opus`
+ * roles (architect, design-reviewer, plan-critic, planner, security-auditor),
+ * 11 `sonnet` roles (the rest) — which is what lets an absent
+ * `.sdlc-model-profile` receipt (FR-9.3) be validated identically to a
+ * receipt reading `quality`.
  */
 
 const PROFILES = ['quality', 'balanced', 'budget', 'inherit'];
@@ -26,6 +27,7 @@ const TABLE = {
   'plan-critic': { quality: 'opus', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
   'planner': { quality: 'opus', balanced: 'opus', budget: 'sonnet', inherit: 'inherit' },
   'security-auditor': { quality: 'opus', balanced: 'opus', budget: 'opus', inherit: 'inherit' },
+  'design-reviewer': { quality: 'opus', balanced: 'opus', budget: 'opus', inherit: 'inherit' },
   'ba-analyst': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
   'build-runner': { quality: 'sonnet', balanced: 'haiku', budget: 'haiku', inherit: 'inherit' },
   'code-reviewer': { quality: 'sonnet', balanced: 'sonnet', budget: 'sonnet', inherit: 'inherit' },
