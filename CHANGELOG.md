@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-28
+
+### The build was red for a reason that was not a bug — 10:18 UTC
+**Summary:** Every build had been failing for days on a test that checks the project's own safety checks. Nothing was actually broken; one test example had quietly grown into proving two things at once, when it is only allowed to prove one. Fixed.
+**Details:** These examples are deliberately broken inputs, each written to prove one specific check catches one specific mistake. The example for a badly-declared list of specialists also carried a second, unrelated mistake. When a check for that second mistake was added later, the example began failing two checks instead of one, and the test that counts them refused it. Nobody edited the example — the ground moved under it. A separate example already covers the second mistake, so nothing is left unproven.
+**Technical details:** One line removed from a CI test fixture; no product code, no delivered file, no version bump — the release-readiness gate only counts files that ship to installs. All 18 CI validators and all 26 hook test files pass. This unblocks the guard fix in PR #7, whose only red job was this same pre-existing failure.
+
 ## 2026-08-27
 
 ### Design-Engineering Capability — 23:42 UTC
