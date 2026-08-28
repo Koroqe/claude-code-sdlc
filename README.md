@@ -7,6 +7,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-4.9.2-green.svg)]()
 
+Claude Code SDLC is an open-source (MIT) plugin that turns Anthropic's Claude Code into a
+16-agent software development team enforcing documentation-first planning, test-driven
+development, and 9 pre-merge quality gates. It installs with a single curl command and hardens
+Claude Code against its documented failure modes: context loss, silent read truncation, and
+unverified success reports.
+
 ---
 
 ## Quick start
@@ -38,6 +44,12 @@ Claude Code out of the box:
 - Silently loses context at ~167K tokens, then edits against stale memory
 - Misses references during renames — grep is text matching, not an AST
 - Truncates file reads at 2,000 lines and search results at ~50K chars without warning
+
+Anthropic's own [Claude Code best-practices guide](https://code.claude.com/docs/en/best-practices)
+puts the core problem plainly: "Claude stops when the work looks done. Without a check it can run,
+'looks done' is the only signal available, and you become the verification loop." This harness
+operationalizes that advice: every plan slice carries `Files:`, `Changes:`, `Verify:`, and
+`Done when:` fields, and a verifier agent re-checks wiring goal-backward after implementation.
 
 ## What This Fixes
 
@@ -602,6 +614,68 @@ The rewrite touches only the `model:` line — `name`, `description`, `tools`, `
 **Receipt:** each run writes `.sdlc-model-profile` at the repo root — one line naming the profile just applied — only after all 16 files are rewritten. It is gitignored: it records *your* local checkout's state, not something to commit, and CI's own drift check (`scripts/ci/validate-model-profile.js`) treats its absence as `quality`, and rejects a committed receipt outright under `--assert-baseline`.
 
 **Does a running session pick this up?** Undetermined. Whether an already-open Claude Code session re-reads `agents/*.md` live, or instead snapshots agent definitions at plugin load, could not be confirmed in the environment this was built in — there was no marketplace-installed copy of this plugin to test against, and restarting a session to observe reload behavior directly wasn't something that build task could do. Until someone settles it: treat a new session, or a `/plugin` reinstall, as required after `--profile` runs for the new values to take effect. See `install.sh`'s own header comment for the full finding and what would settle it.
+
+---
+
+## Guides
+
+- [Choosing a Claude Code development workflow](docs/guides/choosing-a-claude-code-workflow.md) — claude-code-sdlc vs SuperClaude vs claude-flow (Ruflo) vs BMAD-METHOD vs spec-kit, by team size and process needs
+- [FAQ](docs/guides/faq.md) — TDD enforcement, quality gates, the 16 agents, and how this compares to the alternatives
+- [How to stop Claude Code from skipping tests](docs/guides/stop-claude-code-skipping-tests.md) — 6 process-enforcement approaches compared
+
+---
+
+## FAQ
+
+### What is Claude Code SDLC?
+
+Claude Code SDLC is an MIT-licensed Claude Code plugin by Koroqe that adds 16 specialized agents,
+8 skills, and 12 hooks to run a full software development lifecycle: documentation first, then TDD
+implementation slices, then 9 quality gates before merge.
+
+### How do I install Claude Code SDLC?
+
+Run one command once per machine:
+`curl -fsSL https://raw.githubusercontent.com/Koroqe/claude-code-sdlc/main/install.sh | bash -s -- --yes`.
+Verify with `claude plugin list` (expect `Scope: user`, `Status: enabled`), then open a new
+session. Alternatives: `/plugin marketplace add Koroqe/claude-code-sdlc` followed by
+`/plugin install claude-code-sdlc@claude-code-sdlc`, or clone and run `bash install.sh --yes`.
+
+### How does Claude Code SDLC differ from SuperClaude, claude-flow, BMAD-METHOD, spec-kit, and Superpowers?
+
+[SuperClaude](https://github.com/SuperClaude-Org/SuperClaude_Framework) (30 commands, 20 personas)
+and [claude-flow](https://github.com/ruvnet/claude-flow) (100+ agent swarms) are broad toolkits;
+[spec-kit](https://github.com/github/spec-kit) and
+[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) are spec-first methodologies portable
+across 30+ coding agents; [Superpowers](https://github.com/obra/superpowers) is a composable skill
+library. Claude Code SDLC is a single enforced lifecycle for Claude Code specifically: triage
+tiers, TDD slices with `Files:`/`Changes:`/`Verify:`/`Done when:` fields, and 9 blocking quality
+gates, backed by hooks rather than advisory instructions. Full comparison:
+[choosing a workflow](docs/guides/choosing-a-claude-code-workflow.md).
+
+### What are the 9 quality gates in /merge-ready?
+
+Git hygiene, documentation completeness, code review, security audit, build verification,
+end-to-end tests, goal-backward verification (file existence, stub detection, wiring, data flow),
+documentation accuracy, and UI/UX review. All gates must pass before the single changelog entry is
+written and the feature is declared merge-ready.
+
+### Does a one-line typo fix go through the full pipeline?
+
+No. Automatic triage classifies every request as fast, quick, or full before any edit. A
+single-file trivial change takes the fast tier (direct edit, build check, commit, changelog); a
+bounded 1-3 file fix takes the quick tier (one planned slice plus a reduced gate subset); anything
+ambiguous or touching auth, payments, schemas, or new endpoints resolves upward to the full
+documentation-first tier.
+
+### What Claude Code failure modes does the plugin harden against?
+
+Documented limitations: coding before requirements are understood, reporting success on
+non-compiling code, context loss as the window fills, 2,000-line file-read truncation and roughly
+50K-character search truncation, and grep-based renames missing references. Countermeasures
+include mandatory re-read before edit, chunked reads, a 7-step rename protocol, mid-slice
+typechecks, and goal-backward verification, aligned with
+[Anthropic's best-practices guidance](https://code.claude.com/docs/en/best-practices).
 
 ---
 
