@@ -26,12 +26,19 @@
  *   - git aliases, including repo-local ones and `git -c alias.x=commit x`
  *   - variable indirection (`G=git; $G commit`)
  *   - string splicing (`g''it commit`)
+ *   - directory tracking (see below) does not follow `pushd`/`popd`, a `cd`
+ *     inside `( … )`, or a `cd` that fails at runtime; each of those leaves the
+ *     tracked directory stale rather than unknown, so the branch check can read
+ *     a repository the command did not target
+ *   - a git command quoted as DATA — inside a heredoc, or an argument to
+ *     another program — is judged as if it were about to run
  * A model laundering git through those is outside the threat model. The
  * backstop is merge-ready Gate 0, which re-checks git hygiene before merge.
  * ---------------------------------------------------------------------------
  */
 
 const { spawnSync } = require('child_process');
+const path = require('path');
 const shell = require('../lib/shell-parse.js');
 const sanitize = require('../lib/sanitize.js');
 
@@ -55,14 +62,25 @@ const ATTRIBUTION_PATTERNS = [
   /^\s*(co-)?(authored|written|created|generated)[-\s]by\b.*\b(claude|ai|anthropic|copilot|gpt)\b/im,
 ];
 
-/** Resolve the current branch without letting a repo's own config run code. */
-function currentBranch(cwd) {
+/**
+ * Resolve the current branch without letting a repo's own config run code.
+ *
+ * `pathOpts` are the target-selecting global options lifted verbatim off the
+ * command being judged (`-C`, `--git-dir`, `--work-tree`). Replaying them lets
+ * git resolve the target itself, rather than this file reimplementing rules it
+ * would get subtly wrong. `-c` is deliberately NOT replayed: arbitrary config
+ * from the command line is the same code-execution vector `core.fsmonitor=`
+ * below exists to close.
+ */
+function currentBranch(cwd, pathOpts) {
   const result = spawnSync(
     'git',
     // `-c core.fsmonitor=` neutralises the canonical repo-config code-execution
     // vector: a repository can otherwise make almost any git command run a
     // program of its choosing.
-    ['-c', 'core.fsmonitor=', 'rev-parse', '--abbrev-ref', 'HEAD'],
+    ['-c', 'core.fsmonitor=']
+      .concat(pathOpts || [])
+      .concat(['rev-parse', '--abbrev-ref', 'HEAD']),
     {
       cwd,
       shell: false,
@@ -86,6 +104,77 @@ function currentBranch(cwd) {
   if (result.status !== 0 || !result.stdout) return '';
   const name = String(result.stdout).trim();
   return /^[\w./-]+$/.test(name) ? name : '';
+}
+
+/**
+ * Where a `cd` segment lands, or null when that cannot be known.
+ *
+ * Returning null is the important half. The alternative to admitting "I don't
+ * know" is judging some other repository's branch, which is exactly the defect
+ * this function exists to fix — so anything with a variable, a subshell, a
+ * glob, or `cd -` gives up rather than guesses.
+ */
+function cdTarget(args, cwd) {
+  const operands = args.filter((a) => !a.startsWith('-'));
+
+  // Bare `cd` is $HOME. Anything with more than one operand is not a plain
+  // directory change (`cd a b` is bash's substitution form).
+  if (operands.length === 0) return process.env.HOME || null;
+  if (operands.length > 1) return null;
+
+  const target = operands[0];
+
+  // `cd -` is the previous directory, which this file does not track.
+  if (target === '-') return null;
+
+  // Unexpanded shell metacharacters mean the literal text is not the path.
+  // Tokenizing strips quotes, so a `$` surviving to here was genuinely a
+  // variable, not the `$` inside a quoted string that shell-parse already
+  // resolved.
+  if (/[$`*?]/.test(target)) return null;
+
+  if (target === '~') return process.env.HOME || null;
+  if (target.startsWith('~/')) {
+    return process.env.HOME ? path.resolve(process.env.HOME, target.slice(2)) : null;
+  }
+  if (target.startsWith('~')) return null; // ~otheruser
+
+  return path.resolve(cwd, target);
+}
+
+/**
+ * Lift the target-selecting global options off a git command, in order, so
+ * `currentBranch` can replay them. Only the three that choose which repository
+ * git acts on — never `-c`.
+ */
+function targetOptions(args) {
+  const out = [];
+  const PAIRED = ['-C', '--git-dir', '--work-tree'];
+
+  let i = 0;
+  while (i < args.length && args[i].startsWith('-')) {
+    const a = args[i];
+
+    if (PAIRED.indexOf(a) !== -1) {
+      const value = args[i + 1];
+      // A value that looks like an option is a malformed command; replaying it
+      // would let git reinterpret it as something else entirely.
+      if (value !== undefined && !value.startsWith('-')) out.push(a, value);
+      i += 2;
+      continue;
+    }
+
+    if (/^--(git-dir|work-tree)=/.test(a)) {
+      out.push(a);
+      i += 1;
+      continue;
+    }
+
+    // `-c` and `--exec-path` are two-token but deliberately not replayed.
+    i += (a === '-c' || a === '--namespace' || a === '--exec-path') ? 2 : 1;
+  }
+
+  return out;
 }
 
 /** Collect every -m / --message value from a commit's arguments. */
@@ -113,12 +202,25 @@ module.exports = function gitGuard(input) {
   const command = (input && input.tool_input && input.tool_input.command) || '';
   if (!command) return null;
 
-  const cwd = (input && input.cwd) || process.cwd();
   const envEscaped = process.env[ESCAPE] === '1';
   const notes = [];
 
+  // The cwd the shell is standing in as each segment runs. It starts at the
+  // session's directory and moves with every `cd`, because the branch check
+  // has to judge the repository git will ACTUALLY act on — not the one the
+  // session happens to be rooted in. `null` means "no longer known", which
+  // suppresses the branch check rather than pointing it at the wrong repo.
+  let cwd = (input && input.cwd) || process.cwd();
+  let branchSkipNoted = false;
+
   for (const segment of shell.splitSegments(command)) {
     const resolved = shell.resolveCommand(segment);
+
+    if (resolved.name === 'cd') {
+      cwd = cwd === null ? null : cdTarget(resolved.args, cwd);
+      continue;
+    }
+
     if (resolved.name !== 'git') continue;
 
     // The escape may be set in this process's environment, or written inline
@@ -150,7 +252,19 @@ module.exports = function gitGuard(input) {
     }
 
     if (subcommand === 'commit') {
-      const branch = currentBranch(cwd);
+      // Every other check below reads only the command text, so losing track of
+      // the directory must not disable them — otherwise this becomes a way to
+      // launder a bad commit past the shape and attribution checks.
+      const branch = cwd === null ? '' : currentBranch(cwd, targetOptions(args));
+
+      if (cwd === null && !branchSkipNoted) {
+        notes.push(
+          'git-guard: branch check skipped — could not resolve which repository ' +
+          'this `git commit` targets (an unresolved `cd`). Every other check ran.'
+        );
+        branchSkipNoted = true;
+      }
+
       if (branch && PROTECTED_BRANCHES.indexOf(branch) !== -1) {
         const r = refuse(
           'Refusing to commit on ' + branch + '. Work happens on a feature branch: ' +
