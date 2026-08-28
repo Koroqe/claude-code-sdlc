@@ -4,6 +4,7 @@ description: Fixture mirror of agents/architect.md for scripts/ci/validate-model
 tools: ["Read"]
 model: fable
 effort: high
+maxTurns: 100
 ---
 
 # Fixture Agent — architect

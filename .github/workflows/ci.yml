@@ -339,6 +339,18 @@ jobs:
       # model-profile drift validator, each a passing mirror except one
       # deliberate defect. Every fixture must fail for its own named reason
       # — a generic mismatch count would let a rotted fixture keep CI green.
+      # The context budget is the fourth hard cap (agents, skills, hooks, and now
+      # instruction-text size). It shipped in 4.8.0 referenced by nothing in this
+      # workflow, so it ran only when someone remembered to run it.
+      - name: Instruction-text cost stays within its ceilings
+        run: node scripts/ci/validate-context-budget.js
+
+      # A validator that CI never invokes is not a check. This asserts every
+      # scripts/ci/validate-*.js is referenced here — the omission above went
+      # unnoticed until main had been red for 16 consecutive runs.
+      - name: Every validator is actually wired into CI
+        run: node scripts/ci/ci-parity.js --check-coverage
+
       - name: Falsify — model-profile validator catches a stale file under a committed profile
         run: "node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/stale-file --min 1 --expect-failure \"agents/build-runner.md: model 'sonnet', expected 'haiku'\" --expect-problems 1"
 
@@ -352,7 +364,7 @@ jobs:
         run: node scripts/ci/validate-agents.js --root tests/fixtures/ci/model-profile/no-receipt-fable --min 1
 
       - name: Falsify — model-profile validator catches install.sh/CI table disagreement
-        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/install-table-mismatch --min 1 --expect-failure "balanced:plan-critic" --expect-problems 4
+        run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/install-table-mismatch --min 1 --expect-failure "balanced:plan-critic" --expect-problems 1
 
       - name: Control — model-profile validator passes the inherit profile and its wildcard arm
         run: node scripts/ci/validate-model-profile.js --root tests/fixtures/ci/model-profile/inherit-wildcard --min 1

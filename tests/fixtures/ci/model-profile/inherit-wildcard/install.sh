@@ -18,6 +18,7 @@ model_for_role() {
     quality:qa-planner) echo sonnet ;;
     quality:refactor-cleaner) echo sonnet ;;
     quality:security-auditor) echo opus ;;
+    quality:design-reviewer) echo opus ;;
     quality:test-writer) echo sonnet ;;
     quality:debugger) echo sonnet ;;
     quality:verifier) echo sonnet ;;
@@ -33,6 +34,7 @@ model_for_role() {
     balanced:qa-planner) echo sonnet ;;
     balanced:refactor-cleaner) echo sonnet ;;
     balanced:security-auditor) echo opus ;;
+    balanced:design-reviewer) echo opus ;;
     balanced:test-writer) echo sonnet ;;
     balanced:debugger) echo sonnet ;;
     balanced:verifier) echo sonnet ;;
@@ -48,6 +50,7 @@ model_for_role() {
     budget:qa-planner) echo sonnet ;;
     budget:refactor-cleaner) echo haiku ;;
     budget:security-auditor) echo opus ;;
+    budget:design-reviewer) echo opus ;;
     budget:test-writer) echo haiku ;;
     budget:debugger) echo sonnet ;;
     budget:verifier) echo sonnet ;;

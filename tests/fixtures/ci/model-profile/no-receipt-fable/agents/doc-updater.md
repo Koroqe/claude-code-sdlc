@@ -4,6 +4,7 @@ description: Fixture mirror of agents/doc-updater.md for scripts/ci/validate-mod
 tools: ["Read"]
 model: sonnet
 effort: low
+maxTurns: 60
 ---
 
 # Fixture Agent — doc-updater

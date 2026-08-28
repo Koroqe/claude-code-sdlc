@@ -4,6 +4,7 @@ description: Fixture mirror of agents/refactor-cleaner.md for scripts/ci/validat
 tools: ["Read"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # Fixture Agent — refactor-cleaner

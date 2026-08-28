@@ -4,6 +4,7 @@ description: Fixture mirror of agents/planner.md for scripts/ci/validate-model-p
 tools: ["Read"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Fixture Agent — planner

@@ -64,6 +64,14 @@ const NONINTERACTIVE = /(?:^|\s)--yes(?:\s|$)/;
  * one level up: documentation that describes a repo it no longer matches.
  */
 function checkAssetCounts(v, root) {
+  // Only ever assert against the REAL tree. Under `--root <fixture>` the README
+  // is a deliberately-broken prop with no asset counts in it, and demanding them
+  // there adds three problems to a fixture whose CI step asserts exactly three —
+  // which is precisely the "fixture has stopped isolating" failure this repo
+  // treats as a hard error. Measured 2026-08-28: this check, added in 4.8.0,
+  // did exactly that to tests/fixtures/ci/doc-commands and helped keep CI red.
+  if (path.resolve(root) !== path.resolve(core.repoRoot())) return;
+
   const readme = path.join(root, 'README.md');
   let text = null;
   try { text = fs.readFileSync(readme, 'utf8'); } catch (err) { return; }

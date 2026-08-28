@@ -4,6 +4,7 @@ description: Fixture mirror of agents/code-reviewer.md for scripts/ci/validate-m
 tools: ["Read"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # Fixture Agent — code-reviewer

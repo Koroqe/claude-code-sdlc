@@ -4,6 +4,7 @@ description: Fixture mirror of agents/security-auditor.md for scripts/ci/validat
 tools: ["Read"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Fixture Agent — security-auditor

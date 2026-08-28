@@ -4,6 +4,7 @@ description: Fixture mirror of agents/build-runner.md for scripts/ci/validate-mo
 tools: ["Read"]
 model: sonnet
 effort: low
+maxTurns: 60
 ---
 
 # Fixture Agent — build-runner

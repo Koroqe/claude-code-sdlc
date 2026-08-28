@@ -4,6 +4,7 @@ description: Fixture mirror of agents/prd-writer.md for scripts/ci/validate-mode
 tools: ["Read"]
 model: sonnet
 effort: low
+maxTurns: 60
 ---
 
 # Fixture Agent — prd-writer

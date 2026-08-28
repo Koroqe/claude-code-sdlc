@@ -4,6 +4,7 @@ description: Fixture mirror of agents/ba-analyst.md for scripts/ci/validate-mode
 tools: ["Read"]
 model: sonnet
 effort: medium
+maxTurns: 60
 ---
 
 # Fixture Agent — ba-analyst

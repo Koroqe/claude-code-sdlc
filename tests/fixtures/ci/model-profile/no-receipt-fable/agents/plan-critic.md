@@ -4,6 +4,7 @@ description: Fixture mirror of agents/plan-critic.md for scripts/ci/validate-mod
 tools: ["Read"]
 model: opus
 effort: high
+maxTurns: 100
 ---
 
 # Fixture Agent — plan-critic

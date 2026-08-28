@@ -10,6 +10,7 @@ model_for_role() {
     quality:ba-analyst) echo sonnet ;;
     quality:build-runner) echo sonnet ;;
     quality:code-reviewer) echo sonnet ;;
+    quality:debugger) echo sonnet ;;
     quality:doc-updater) echo sonnet ;;
     quality:e2e-runner) echo sonnet ;;
     quality:plan-critic) echo opus ;;
@@ -18,12 +19,14 @@ model_for_role() {
     quality:qa-planner) echo sonnet ;;
     quality:refactor-cleaner) echo sonnet ;;
     quality:security-auditor) echo opus ;;
+    quality:design-reviewer) echo opus ;;
     quality:test-writer) echo sonnet ;;
     quality:verifier) echo sonnet ;;
     balanced:architect) echo opus ;;
     balanced:ba-analyst) echo sonnet ;;
     balanced:build-runner) echo haiku ;;
     balanced:code-reviewer) echo sonnet ;;
+    balanced:debugger) echo sonnet ;;
     balanced:doc-updater) echo haiku ;;
     balanced:e2e-runner) echo sonnet ;;
     balanced:plan-critic) echo opus ;;
@@ -32,12 +35,14 @@ model_for_role() {
     balanced:qa-planner) echo sonnet ;;
     balanced:refactor-cleaner) echo sonnet ;;
     balanced:security-auditor) echo opus ;;
+    balanced:design-reviewer) echo opus ;;
     balanced:test-writer) echo sonnet ;;
     balanced:verifier) echo sonnet ;;
     budget:architect) echo sonnet ;;
     budget:ba-analyst) echo sonnet ;;
     budget:build-runner) echo haiku ;;
     budget:code-reviewer) echo sonnet ;;
+    budget:debugger) echo sonnet ;;
     budget:doc-updater) echo haiku ;;
     budget:e2e-runner) echo sonnet ;;
     budget:plan-critic) echo sonnet ;;
@@ -46,6 +51,7 @@ model_for_role() {
     budget:qa-planner) echo sonnet ;;
     budget:refactor-cleaner) echo haiku ;;
     budget:security-auditor) echo opus ;;
+    budget:design-reviewer) echo opus ;;
     budget:test-writer) echo haiku ;;
     budget:verifier) echo sonnet ;;
     inherit:*) echo inherit ;;

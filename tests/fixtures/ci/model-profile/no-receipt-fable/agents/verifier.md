@@ -4,6 +4,7 @@ description: Fixture mirror of agents/verifier.md for scripts/ci/validate-model-
 tools: ["Read"]
 model: sonnet
 effort: high
+maxTurns: 100
 ---
 
 # Fixture Agent — verifier

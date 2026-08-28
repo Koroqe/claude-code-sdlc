@@ -4,6 +4,7 @@ description: Fixture mirror of agents/e2e-runner.md for scripts/ci/validate-mode
 tools: ["Read"]
 model: sonnet
 effort: medium
+maxTurns: 100
 ---
 
 # Fixture Agent — e2e-runner

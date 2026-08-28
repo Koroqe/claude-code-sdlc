@@ -4,6 +4,7 @@ description: Fixture mirror of agents/test-writer.md for scripts/ci/validate-mod
 tools: ["Read"]
 model: sonnet
 effort: medium
+maxTurns: 60
 ---
 
 # Fixture Agent — test-writer
