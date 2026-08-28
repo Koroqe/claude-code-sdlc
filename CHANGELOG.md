@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-08-28
+
+### Continuous integration was failing on every run, and nothing said so — 10:41 UTC
+**Summary:** The project's automated checks had been failing on every change for eight days, across five releases, because the command people ran locally was not the one the build server runs. Both now match, and a warning that cried wolf every session now only speaks when something is genuinely out of date.
+**Details:** The local check ran each validator alone, but the build server also runs about forty deliberately-broken cases proving each one still catches a real fault. Three had quietly stopped working and one new check was connected to nothing — invisible locally, failing every build. One command now runs exactly what the server runs, and fails if any check is unconnected. The startup "out of date" notice now compares actual files, not a version label, so it stays quiet unless something differs.
+**Technical details:** Repairs three fixtures that had stopped isolating — one carrying a second defect a later check began flagging, one whose agent mirrors lacked a field made mandatory in 4.7.0, and two whose installer copies were missing case arms for roles added since. One assertion count had been raised to absorb that rot rather than fix it, and is now back to the single seeded defect it exists to prove. Adds a parity runner that reads the workflow itself, so the local sweep and CI cannot diverge, plus a coverage mode that fails when a validator is referenced nowhere in the workflow. The session-start memory-layer check now compares installed bytes against shipped bytes using the installer's own manifest, rather than an install-time version stamp that made it fire after any release which did not touch that source. Process and tooling only — no user-facing screens, endpoints, schema or deployment impact.
+
 ## 2026-08-27
 
 ### Design-Engineering Capability — 23:42 UTC

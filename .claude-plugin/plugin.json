@@ -1,6 +1,6 @@
 {
   "name": "claude-code-sdlc",
-  "version": "4.9.0",
+  "version": "4.9.1",
   "description": "Turn Claude Code into an autonomous software development team \u2014 16 specialized agents, documentation-first pipeline, TDD slices in parallel waves, and 9 quality gates.",
   "author": {
     "name": "Aleksei Korobeinikov",

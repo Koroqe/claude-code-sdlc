@@ -5,12 +5,25 @@ The harness itself. It dogfoods its own pipeline, so everything the agents enfor
 ## Commands
 
 This repository has no `package.json`, no build step and no runtime dependencies — it ships markdown
-and zero-dependency Node scripts. Its equivalent of a typecheck is the validator sweep:
+and zero-dependency Node scripts. Its equivalent of a typecheck is:
 
 ```bash
-for v in scripts/ci/validate-*.js; do node "$v" || exit 1; done
-for t in tests/hooks/test-*.js; do node "$t" || exit 1; done
+node scripts/ci/ci-parity.js     # runs exactly what CI runs, read from ci.yml
 ```
+
+**Use that, not a bare validator loop.** This is not a style preference — it is the difference
+between evidence and none:
+
+```bash
+for v in scripts/ci/validate-*.js; do node "$v" || exit 1; done   # NOT sufficient
+```
+
+That loop invokes each validator bare, skipping the ~40 seeded-fixture assertions
+(`--root <fixture> --expect-failure … --expect-problems N`) that CI also runs — the very checks that
+make a validator evidence rather than decoration. It passes while CI fails. Measured: `main` sat red
+for **16 consecutive runs across five releases (4.5.0–4.9.0)** while that loop stayed green the whole
+time, because three fixtures had silently stopped isolating and one validator was wired into nothing.
+`ci-parity.js --check-coverage` now fails if any `validate-*.js` is missing from `ci.yml`.
 
 Those check **structure** and **hook logic**. They do not check that the instructions this harness
 ships actually steer a real session — that is what the behavioural eval is for:

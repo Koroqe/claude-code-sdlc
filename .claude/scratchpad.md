@@ -1,12 +1,48 @@
 # Scratchpad
 
-## Feature: design-capability — design-engineering capability (design-reviewer agent runs Gate 8, design-foundation skill, templates/rules/design.md)
+## Feature: ci-parity — get CI green and make local verification mean something
+
+(previous: design-capability — design-reviewer agent runs Gate 8, design-foundation skill, templates/rules/design.md)
 
 ## Tier: full
 
-## Branch: feat/design-capability
+## Branch: fix/ci-parity
 
-## Status: RELEASED — 4.9.0 merged to main (8cafb97, fast-forward, 24 commits), pushed, tagged v4.9.0, metadata synced.
+## Status: implementing — CI parity 74/74 local, spine 203 checks. 4.9.1 bumped, not yet released.
+
+## CI was red for 16 consecutive runs (2026-08-20 → 2026-08-28), across 4.5.0–4.9.0
+
+Root cause of the blindness: **the sweep documented in CLAUDE.md was not what CI runs.** A bare
+`for v in scripts/ci/validate-*.js` loop skips the ~40 seeded-fixture assertions
+(`--root <fixture> --expect-failure … --expect-problems N`) CI also runs — the checks that make a
+validator evidence at all. Local green, CI red, for eight days.
+
+Three fixtures had stopped isolating, plus one unwired validator:
+- `plugin-manifest/bad-directory-string` carried a `hooks` key a later check began flagging → 2
+  problems where 1 was asserted. Removed; `duplicate-hooks` already covers that defect separately.
+- `model-profile/no-receipt-fable`'s 14 agent mirrors lacked `maxTurns` (mandatory since 4.7.0),
+  breaking the Control step that proves validate-agents still PASSES it.
+- `model-profile/install-table-mismatch` + `inherit-wildcard` installer copies were missing case arms
+  for `debugger` and `design-reviewer`. **The mismatch fixture's assertion had been raised from 1 to 4
+  to absorb that rot rather than repair it** — restored to 1, its single seeded defect.
+- `validate-context-budget.js` (4.8.0) was referenced nowhere in `ci.yml`.
+
+Fixes: `scripts/ci/ci-parity.js` runs exactly what `ci.yml` says (default) and fails when any
+validator is unwired (`--check-coverage`, now a CI step). 19 checks incl. seeded-broken; its parser is
+pinned to the two forms that defeated earlier attempts — a double-quoted `run:` scalar, and the
+backticks in `--expect-failure "does not grant \`Bash\`"` which a shell would execute.
+
+**Also my own regression, found by the same instrument:** the README asset-count check added in 4.8.0
+ran against fixture roots, adding 3 problems to a fixture asserting 3. Now scoped to the real repo root.
+
+## Memory-layer drift now means drift
+
+`driftLine()` compared `.sdlc-receipt`'s install-time version against the plugin's, so it fired after
+any release that did not touch `src/` — measured: receipt 4.6.0 vs plugin 4.9.0 while all six
+delivered files were byte-identical. It now compares installed bytes against `<pluginRoot>/src/` using
+the installer's own `manifests/owned-files.txt`, names the differing files, and stays silent otherwise.
+Fail-open preserved (no manifest / no `src/` / no memory layer → silent). Live probe after the change
+correctly reports exactly one real difference: `claude.md`, which 4.9.0 did change.
 Delivery confirmed against `claude plugin list`: user scope 4.9.0 AND this repo's project scope 4.9.0, both from the GitHub marketplace (repointed back after the sanctioned pre-release local install used for Gate 6's type-resolved runs). Assets now: **16 agents / 8 skills / 12 hook ids** — agents AND hooks both AT ceiling.
 Post-release follow-ups carried: (1) pre-4.9.0 dormant-registry notice (Gate 2 MEDIUM, candidate session-start vintage note); (2) supersede the "headless claude -p has no Agent tool" finding in docs/findings (re-measured 2026-08-27: 2.1.237 HAS it, and fresh sessions dispatch newly installed plugin agent types); (3) type-resolved design-foundation runs + the three-way Gate 8 rendering comparison land with the external validation-project pass; (4) 27 deferred fixture-corpus manifest entries.
 Gates: 9/9 — MERGE READY. Gate 0 PASS; Gate 1 PASS; Gate 2 PASS ×3 (full diff; fix commits 509f9bb+7bf7e5e; replan commits — 1 MEDIUM follow-up below); Gate 3 FAIL→fixed→PASS attempt 2, replan-commit audit PASS (2 CRITICAL + 2 MEDIUM all closed); Gate 4 PASS (18/18, 26/26/1373); Gate 5 PASS (5/5 probes, 73 live cases out of scope); Gate 6 VERIFIED passed:true gaps:[] hvr:[] on attempt 3/3, freshness confirmed 2026-08-27 23:36 (replan slices 9-12 + user-sanctioned 4.9.0 pre-release local install → five TYPE-RESOLVED design-reviewer dispatches persisted in docs/findings/design-capability-live-runs.md; measured en route: headless claude -p on 2.1.237 now HAS the Agent tool, superseding the 2026-08-26 finding — record in docs/findings at next touch); Gate 7 PASS after Auto-Fix (trust-gate wording aligned, digest §14 row); Gate 8 N/A. Post-Gate Instinct Capture: 3 entries (new-channel-inherits-existing-controls [security], prd-tracks-security-hardening, preinstall-to-exercise-new-agent-types — all Gate Auto-Fix).
