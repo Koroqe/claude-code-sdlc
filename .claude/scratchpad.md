@@ -8,7 +8,11 @@
 
 ## Branch: fix/ci-parity
 
-## Status: implementing — CI parity 74/74 local, spine 203 checks. 4.9.1 bumped, not yet released.
+## Status: RELEASED — 4.9.1 merged to main (3facb06), pushed, tagged v4.9.1, metadata synced.
+**CI is GREEN — the first successful run since 2026-08-20**, ending a 16-run failure streak.
+Delivery confirmed: user 4.9.0→4.9.1, this repo's project scope 4.9.0→4.9.1. Memory layer refreshed
+via install.sh (receipt 4.6.0→4.9.1); all six delivered files now byte-identical and the spine probe
+is silent about drift.
 
 ## CI was red for 16 consecutive runs (2026-08-20 → 2026-08-28), across 4.5.0–4.9.0
 
