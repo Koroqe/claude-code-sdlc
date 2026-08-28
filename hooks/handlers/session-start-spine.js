@@ -339,10 +339,11 @@ function extractPreventionRules(text) {
 }
 
 /**
- * The loaded plugin's own version, from its manifest. Derived once at the
- * entry point and passed to both version checks — the old derivation lived
- * inside driftLine() behind the receipt early-return, so receipt-less
- * (plugin-only) installs never computed it at all. '' on any failure.
+ * The loaded plugin's own version, from its manifest. Derived once at the entry
+ * point and used by staleInstallLine(), which compares it against what a
+ * project-scope install actually pinned. The memory-layer check no longer uses
+ * it at all — that one compares file content, not version stamps. '' on any
+ * failure.
  */
 function loadedPluginVersion(pluginRoot) {
   try {
@@ -354,21 +355,85 @@ function loadedPluginVersion(pluginRoot) {
   }
 }
 
-/** Compare the installed memory-layer version with the plugin's. */
-function driftLine(homeDir, pluginVersion) {
-  if (!pluginVersion) return '';
-  const receiptPath = path.join(homeDir, '.claude', '.sdlc-receipt');
-  const receipt = readCapped(receiptPath, 256);
-  // A malformed receipt is treated exactly as an absent one: silent. Reporting
-  // it as drift would produce a false mismatch, and reporting it as an
-  // exception would train adopters to ignore genuine failures.
-  if (!receipt) return '';
-  const installed = sanitize.sanitizeField(receipt.split('\n')[0], 40);
-  if (!VERSION_RE.test(installed)) return '';
-  if (installed === pluginVersion) return '';
+/**
+ * Report drift in the installed memory layer — by CONTENT, never by version stamp.
+ *
+ * This used to compare `~/.claude/.sdlc-receipt`'s first line (the version that
+ * was current when the user last ran install.sh) against the loaded plugin's
+ * version, and warn on any difference. That is wrong whenever a release does not
+ * touch `src/`: the installed files are byte-for-byte what the plugin ships, yet
+ * every session opened with "version drift … run `bash install.sh`". Measured
+ * 2026-08-28 — the receipt read 4.6.0 against a 4.9.0 plugin while all six
+ * delivered files were identical and `git diff v4.6.0..HEAD -- src/` was empty.
+ *
+ * That matters more than a cosmetic nag. This file's own contract says a
+ * malformed receipt must stay silent because reporting a non-problem "would
+ * train adopters to ignore genuine failures" — and a warning that is false on
+ * every release does exactly that to the real one.
+ *
+ * So: drift means the installed bytes differ from the shipped bytes. The file
+ * list comes from the installer's own manifest, which is already the single
+ * source of truth for what is owned.
+ *
+ * Fail-open throughout, as everywhere else here: no manifest, no `src/` in the
+ * plugin root, or no memory layer installed at all (a plugin-only install) are
+ * all silent, not exceptions.
+ */
+function ownedFiles(pluginRoot) {
+  const text = readCapped(path.join(pluginRoot, 'manifests', 'owned-files.txt'), 16 * 1024);
+  if (!text) return [];
+  const out = [];
+  let section = '';
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    if (line === 'owns' || line === 'legacy') { section = line; continue; }
+    // Only `owns` — `legacy` lists paths this version deliberately REMOVES, so
+    // treating one as missing content would invert the check.
+    if (section !== 'owns') continue;
+    // Defensive: the manifest is plugin-supplied, but never trust a path with
+    // an escape in it.
+    if (line.indexOf('..') !== -1 || line[0] === '/' || line.indexOf('\\') !== -1) continue;
+    out.push(line);
+  }
+  return out;
+}
 
-  return 'version drift: memory layer ' + installed + ', plugin ' + pluginVersion +
-    ' — run `bash install.sh` to refresh the memory layer';
+function driftLine(homeDir, pluginRoot) {
+  // A plugin-only install has no memory layer to be stale. Silent, not drift.
+  const installedRoot = path.join(homeDir, '.claude');
+  if (!readCapped(path.join(installedRoot, 'claude.md'), 1)) return '';
+
+  const owned = ownedFiles(pluginRoot);
+  if (owned.length === 0) return '';
+
+  const differing = [];
+  let compared = 0;
+  for (const rel of owned) {
+    let shipped;
+    let installed;
+    try {
+      shipped = fs.readFileSync(path.join(pluginRoot, 'src', rel));
+      installed = fs.readFileSync(path.join(installedRoot, rel));
+    } catch (err) {
+      // Shipped side unreadable → nothing to compare against; stay silent.
+      // Installed side missing while shipped exists IS drift, reported below.
+      if (shipped === undefined) return '';
+      differing.push(rel + ' (missing)');
+      continue;
+    }
+    compared += 1;
+    if (!shipped.equals(installed)) differing.push(rel);
+  }
+
+  // Compared nothing → the layout is not what this check assumes. Silent.
+  if (compared === 0 && differing.length === 0) return '';
+  if (differing.length === 0) return '';
+
+  const shown = differing.slice(0, 3).join(', ');
+  return 'memory layer differs from the plugin in ' + differing.length + ' file(s): ' +
+    shown + (differing.length > 3 ? ', …' : '') +
+    ' — run `bash install.sh` to refresh it';
 }
 
 /** Strip trailing path separators (one or more) without touching a bare root. */
@@ -469,7 +534,7 @@ module.exports = function sessionStartSpine(input) {
   // before the body was ever assembled, which would have injected nothing in
   // exactly that case.
   const pluginVersion = loadedPluginVersion(pluginRoot);
-  const drift = homeDir ? driftLine(homeDir, pluginVersion) : '';
+  const drift = homeDir ? driftLine(homeDir, pluginRoot) : '';
   const stale = (homeDir && pluginVersion) ? staleInstallLine(homeDir, cwd, pluginVersion) : '';
 
   const scratchpadText = readCapped(scratchpad, MAX_BYTES);

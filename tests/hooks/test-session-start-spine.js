@@ -146,7 +146,18 @@ r = spine(big);
 c.equal('2MB scratchpad exits 0', r.code, 0);
 c.contains('2MB scratchpad still yields the feature', ctx(r), 'Big One');
 
-// --- drift check ----------------------------------------------------------
+// --- drift check: CONTENT, not version stamps -----------------------------
+//
+// The old check compared `.sdlc-receipt`'s version against the plugin's and
+// warned on any difference. That fired on every release which did not touch
+// `src/` — measured 2026-08-28, a 4.6.0 receipt against a 4.9.0 plugin while all
+// six delivered files were byte-identical. A warning that is false on most
+// releases trains adopters to ignore the true one, which is the exact harm this
+// hook's own contract cites when it stays silent on a malformed receipt.
+//
+// Drift now means the installed bytes differ from the shipped bytes.
+// Still used by the stale-install cases below: a HOME carrying only a receipt,
+// with no memory layer installed.
 function homeWith(version) {
   const home = tempDir('sdlc-home-');
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
@@ -155,29 +166,83 @@ function homeWith(version) {
   }
   return home;
 }
+
+// Still needed below: staleInstallLine() legitimately compares VERSIONS — a
+// project-scope install pins one, and pinning an old one is real drift. Only the
+// memory-layer check moved to content.
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).version;
 
-let home = homeWith('1.2.3');
-r = spine(midFeature, { HOME: home });
-c.contains('version drift is reported', ctx(r), 'version drift');
-c.contains('drift names the remedy', ctx(r), 'install.sh');
-rimraf(home);
+const DRIFT_MARK = 'memory layer differs';
+const OWNED = ['claude.md', 'rules/git.md', 'rules/changelog.md',
+  'rules/error-recovery.md', 'rules/scratchpad.md', 'rules/tool-limitations.md'];
 
-home = homeWith(pluginVersion);
-r = spine(midFeature, { HOME: home });
-c.ok('matching versions are silent about drift', ctx(r).indexOf('version drift') === -1, ctx(r));
-rimraf(home);
+/** A HOME whose memory layer mirrors src/, then optionally mutated. */
+function homeWithLayer(mutate, receiptVersion) {
+  const home = tempDir('sdlc-home-');
+  fs.mkdirSync(path.join(home, '.claude', 'rules'), { recursive: true });
+  for (const rel of OWNED) {
+    fs.copyFileSync(path.join(REPO_ROOT, 'src', rel), path.join(home, '.claude', rel));
+  }
+  if (receiptVersion !== null && receiptVersion !== undefined) {
+    fs.writeFileSync(path.join(home, '.claude', '.sdlc-receipt'),
+      receiptVersion + '\n' + OWNED.join('\n') + '\n');
+  }
+  if (mutate) mutate(path.join(home, '.claude'));
+  return home;
+}
 
-home = homeWith(null);
+// An ancient receipt must NOT produce a warning when the content is current.
+// This is the regression the rewrite exists for.
+let home = homeWithLayer(null, '1.2.3');
 r = spine(midFeature, { HOME: home });
-c.ok('absent receipt is silent about drift', ctx(r).indexOf('version drift') === -1);
-rimraf(home);
-
-home = homeWith('not-a-version; rm -rf /');
-r = spine(midFeature, { HOME: home });
-c.ok('malformed receipt is treated as absent, not as drift',
+c.ok('SEEDED BROKEN — identical content is silent even under an ancient receipt',
+  ctx(r).indexOf('memory layer differs') === -1, ctx(r));
+c.ok('and the old version-stamp wording is gone entirely',
   ctx(r).indexOf('version drift') === -1, ctx(r));
-c.ok('malformed receipt content is never echoed', ctx(r).indexOf('rm -rf') === -1);
+rimraf(home);
+
+home = homeWithLayer(function (claudeDir) {
+  fs.appendFileSync(path.join(claudeDir, 'claude.md'), '\nlocally edited\n');
+}, '1.2.3');
+r = spine(midFeature, { HOME: home });
+c.contains('a changed file is reported as drift', ctx(r), 'memory layer differs');
+c.contains('drift names the offending file', ctx(r), 'claude.md');
+c.contains('drift names the remedy', ctx(r), 'install.sh');
+c.ok('drift never echoes the differing content', ctx(r).indexOf('locally edited') === -1, ctx(r));
+rimraf(home);
+
+// A single byte is enough — the check is exact, not size- or mtime-based.
+home = homeWithLayer(function (claudeDir) {
+  const f = path.join(claudeDir, 'rules', 'git.md');
+  const buf = fs.readFileSync(f);
+  buf[buf.length - 1] = buf[buf.length - 1] === 0x0a ? 0x20 : 0x0a;
+  fs.writeFileSync(f, buf);
+}, null);
+r = spine(midFeature, { HOME: home });
+c.contains('a one-byte difference in a rules file is drift', ctx(r), 'rules/git.md');
+rimraf(home);
+
+home = homeWithLayer(function (claudeDir) {
+  fs.unlinkSync(path.join(claudeDir, 'rules', 'git.md'));
+}, null);
+r = spine(midFeature, { HOME: home });
+c.contains('an installed file that has gone missing is drift', ctx(r), 'missing');
+rimraf(home);
+
+// A plugin-only install has no memory layer to be stale.
+home = tempDir('sdlc-home-');
+fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+r = spine(midFeature, { HOME: home });
+c.ok('no memory layer installed is silent, not drift',
+  ctx(r).indexOf('memory layer differs') === -1, ctx(r));
+rimraf(home);
+
+// Fail-open: a receipt full of junk must not crash or leak, and with content
+// current it must stay silent.
+home = homeWithLayer(null, 'not-a-version; rm -rf /');
+r = spine(midFeature, { HOME: home });
+c.equal('junk receipt still exits 0', r.code, 0);
+c.ok('junk receipt content is never echoed', ctx(r).indexOf('rm -rf') === -1);
 rimraf(home);
 
 // --- stale project-scope install detection (Slice 1 tracer, TC-1.1, TC-1.5,
@@ -188,6 +253,20 @@ rimraf(home);
 // `null` — a `.sdlc-receipt` alongside it, so a single helper can express
 // both the receipt-less path (TC-7.2) and, later, the combined-with-drift
 // path (Slice 4).
+/**
+ * Seed a memory layer that DIFFERS from the shipped one, so a drift line appears.
+ * Tests below use a drift line as a fixed marker to prove unrelated properties
+ * (ordering, attribution, outer-catch survival); since the check moved from
+ * version stamps to content, the seed had to move with it.
+ */
+function seedDriftingLayer(claudeDir) {
+  fs.mkdirSync(path.join(claudeDir, 'rules'), { recursive: true });
+  for (const rel of OWNED) {
+    fs.copyFileSync(path.join(REPO_ROOT, 'src', rel), path.join(claudeDir, rel));
+  }
+  fs.appendFileSync(path.join(claudeDir, 'claude.md'), '\nseeded drift\n');
+}
+
 function homeWithRegistry(entries, receiptVersion) {
   const home = tempDir('sdlc-reghome-');
   fs.mkdirSync(path.join(home, '.claude', 'plugins'), { recursive: true });
@@ -200,6 +279,8 @@ function homeWithRegistry(entries, receiptVersion) {
   );
   if (receiptVersion !== null) {
     fs.writeFileSync(path.join(home, '.claude', '.sdlc-receipt'), receiptVersion + '\nclaude.md\n');
+    // A non-null value here means "this case wants a drift line present".
+    seedDriftingLayer(path.join(home, '.claude'));
   }
   return home;
 }
@@ -267,7 +348,7 @@ const tc72Project = project('stale-tc72', null);
 const tc72Home = homeWithRegistry([staleEntryFor(tc72Project)], null);
 r = spine(tc72Project, { HOME: tc72Home });
 c.contains('TC-7.2: stale line still emitted with no .sdlc-receipt', ctx(r), staleLine);
-c.ok('TC-7.2: no version drift line appears', ctx(r).indexOf('version drift:') === -1, ctx(r));
+c.ok('TC-7.2: no memory-layer drift line appears', ctx(r).indexOf(DRIFT_MARK) === -1, ctx(r));
 rimraf(tc72Home);
 rimraf(tc72Project);
 
@@ -515,6 +596,8 @@ function homeWithRegistryRaw(rawString, receiptVersion) {
   fs.writeFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), rawString);
   if (receiptVersion !== null && receiptVersion !== undefined) {
     fs.writeFileSync(path.join(home, '.claude', '.sdlc-receipt'), receiptVersion + '\nclaude.md\n');
+    // A non-null value here means "this case wants a drift line present".
+    seedDriftingLayer(path.join(home, '.claude'));
   }
   return home;
 }
@@ -576,7 +659,7 @@ function assertSilentSurvives(r, label, opts) {
   c.contains(label + ': seeded feature line survives', ctx(r), 'feature: Silent Set');
   c.contains(label + ': seeded prevention rule survives', ctx(r), 'prevention rule:');
   if (!o.noDrift) {
-    c.contains(label + ': seeded drift line survives', ctx(r), 'version drift:');
+    c.contains(label + ': seeded drift line survives', ctx(r), DRIFT_MARK);
   }
 }
 
@@ -617,6 +700,7 @@ function skipIfRoot(label) {
   fs.writeFileSync(symTarget, registryEnvelope([staleEntryFor(f)], 2));
   fs.symlinkSync(symTarget, path.join(h, '.claude', 'plugins', 'installed_plugins.json'));
   fs.writeFileSync(path.join(h, '.claude', '.sdlc-receipt'), '1.2.3\nclaude.md\n');
+  seedDriftingLayer(path.join(h, '.claude'));
   r = spine(f, { HOME: h });
   assertSilentSurvives(r, 'TC-5.2 symlinked registry');
   rimraf(h);
@@ -741,7 +825,7 @@ const hostileVersion = '#'.repeat(20) + '\n```\n' + 'x'.repeat(5000);
   r = spine(f, { HOME: '', USERPROFILE: '' });
   assertSilentSurvives(r, 'TC-5.13 empty HOME/USERPROFILE', { noDrift: true });
   c.ok('TC-5.13: no drift line at all (homeDir empty by construction)',
-    ctx(r).indexOf('version drift:') === -1, ctx(r));
+    ctx(r).indexOf(DRIFT_MARK) === -1, ctx(r));
   rimraf(f);
 }
 
@@ -933,7 +1017,7 @@ const tc66Project = project('stale-tc66', null);
 const tc66Home = homeWithRegistry([staleEntryFor(tc66Project)], '1.2.3');
 r = spine(tc66Project, { HOME: tc66Home });
 const tc66Ctx = ctx(r);
-c.contains('TC-6.6: version drift line present', tc66Ctx, 'version drift:');
+c.contains('TC-6.6: memory-layer drift line present', tc66Ctx, DRIFT_MARK);
 c.contains('TC-6.6: stale project-scope install line present', tc66Ctx, buildStaleLine('0.0.1'));
 
 const tc66DriftSourceIdx = tc66Ctx.indexOf('the installed-vs-plugin version check');
@@ -944,7 +1028,7 @@ c.ok(
   'drift-source=' + tc66DriftSourceIdx + ' registry-source=' + tc66StaleSourceIdx
 );
 
-const tc66DriftBodyIdx = tc66Ctx.indexOf('version drift:');
+const tc66DriftBodyIdx = tc66Ctx.indexOf(DRIFT_MARK);
 const tc66StaleBodyIdx = tc66Ctx.indexOf('stale project-scope install:');
 c.ok(
   'TC-6.6: the drift line appears before the stale line in the body',
@@ -954,15 +1038,16 @@ c.ok(
 
 // Captured for TC-6.7's byte-identity comparison below, before this fixture
 // is torn down.
-const tc66DriftLine = extractLine(tc66Ctx, 'version drift:');
+const tc66DriftLine = extractLine(tc66Ctx, DRIFT_MARK);
 const tc66StaleLine = extractLine(tc66Ctx, 'stale project-scope install:');
 
 // TC-6.7(a) — receipt only, registry removed: the drift line's own text is
 // byte-identical to its form in the combined TC-6.6 run (independent
 // computation, not reconciled with the registry's presence).
 const tc67aHome = homeWith('1.2.3');
+seedDriftingLayer(path.join(tc67aHome, '.claude'));
 r = spine(tc66Project, { HOME: tc67aHome });
-const tc67aDriftLine = extractLine(ctx(r), 'version drift:');
+const tc67aDriftLine = extractLine(ctx(r), DRIFT_MARK);
 c.equal(
   'TC-6.7a: drift line is byte-identical whether or not the registry is also present',
   tc67aDriftLine, tc66DriftLine
