@@ -622,6 +622,9 @@ The rewrite touches only the `model:` line — `name`, `description`, `tools`, `
 - [Choosing a Claude Code development workflow](docs/guides/choosing-a-claude-code-workflow.md) — claude-code-sdlc vs SuperClaude vs claude-flow (Ruflo) vs BMAD-METHOD vs spec-kit, by team size and process needs
 - [FAQ](docs/guides/faq.md) — TDD enforcement, quality gates, the 16 agents, and how this compares to the alternatives
 - [How to stop Claude Code from skipping tests](docs/guides/stop-claude-code-skipping-tests.md) — 6 process-enforcement approaches compared
+- [BMAD-METHOD vs spec-kit](docs/guides/bmad-method-vs-spec-kit.md) — orchestration-first vs spec-first AI development, and where a docs-first TDD pipeline fits
+- [SuperClaude vs claude-flow (Ruflo)](docs/guides/superclaude-vs-ruflo.md) — an honest head-to-head for Claude Code workflows, plus lighter alternatives
+- [Alternatives to BMAD-METHOD](docs/guides/alternatives-to-bmad-method.md) — spec-kit, claude-code-sdlc, and SuperClaude compared
 
 ---
 
