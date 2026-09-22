@@ -7,3 +7,6 @@
 - Commit messages MUST contain only the change description
 - Commit after completing work — do NOT push unless explicitly asked
 - Keep commits atomic: 1 slice = 1 commit
+- One Claude Code session per git worktree — parallel features live in separate worktrees, never two sessions in one checkout
+- Sync a branch by merging the base IN — NEVER rebase (rebase rewrites the commit hashes that gates and plan records check)
+- Sync commit shape: `chore(core): sync <branch> with <base>`

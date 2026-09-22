@@ -48,7 +48,9 @@ Any of:
 - A subagent is observed writing outside its declared write surface in a real run, and transcript
   inspection proves insufficient to catch it.
 - The harness starts running multiple *features* concurrently rather than multiple slices, where true
-  branch isolation is the only correct answer.
+  branch isolation is the only correct answer. **This trigger has fired:** PRD §15 (Parallel Feature
+  Sessions) adopts exactly that model — one session per worktree — and the measured consequences plus
+  the operating answer are recorded in `docs/findings/parallel-feature-sessions.md`.
 
 Until one of those happens, the file-disjointness analysis plus the isolation guard is the smaller
 mechanism that does the job, and smaller is the right default for something that must not dead-end at

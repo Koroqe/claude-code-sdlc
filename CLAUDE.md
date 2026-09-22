@@ -57,7 +57,12 @@ Two consequences that are easy to get backwards:
 
 ### Procedure
 
-1. **Bump the version in all four sources** — they must agree:
+1. **Bump the version in all four sources** — they must agree. Derive the next number from
+   **origin/main's currently advertised version at release time** — fetch, then read
+   `plugins[0].version` from origin/main's `.claude-plugin/marketplace.json`
+   (`git fetch origin main && git show origin/main:.claude-plugin/marketplace.json`) — never from a
+   number remembered earlier in a branch or session: with parallel feature sessions, two branches
+   that each memorized "current is X" both compute X+1 and collide.
    - `.claude-plugin/marketplace.json` → `plugins[0].version` ← *this is the one that ships*
    - `.claude-plugin/plugin.json` → `version`
    - `install.sh` → `VERSION="..."`

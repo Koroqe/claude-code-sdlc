@@ -359,6 +359,31 @@ Creates:
 
 ---
 
+## Parallel Feature Sessions
+
+Several features can be in flight at once — **one Claude Code session per git worktree**, never two
+sessions sharing one checkout:
+
+```bash
+git worktree add ../myproject-feat-x feat/x    # one worktree = one session = one feature
+```
+
+- **One session per worktree.** `.claude/scratchpad.md` is untracked, per-worktree local state, so
+  sessions never see each other's plan or tier. Features merge **sequentially** into the shared
+  base; a branch syncs by merging the base *in* (commit shape
+  `chore(core): sync <branch> with <base>`) — never by rebasing, which would rewrite the commit
+  hashes the quality gates and the plan record check.
+- **Migrate main first.** For an existing project adopting this model, de-track the scratchpad on
+  the main branch before syncing any feature branch — migrating mid-flight branches before main
+  produces delete/modify conflicts.
+- **Trust is inherited, not re-registered.** A worktree of a registered main root resolves trusted:
+  the hook resolves the worktree's `git-common-dir` back to the main root and confirms the
+  relationship bidirectionally via `git worktree list` before honoring it, so registering the main
+  root once covers every worktree cut from it. Submodule shapes, gitlinks, and any git failure
+  along the way stay untrusted and report-only.
+
+---
+
 ## Hooks
 
 The plugin registers **12 hooks across 13 registrations** (`pre:edit:read-guard` listens on two

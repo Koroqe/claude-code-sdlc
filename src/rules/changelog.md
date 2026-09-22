@@ -77,6 +77,10 @@ Before writing, check whether an entry with the same feature/fix **name** alread
 
 This guard makes double-writes impossible even if the trigger-ownership heuristics misfire.
 
+## Fold Duplicated Day Headings After Sync
+
+`CHANGELOG.md` merges with the union strategy, so a base-sync merge (`chore(core): sync <branch> with <base>`) can leave two `## YYYY-MM-DD` headings for the same day. After any sync — and always before `/merge-ready`'s Gate 0 can pass — fold the duplicates: keep a single `## <date>` heading containing all of that day's entries, newest entry first, and delete the redundant heading. Entries themselves are never dropped in the fold; the idempotency guard handles any same-name pair.
+
 ## Trigger Ownership — write exactly once per completed unit
 
 Each completed unit of work must produce **exactly one** changelog entry. Ownership of the write is assigned as follows. *(The commands named below are plugin skills, resolvable in full as `/claude-code-sdlc:<name>`; the bare form used throughout this document works automatically unless another installed plugin defines a same-named skill.)*
