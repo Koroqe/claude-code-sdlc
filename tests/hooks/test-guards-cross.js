@@ -129,6 +129,12 @@ for (const file of guardSources) {
 }
 
 // --- guards never leak their own variables into a child process ---------
+// SPLIT (parallel-features B1): the hardening invariant now has two arms.
+//
+// Arm 1 — spawn-site literal shape, asserted at each site that OWNS an
+// inline git spawn. The two guards below keep their inline blocks
+// deliberately (deny path, unmigrated); hooks/lib/git-safe.js is the single
+// shared spawn site for the migrated trust/spine paths.
 for (const file of ['pre-bash-git-guard.js', 'stop-changelog-guard.js']) {
   const src = fs.readFileSync(path.join(HANDLERS, file), 'utf8');
   const envBlock = /env:\s*\{[\s\S]*?\}/.exec(src);
@@ -137,6 +143,49 @@ for (const file of ['pre-bash-git-guard.js', 'stop-changelog-guard.js']) {
     c.ok(file + ' does not forward SDLC_* to the child', envBlock[0].indexOf('SDLC_') === -1);
     c.ok(file + ' neutralises repo git config', src.indexOf('core.fsmonitor=') !== -1);
   }
+}
+
+// The helper is a lib module, not a handler — path-joined from REPO_ROOT,
+// never from HANDLERS, and it never counts against the 12-hook ceiling.
+const GIT_SAFE = path.join(REPO_ROOT, 'hooks', 'lib', 'git-safe.js');
+c.ok('hooks/lib/git-safe.js exists (the single shared hardened spawn site)',
+  fs.existsSync(GIT_SAFE));
+if (fs.existsSync(GIT_SAFE)) {
+  const src = fs.readFileSync(GIT_SAFE, 'utf8');
+  const envBlock = /env:\s*\{[\s\S]*?\}/.exec(src);
+  c.ok('git-safe.js builds a child env allowlist', !!envBlock);
+  if (envBlock) {
+    c.ok('git-safe.js does not forward SDLC_* to the child',
+      envBlock[0].indexOf('SDLC_') === -1);
+    c.ok('git-safe.js never builds the child env over process.env wholesale',
+      src.indexOf('Object.assign({}, process.env') === -1 &&
+        src.indexOf('...process.env') === -1);
+  }
+  c.ok('git-safe.js neutralises repo git config', src.indexOf('core.fsmonitor=') !== -1);
+  c.ok('git-safe.js spawns without a shell', /shell:\s*false/.test(src));
+  c.ok('git-safe.js bounds the child with timeout + killSignal',
+    /timeout:\s*\d/.test(src) && /killSignal:/.test(src));
+  c.ok("git-safe.js pins stdio to ['ignore','pipe','pipe']",
+    /stdio:\s*\['ignore',\s*'pipe',\s*'pipe'\]/.test(src));
+  c.ok('git-safe.js caps the child output with maxBuffer', /maxBuffer:\s*\d/.test(src));
+}
+
+// Arm 2 — delegation, over the consumers migrated onto the helper. Each
+// listed consumer must require git-safe and own NO direct git child-process
+// spawn — matched against BOTH spawn forms, because a spawnSync-only pattern
+// passes vacuously on a file whose real call is execFileSync (correction 1).
+//
+// S5 (worktree-aware trust registry) appends
+// 'hooks/handlers/stop-typecheck-format.js' to this list on its accept path;
+// until then session-start-spine.js is the only migrated consumer.
+for (const rel of ['hooks/handlers/session-start-spine.js']) {
+  const src = fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8');
+  c.ok(rel + ' requires the shared git-safe helper',
+    /require\([^)]*git-safe/.test(src), rel);
+  c.ok(rel + " owns no direct spawnSync('git' spawn",
+    src.indexOf("spawnSync('git'") === -1, rel);
+  c.ok(rel + " owns no direct execFileSync('git' spawn",
+    src.indexOf("execFileSync('git'") === -1, rel);
 }
 
 // --- exit code 2 exists nowhere in the harness ---------------------------

@@ -1225,5 +1225,136 @@ r = spine(midFeature);
 c.ok('a non-repository project still reports its scratchpad state',
   ctx(r).indexOf('branch: feat/hook-infrastructure') !== -1, ctx(r));
 
+// --- parallel-features FR-9: the parse-hole suppression (TC-9.1-TC-9.6),
+// and worktree-aware stale-install matching (TC-4.11) ----------------------
+//
+// Under parallel worktrees a scratchpad whose `## Branch:` cannot be parsed
+// may be a sibling session's state. Pre-fix, both the `undefined` and the
+// 'unparseable' cases fell through to the confident state injection — the
+// C10 collision. Post-fix, when the ACTUAL branch is resolvable and the
+// parsed branch is undefined or the 'unparseable' sentinel, the whole state
+// block is suppressed in favour of exactly one literal line. An ABSENT file
+// keeps the pre-existing silent skip; a failed actual-branch resolution
+// keeps the pre-existing degrade.
+
+const NO_PARSE = 'scratchpad: no parseable state';
+
+/** The lines between the opening frame and the end marker. */
+function bodyLines(text) {
+  const lines = text.split('\n');
+  return lines.slice(1, lines.length - 1);
+}
+
+// TC-9.1 / TC-9.6 — the 'unparseable' sentinel arm. `## Branch: <<<<<<< HEAD`
+// is the literal a real merge conflict leaves behind: the space and the angle
+// brackets sit outside BRANCH_RE's charset, so extractState mints the
+// sentinel. With a resolvable actual branch, nothing from the scratchpad may
+// be injected — only the exact literal line.
+const s4Sentinel = gitProject('noparse-sentinel', 'main', [
+  '## Feature: Sibling Session Work',
+  '## Branch: <<<<<<< HEAD',
+  '## Status: implementing wave 2 slice 3/8',
+  '',
+  '### Wave 2 [IN PROGRESS]',
+  '- [ ] Slice 3: foreign slice',
+].join('\n'));
+r = spine(s4Sentinel);
+c.equal('TC-9.1: exits 0', r.code, 0);
+c.equal('TC-9.1: the body is exactly the one literal line',
+  bodyLines(ctx(r)).join('\n'), NO_PARSE);
+c.ok('TC-9.1: no state block — feature never injected',
+  ctx(r).indexOf('feature:') === -1, ctx(r));
+c.ok('TC-9.1: no state block — no branch line at all',
+  ctx(r).indexOf('branch:') === -1, ctx(r));
+c.ok('TC-9.1: the unparseable marker itself is suppressed too',
+  ctx(r).indexOf('unparseable') === -1, ctx(r));
+c.ok('TC-9.6: foreign sibling-session content is never injected',
+  ctx(r).indexOf('Sibling Session Work') === -1 && ctx(r).indexOf('wave: 2') === -1, ctx(r));
+c.equal('TC-9.1: normal { hookEventName, additionalContext } shape',
+  r.json && r.json.hookSpecificOutput && r.json.hookSpecificOutput.hookEventName,
+  'SessionStart');
+
+// TC-9.5 — the `undefined` arm: NO `## Branch:` line at all (heading absent
+// entirely), so `state.branch` stays JS undefined. Pre-fix this fell into the
+// `else if (actualBranch !== null)` fallback and injected the block with the
+// git-derived branch; post-fix it is the same suppression as the sentinel.
+const s4Undefined = gitProject('noparse-undefined', 'main', [
+  '## Feature: Headless Fixture',
+  '## Status: implementing slice 1/3',
+  '- [ ] Slice 1: foreign work',
+].join('\n'));
+r = spine(s4Undefined);
+c.equal('TC-9.5: exits 0', r.code, 0);
+c.equal('TC-9.5: the body is exactly the one literal line',
+  bodyLines(ctx(r)).join('\n'), NO_PARSE);
+c.ok('TC-9.5: no state block — feature never injected',
+  ctx(r).indexOf('feature:') === -1 && ctx(r).indexOf('Headless Fixture') === -1, ctx(r));
+c.ok('TC-9.5: the deleted fallback no longer injects the git branch',
+  ctx(r).indexOf('branch: main') === -1, ctx(r));
+
+// TC-9.2 — the ABSENT-file arm keeps the silent skip: no scratchpad output
+// at all, and the no-parseable-state line is reserved for existing-but-
+// unparseable, never for absent. The repo has a resolvable branch, so this
+// distinguishes absence from the suppression above.
+const s4Absent = gitProject('noparse-absent', 'main', '## Feature: To Be Removed\n');
+fs.unlinkSync(path.join(s4Absent, '.claude', 'scratchpad.md'));
+r = spine(s4Absent);
+c.equal('TC-9.2: exits 0', r.code, 0);
+c.ok('TC-9.2: absent file emits no no-parseable-state line',
+  ctx(r).indexOf(NO_PARSE) === -1, ctx(r));
+c.ok('TC-9.2: absent file emits no scratchpad output at all',
+  ctx(r).indexOf('scratchpad') === -1, ctx(r));
+
+// TC-9.3 — the well-formed arm is unchanged: a parseable `## Branch:`
+// matching the actual branch still injects the full state block.
+r = spine(gitProject('noparse-wellformed', 'feat/ok', [
+  '## Feature: Well Formed',
+  '## Branch: feat/ok',
+  '## Status: implementing slice 1/2',
+  '- [ ] Slice 1: real work',
+  '- [ ] Slice 2: more real work',
+].join('\n')));
+c.ok('TC-9.3: well-formed state block injected unchanged',
+  ctx(r).indexOf('feature: Well Formed') !== -1 && ctx(r).indexOf('branch: feat/ok') !== -1 &&
+    ctx(r).indexOf('slice: 1 of 2') !== -1, ctx(r));
+c.ok('TC-9.3: no no-parseable-state line on the happy path',
+  ctx(r).indexOf(NO_PARSE) === -1, ctx(r));
+
+// TC-9.4 — the gitBranch-failure degrade arm: when the actual branch cannot
+// be resolved (not a repository), FR-9's suppression is NOT engaged and the
+// pre-fix degrade is byte-for-byte what it was: fields reported, an
+// unparseable branch reported as the marker.
+const s4Degrade = project('noparse-degrade',
+  '## Feature: Degrade Path\n## Branch: <<<<<<< HEAD\n## Status: idle\n');
+r = spine(s4Degrade);
+c.equal('TC-9.4: exits 0', r.code, 0);
+c.ok('TC-9.4: suppression not engaged when the actual branch is unknown',
+  ctx(r).indexOf(NO_PARSE) === -1, ctx(r));
+c.contains('TC-9.4: degrade unchanged — branch reported as the unparseable marker',
+  ctx(r), 'branch: unparseable');
+c.contains('TC-9.4: degrade unchanged — feature still reported',
+  ctx(r), 'feature: Degrade Path');
+
+// TC-4.11 — the stale-install compare recognizes a linked worktree through
+// git-safe's --git-common-dir resolution: the CLI's registry records the
+// MAIN checkout root as projectPath, the session runs in the worktree, and
+// the exact-path compare alone would silently suppress the line.
+const wtMain = gitProject('stale-wt-main', 'main',
+  '## Feature: WT Main\n## Branch: main\n## Status: idle\n');
+const wtLinked = path.join(scratch, 'stale-wt-linked');
+spawnSync('git', ['-C', wtMain, 'worktree', 'add', '-b', 'feat/wt-linked', wtLinked],
+  { stdio: 'ignore' });
+c.ok('TC-4.11: worktree fixture created', fs.existsSync(wtLinked));
+const wtHome = homeWithRegistry([staleEntryFor(wtMain)], null);
+r = runHook(
+  'session:start:spine',
+  { session_id: 's1', cwd: wtLinked, hook_event_name: 'SessionStart' },
+  { SDLC_HOOK_HANDLERS_DIR: HANDLERS, HOME: wtHome }
+);
+c.equal('TC-4.11: exits 0', r.code, 0);
+c.equal('TC-4.11: the stale-install line is emitted in the worktree exactly once',
+  countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
+rimraf(wtHome);
+
 rimraf(scratch);
 c.finish();

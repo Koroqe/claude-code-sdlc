@@ -71,7 +71,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const gitSafe = require('../lib/git-safe.js');
 const sanitize = require('../lib/sanitize.js');
 
 const MAX_BYTES = 256 * 1024;
@@ -148,19 +148,17 @@ function readCapped(file, maxBytes) {
  *
  * Fail-open in every branch: no git, not a repo, detached HEAD or a timeout
  * all return null, which leaves the previous behaviour exactly as it was.
+ *
+ * The spawn itself is delegated to hooks/lib/git-safe.js — the hardened
+ * allowlist-env shape; this handler owns no git child process of its own.
+ * The helper's UNKNOWN failure sentinel maps to null here (a branch
+ * literally named "unknown" collides with it and also reads as null —
+ * fail-open, accepted).
  */
 function gitBranch(cwd) {
-  try {
-    const out = execFileSync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 2000,
-    }).trim();
-    if (!out || out === 'HEAD') return null;
-    return BRANCH_RE.test(out) ? out : null;
-  } catch (err) {
-    return null;
-  }
+  const out = gitSafe.runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (out === gitSafe.UNKNOWN || !out || out === 'HEAD') return null;
+  return BRANCH_RE.test(out) ? out : null;
 }
 
 function matchLine(lines, re) {
@@ -471,6 +469,7 @@ function staleInstallLine(homeDir, cwd, pluginVersion) {
 
     const cwdNorm = normalizePath(cwd);
     let cwdReal; // lazily memoized; stays undefined until first needed
+    let mainRoot; // lazily memoized main-checkout root; undefined until first needed
 
     const bound = Math.min(entries.length, MAX_REGISTRY_ENTRIES);
     for (let i = 0; i < bound; i += 1) {
@@ -496,6 +495,24 @@ function staleInstallLine(homeDir, cwd, pluginVersion) {
           matched = fs.realpathSync(entryNorm) === cwdReal;
         } catch (err) {
           matched = false;
+        }
+      }
+      // Step 3, worktree recognition: a linked worktree's cwd never string-
+      // or realpath-matches the projectPath the CLI recorded at the MAIN
+      // checkout, so a stale project-scope install would be silently missed
+      // in every worktree. Resolve the main root through git-safe's
+      // `--git-common-dir` resolution (already realpathed by the helper) and
+      // compare the entry against that too. UNKNOWN — not a repository, git
+      // missing or failing — just skips this step; a realpath throw on the
+      // entry side stays no-match-for-that-entry, as in step 2.
+      if (!matched) {
+        if (mainRoot === undefined) mainRoot = gitSafe.commonDirRoot(cwdNorm);
+        if (mainRoot !== gitSafe.UNKNOWN) {
+          try {
+            matched = entryNorm === mainRoot || fs.realpathSync(entryNorm) === mainRoot;
+          } catch (err) {
+            matched = false;
+          }
         }
       }
       if (!matched) continue;
@@ -543,6 +560,21 @@ module.exports = function sessionStartSpine(input) {
     const state = extractState(scratchpadText);
     const actualBranch = gitBranch(cwd);
 
+    // FR-9, the parse hole. When the file EXISTS but yields no parseable
+    // `## Branch:` — the heading is absent entirely (undefined) or its value
+    // failed BRANCH_RE and was minted 'unparseable' — while git can say
+    // which branch this actually is, the block cannot be attributed to this
+    // piece of work: under parallel worktrees it may be a sibling session's
+    // state, and injecting any of it confidently is the collision this
+    // suppression closes. Say only that nothing parseable was found. An
+    // ABSENT file never reaches this code (readCapped returned null above)
+    // and keeps its silent skip; when git itself cannot resolve a branch
+    // (actualBranch === null) this is not engaged and the degrade path below
+    // reports fields exactly as before.
+    const noParseableState =
+      actualBranch !== null &&
+      (state.branch === undefined || state.branch === 'unparseable');
+
     // When the scratchpad names a branch that is not the one checked out, the
     // block describes different work — every field in it is about that other
     // branch. Reporting `slice 3 of 8` from it is worse than reporting
@@ -560,13 +592,18 @@ module.exports = function sessionStartSpine(input) {
       state.branch !== 'unparseable' &&
       state.branch !== actualBranch;
 
-    if (scratchpadStale) {
+    if (noParseableState) {
+      parts.push('scratchpad: no parseable state');
+    } else if (scratchpadStale) {
       parts.push('branch: ' + actualBranch);
       parts.push('scratchpad: stale — it describes ' + state.branch + ', not this branch');
     } else {
+      // Reaching here with state.branch undefined means actualBranch is null
+      // too (the suppression above owns the other case), so there is no
+      // git-derived fallback branch line — that fallback became dead code
+      // when FR-9 landed and was deleted with it.
       if (state.feature !== undefined) parts.push('feature: ' + state.feature);
       if (state.branch !== undefined) parts.push('branch: ' + state.branch);
-      else if (actualBranch !== null) parts.push('branch: ' + actualBranch);
       if (state.status !== undefined) parts.push('status: ' + state.status);
       if (state.wave !== undefined) parts.push('wave: ' + state.wave);
       if (state.slice !== undefined) {
