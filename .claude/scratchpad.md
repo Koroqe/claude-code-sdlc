@@ -1,14 +1,53 @@
 # Scratchpad
 
-## Feature: ci-parity — get CI green and make local verification mean something
+## Feature: parallel-features — worktree-safe parallel per-feature sessions
 
-(previous: design-capability — design-reviewer agent runs Gate 8, design-foundation skill, templates/rules/design.md)
+(previous: ci-parity — RELEASED 4.9.1, CI green after the 16-run streak; before that: design-capability, shipped 4.9.0)
 
 ## Tier: full
 
-## Branch: fix/ci-parity
+## Branch: feat/parallel-features
 
-## Status: RELEASED — 4.9.1 merged to main (3facb06), pushed, tagged v4.9.1, metadata synced.
+## Status: implementing wave 1 slice 1/10
+
+## Plan
+
+Full executable plan (verify commands, done-conditions, pre-review flags, B/W/F/I annotations, Review Notes):
+- Durable copy: `.claude/tmp/parallel-features-plan.md` (gitignored, survives session temp cleanup)
+- Session copy: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/97b082c8-0eea-45f6-80c0-bd50e6b3014a/scratchpad/parallel-features-plan.md`
+- Approved design plan: `/Users/aleksei/.claude/plans/rustling-crunching-storm.md`
+
+Feature: PRD §15 (FR-1..FR-10, NFR-1..NFR-6, AC-1..AC-10). Docs: docs/use-cases/parallel-features_use_cases.md (11 UCs, 57 scenarios), docs/qa/parallel-features_test_cases.md (88 TCs — 74 STATIC / 14 BEHAVIORAL / 0 FIXTURE). Architecture: PASS with amendments (folded into plan). Critic: 3 loops, 42 findings (8 BLOCKER / 23 WARNING / 11 INFO) — all BLOCKER/WARNING fixed; loop-3 fixes applied with the critic's own prescribed remedies, zero unresolved. Docs committed: 0ac82fc.
+Prevention Rules attached: NONE — `## Prevention Rules` is empty; 3 Instincts Log entries carried as judgement only (fixed-limits→S6/S10, prd-tracks-security-hardening→S9, new-channel-inherits-existing-controls→S5). No instincts.md confirmation write (zero attachments).
+Every slice is driven with the `no-changelog` token; /merge-ready owns the feature's single changelog entry.
+
+**Verification discipline (B4):** inside multi-slice waves each slice runs ONLY its own tests/validators/greps + the NFR-3 `git diff --stat "$BASE" -- skills/implement-slice/SKILL.md` empty-diff guard — never the sweep, never a bare validator loop. The FULL sweep (`node scripts/ci/ci-parity.js && node tests/hooks/run-tests.js`) runs once per wave at post-wave collection as the wave-exit condition. Failure ownership: the slice whose Files own the failing artifact re-opens with ONE fresh retry; no-owner or cross-slice failures are Rule 4 escalations. W1 is single-slice: sweep stays in-slice.
+**Gate 6 duty (W10/TC-CC.13):** the ORCHESTRATOR at /merge-ready Gate 6 performs the live worktree rehearsal (spine absent/unparseable arms, trust inheritance from a real worktree, git-guard judgment from the worktree) and appends the transcript into docs/findings/parallel-feature-sessions.md under `## Gate 6 live worktree rehearsal` (heading created by S9). This scratchpad note is the mechanism that carries the duty — no merge-ready skill edit exists for it.
+**S6 close duty (W7):** record S6's post-commit SHA + merge-ready byte size in its slice record HERE at close; S10's ≤1,300 B growth cap measures against that record, never a floating HEAD.
+**Byte caps:** merge-ready ceiling → 45,000 (S6, asymmetry comment); S6 growth ≤3,200 B; S10 ≤1,300 B; implement-slice gains ZERO bytes (per-slice check); design-reviewer ≤14,000 B (direct `wc -c` in-slice — budget validator is sibling-owned in W3).
+
+### Wave 1
+- [ ] Slice 1 (Tracer): de-track .claude/scratchpad.md end to end — templates/.gitignore + .gitignore + `git rm --cached` + hygiene test Section C (template-seeded) + GUARDED entry removal (W14) + src/rules/scratchpad.md + src/claude.md:145. Full sweep in-slice. Pre-review: none.
+
+### Wave 2
+- [ ] Slice 2: .gitattributes merge=union (repo) + hermetic test-union-merge.js (classes (a)-(e) artifacts, negative control, legacy-scratchpad `ours` arm). Pre-review: none.
+- [ ] Slice 3: install.sh — B6 scaffold_project restructure (maintenance region runs every --init-project; existing consumers reachable) + templates/.gitattributes + skip-if-exists for scratchpad (B5) / .gitattributes / CHANGELOG.md (loop-3 F7) + independent gitignore key + migration note + help block. Pre-review: SECURITY (sensitive path).
+- [ ] Slice 4: hooks/lib/git-safe.js (fresh-allowlist env) + test-git-safe.js + spine parse-hole suppression (both arms seeded per B2; delete dead :569 fallback, loop-3 F5) + stale-install worktree matching + guards-cross invariant split (B1). Pre-review: none (covered by S5's security pass).
+- [ ] Slice 8: prd-writer max+1 allocation rule + validate-prd-numbering.js + fixtures with READMEs + ci.yml Falsify/anti-vacuity (additive-only). Pre-review: none.
+
+### Wave 3
+- [ ] Slice 5: worktree trust inheritance via git-safe (`--git-common-dir`, dirname only on `.git` basename, submodule/failure→untrusted) + tests + design-reviewer trust sentence. Pre-review: SECURITY-AUDITOR MANDATORY (scope incl. git-safe.js); reject path pre-planned (docs-only; handler + guards-cross diffs empty).
+- [ ] Slice 6: merge-ready Gate 0 real sync procedure (merge-not-rebase, offline degrade, `chore(core): sync` shape) + Merge Reconciliation preamble classes (a)-(e) + :41-44 rewrite + ceiling 45,000. Growth ≤3,200 B; record post-commit SHA+bytes at close (W7). Pre-review: ARCHITECT.
+
+### Wave 4
+- [ ] Slice 7: validate-instinct-store merge-artifact detection + validate-instinct-discipline class binding + 5 bad-merge-* fixtures + bad-missing-class mirror (plan-authored) + re-pin 2 bad-weakened + ci.yml + fixture READMEs. Pre-review: none (additive-only grep is the control).
+- [ ] Slice 9: docs — findings doc (1-23 divergence + Gate 6 placeholder heading) + worktree-isolation trigger-fired pointer + README parallel-operation section + git.md ≤3 lines + changelog.md fold rule + CLAUDE.md origin/main version derivation + QA corrections (W13) + PRD §10 corrections (sensitive path, content-grep only). Pre-review: none.
+- [ ] Slice 10: merge-ready Gate 1 post-sync uniqueness + later-merger renumber + Gate 7 digest dual-key + digest-index header. Growth ≤1,300 B vs S6's recorded baseline. Pre-review: ARCHITECT.
+
+## Completed (current branch)
+- Bootstrap: PRD §15 + use cases + QA test cases committed 0ac82fc on feat/parallel-features.
+
+## Archived detail — ci-parity (RELEASED 4.9.1, merged to main 3facb06, tagged, metadata synced)
 **CI is GREEN — the first successful run since 2026-08-20**, ending a 16-run failure streak.
 Delivery confirmed: user 4.9.0→4.9.1, this repo's project scope 4.9.0→4.9.1. Memory layer refreshed
 via install.sh (receipt 4.6.0→4.9.1); all six delivered files now byte-identical and the spine probe
@@ -57,7 +96,7 @@ Gate 6 attempts: 2/3 (attempt 1: PRESENT_BEHAVIOR_UNVERIFIED, 4 broad Level-4 ga
 Gate 3 rerun (attempt 2): PASS — all 4 findings verified resolved; 2 non-blocking MEDIUMs (inert leading-glob denies; stale pre-4.9 registry headers) fixed as prescribed in 7bf7e5e (prefix-form denies + requiredDenies + upgrade notice). Gate 2 re-review extended to cover 509f9bb + 7bf7e5e.
 Replan appended (slices 9-12, waves 5-8): 9-10 fixture authoring dispatched; 11 (live design-reviewer runs ×5) and 12 (design-foundation runs ×2 on scratchpad copies) follow; 4 named residues stay in human_verification_required.
 
-## Plan
+### Archived plan — design-capability (shipped 4.9.0)
 
 Full plan with all fields (verify commands, done-conditions, pre-review flags, revision notes):
 `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/97b082c8-0eea-45f6-80c0-bd50e6b3014a/scratchpad/design-capability-plan.md`
@@ -124,7 +163,7 @@ the row count rather than the listing, which is the same mistake the eval instru
 
 (none for this feature)
 
-## Plan (last completed feature — post-live-run-reconciliation, shipped as 4.6.0)
+### Archived plan — post-live-run-reconciliation (shipped 4.6.0)
 
 Full plan with all fields: `/private/tmp/claude-501/-Users-aleksei-Documents-Projects-nosync-claude-code-sdlc/6b6ca8b6-8dfb-4312-b4e9-71d330eef3d0/scratchpad/plan-post-live-run-reconciliation.md`
 Feature: PRD §13. Docs: docs/use-cases/post-live-run-reconciliation_use_cases.md (73 scenarios), docs/qa/post-live-run-reconciliation_test_cases.md (99 TCs). Architecture: FAIL→delta-PASS. Critic: 3 loops (36 findings), all BLOCKER/WARNING fixed; two disputes settled by live measurement (docs/findings/remeasurement-2.1.237.md §5). Docs committed: 91d7b3f.
