@@ -8,6 +8,16 @@ Feature counter: 3
 
 ## Instincts Log
 
+### anchor-external-text-parses
+Confidence: 0.3
+Category: security
+Pattern: install.sh
+Rule: WHEN parsing semi-structured external text (gitignore lines, git porcelain, configs), anchor patterns and handle unexpected block shapes — security review keeps flagging naive matches
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: parallel-features)
+Last confirmed at: 3
+Retires at: 13
+
 ### new-channel-inherits-existing-controls
 Confidence: 0.3
 Category: security
@@ -59,14 +69,14 @@ Last confirmed at: 2
 Retires at: 12
 
 ### git-guard-chain-blindness
-Confidence: 0.3
+Confidence: 0.5
 Category: general
 Pattern: hooks/handlers/pre-bash-git-guard.js
 Rule: WHEN a git commit or push follows a checkout in one chained Bash command, the guard evaluates the branch state before the chain runs — issue the checkout and the commit as separate calls
 Trigger: Repeated Deviation Rule
-Occurrences: 1 (features: post-live-run-reconciliation)
-Last confirmed at: 1
-Retires at: 11
+Occurrences: 2 (features: post-live-run-reconciliation, parallel-features)
+Last confirmed at: 3
+Retires at: 13
 
 ### fixed-limits-collide-with-autonomous-runs
 Confidence: 0.3
