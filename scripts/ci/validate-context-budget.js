@@ -50,7 +50,14 @@ const BYTES_PER_TOKEN = 2.78;
 const SLICES_PER_FEATURE = 8;
 
 const CEILINGS = {
-  'skills/merge-ready/SKILL.md': 40000,
+  // Raised 40,000 → 45,000 for the Gate 0 sync procedure and the Merge
+  // Reconciliation preamble (parallel-features). Deliberately the OPPOSITE
+  // posture from the agents/design-reviewer.md precedent below ("Overrunning
+  // 14,000 is a FAILED slice, never a further raise"): merge-ready's growth
+  // here is plan-fixed specified-procedure text, so an overrun raises this
+  // ceiling deliberately — trimming the specified procedure to fit is the
+  // FAILED slice.
+  'skills/merge-ready/SKILL.md': 45000,
   'skills/develop-feature/SKILL.md': 33000,
   'skills/implement-slice/SKILL.md': 23500,
   'skills/bootstrap-feature/SKILL.md': 14000,

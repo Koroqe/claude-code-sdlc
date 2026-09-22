@@ -38,9 +38,10 @@ Read `.claude/scratchpad.md`'s `## Tier:` field:
   make `quick` a synonym for "unreviewed"; keeping them is what stops that. This sentence is the
   justification for the `quick` tier existing at all, not an incidental detail.
 
-**Residual risk — `## Tier:` is repo-controlled state.** `.claude/scratchpad.md` is tracked, so a hostile
-repository could pre-commit `## Tier: quick` to downgrade a *standalone* run. Mitigated, not eliminated,
-by the rules above: explicit `SKIPPED (tier: quick)` rows, and Gate 2/Gate 3 running regardless of tier.
+**Residual risk — `## Tier:` is repo-controlled state.** `.claude/scratchpad.md` is gitignored
+per-worktree local state now, but a legacy consumer may still track it, and any worktree write can
+pre-seed `## Tier: quick` to downgrade a *standalone* run. Mitigated, not eliminated, by
+the rules above: explicit `SKIPPED (tier: quick)` rows, and Gate 2/Gate 3 running regardless of tier.
 Full record: `docs/PRD.md` FR-4.7.
 
 **Gate 2/3 quick-tier delegation carve-out.** For a `quick`-tier run, the Gate 2 and Gate 3 delegation
@@ -77,7 +78,27 @@ precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`** (Write
 ## Gate 0: Git Hygiene (must pass before anything else)
 - [ ] On feature branch (not `main`)
 - [ ] Working tree clean (`git status`)
-- [ ] Branch up to date with base
+- [ ] Branch up to date with base — sync procedure:
+  1. **Base:** `git rev-parse --abbrev-ref origin/HEAD`, strip `origin/`; on failure fall back to
+     `main`, then `master`.
+  2. **Behind check:** `git fetch origin <base>`, then `git rev-list --count HEAD..origin/<base>`.
+     Count `0` → up to date: a no-op; check the box.
+  3. **Offline:** on fetch failure or bounded-timeout expiry, emit the literal
+     `base sync unavailable (<reason>) — comparing against local <base>`, count against local
+     `<base>`, continue — never block solely on network. Identical under `tier: quick`.
+  4. **Remedy:** merge the base INTO the branch —
+     `git merge -m "chore(core): sync <branch> with <base>" origin/<base>`; after resolving
+     conflicts, `git commit -m "chore(core): sync <branch> with <base>"`. **Rebase is FORBIDDEN:**
+     it rewrites the slice commit hashes the "All slice commits present" box and the scratchpad
+     plan record both check.
+  5. **Conflicts:** `.claude/scratchpad.md` cannot conflict once untracked — a legacy consumer
+     still tracking it resolves `ours`; `.claude/instincts.md`: accept union, then the Merge
+     Reconciliation preamble (below); `CHANGELOG.md`: accept union, then the mandatory fold —
+     collapse a union-duplicated day heading into one newest-first block. A pre-`.gitattributes`
+     consumer gets raw conflict markers instead: keep BOTH sides' entries, then the same preamble
+     and fold.
+  6. **Mid-run sync:** a sync merge after any passed gate is a commit like any fix commit — the
+     Auto-Fix Protocol's existing rule invalidates Gates 2/3.
 - [ ] All slice commits present
 
 ## Gate 1: Documentation Completeness
@@ -484,6 +505,25 @@ READY.
 Execute in this exact order. Every mutation below is via `Edit`, never a whole-file `Write` (Write
 convention above): this file is self-reinforcing context, so a whole-file rewrite that silently drops
 most of it is worse than losing an ordinary document.
+
+**Merge Reconciliation preamble — runs before step 1, when the store shows merge artifacts** (Gate
+0's sync, or any earlier merge). Repair the five canonical classes, (e) first:
+
+- **(a)** duplicate `Feature counter:` lines → keep the **max** — safe direction: it undercounts by
+  one per concurrent feature, only ever *delaying* retirement, never triggering it early; a
+  sum-of-deltas is not computable without the merge base — never "improve" this into one.
+- **(b)** duplicate `### <slug>` entries → union their `(features: …)` lists; `Occurrences:` =
+  max(sides), floored at the union length; `Confidence:` = `min(formula ceiling at the
+  repaired count, max(confidence_A, confidence_B))` — the formula is an upper bound, never an equality:
+  recomputing to the ceiling would erase legitimate decay and re-inject a stale rule past the
+  spine's 0.7 injection floor. **Section placement:** a cross-section duplicate repairs to ONE
+  entry — `## Prevention Rules` when the repaired count meets its category threshold
+  (2 security/data-integrity, 3 general), else `## Instincts Log` — deleting the other copy.
+- **(c)** `Last confirmed at` > the counter → clamp to the counter, recompute `Retires at`.
+- **(d)** duplicate field lines within one entry → keep the repaired value, drop duplicates.
+- **(e)** duplicated section headings → fold each section's blocks into one BEFORE (a)-(d): the
+  parser silently appends a duplicate heading's lines into the first, so (a)-(d) mis-read an unfolded
+  store.
 
 1. **Increment the counter.** `Edit` `## Meta`'s `Feature counter` to exactly its current value `+1`.
    Never on a single-gate rerun, never on a NOT MERGE READY outcome (gating above).
