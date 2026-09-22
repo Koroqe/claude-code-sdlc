@@ -218,13 +218,27 @@ WHAT --init-project CREATES (in current directory):
   .claude/CLAUDE.md           Project context template
   .claude/rules/              Architecture, security, design, testing rules
   .claude/rules/design.md     Design declaration template (tokens, motion, preview)
-  .claude/scratchpad.md       Session state persistence
+  .claude/scratchpad.md       Per-worktree session state (skipped if present)
   .claude/settings.json       Permissions config (incl. statusLine)
   .claude/statusline.js       Statusline renderer template (copied, not run)
   docs/PRD.md                 Product requirements document
   docs/qa/                    QA test case directory
   docs/use-cases/             Use case document directory
-  CHANGELOG.md                Changelog template (newest first, by UTC date)
+  CHANGELOG.md                Changelog template (newest first, by UTC date;
+                              skipped if present)
+  .gitattributes              merge=union for CHANGELOG.md and
+                              .claude/instincts.md (skipped if present)
+  .gitignore                  Keys for .claude/tmp/ and .claude/scratchpad.md
+                              (appended only when missing)
+
+RE-RUNNING --init-project (existing projects):
+  Safe. When .claude/CLAUDE.md already exists the fresh scaffold is skipped
+  and only migration/maintenance runs: missing .gitignore keys are appended,
+  and .gitattributes / .claude/scratchpad.md are scaffolded only when absent.
+  Migrating a project that still tracks its scratchpad: de-track it on your
+  main branch FIRST, then rerun --init-project to gain the ignore key:
+    git rm --cached .claude/scratchpad.md
+  Commit that; each branch and worktree then keeps its own local copy.
 
 AFTER INSTALL:
   Start Claude Code in any project and describe a feature.
@@ -1491,54 +1505,68 @@ enable_plugin_for_project() {
 
 scaffold_project() {
   echo ""
-  log_info "Scaffolding project template in $(pwd)/.claude/"
-
-  if [ -f ".claude/CLAUDE.md" ]; then
-    log_warn ".claude/CLAUDE.md already exists — skipping project scaffold"
-    log_info "To force, remove .claude/ and rerun with --init-project"
-    return
-  fi
 
   if [ ! -d "$SCRIPT_DIR/templates" ]; then
     get_source_dir
   fi
 
-  mkdir -p .claude/rules docs/qa docs/use-cases
-
-  scaffold_cp "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md" ".claude/CLAUDE.md (template — fill in your project details)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md" ".claude/rules/architecture.md (template)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md" ".claude/rules/security.md (template)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/rules/design.md" ".claude/rules/design.md" ".claude/rules/design.md (template)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md" ".claude/rules/testing.md (template)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md" ".claude/scratchpad.md"
-
-  scaffold_cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json" ".claude/settings.json"
-
-  # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
-  # invoked directly by Claude Code's own statusLine mechanism (the command
-  # templates/settings.json just installed above), never by this installer -
-  # this script itself still never invokes `node` or `jq`.
-  scaffold_cp "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js" ".claude/statusline.js (statusline renderer template)"
-
-  scaffold_cp "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md" "CHANGELOG.md"
-
-  # FR-1.1: skip-if-exists, identical in shape to the CHANGELOG.md/scratchpad.md
-  # provisioning above — never overwrites a project's own accumulated instincts.
-  if [ -f ".claude/instincts.md" ]; then
-    log_ok ".claude/instincts.md (already exists — skipped)"
+  # PRD §15 UC-10: the .claude/CLAUDE.md guard covers ONLY the fresh-scaffold
+  # region. The maintenance region below it runs on EVERY --init-project, so
+  # an existing consumer — who by definition already has .claude/CLAUDE.md —
+  # still receives the .gitignore keys and the skip-if-exists .gitattributes
+  # and .claude/scratchpad.md provisioning. Before this restructure an early
+  # return here stopped a re-run before ANY of that code, so the exact
+  # population the migration exists for never reached it.
+  local scaffold_fresh=true
+  if [ -f ".claude/CLAUDE.md" ]; then
+    scaffold_fresh=false
+    log_warn ".claude/CLAUDE.md already exists — skipping the fresh project scaffold"
+    log_info "Migration/maintenance still runs: .gitignore keys, .gitattributes, .claude/scratchpad.md"
+    log_info "To force a full re-scaffold, remove .claude/ and rerun with --init-project"
   else
-    scaffold_cp "$SCRIPT_DIR/templates/instincts.md" ".claude/instincts.md" ".claude/instincts.md"
-  fi
+    log_info "Scaffolding project template in $(pwd)/.claude/"
 
-  if [ -L "docs/PRD.md" ]; then
-    log_warn "docs/PRD.md is a symlink — refusing to write through it (skipped)"
-  else
-  cat > "docs/PRD.md" << 'EOF'
+    mkdir -p .claude/rules docs/qa docs/use-cases
+
+    scaffold_cp "$SCRIPT_DIR/templates/CLAUDE.md" ".claude/CLAUDE.md" ".claude/CLAUDE.md (template — fill in your project details)"
+
+    scaffold_cp "$SCRIPT_DIR/templates/rules/architecture.md" ".claude/rules/architecture.md" ".claude/rules/architecture.md (template)"
+
+    scaffold_cp "$SCRIPT_DIR/templates/rules/security.md" ".claude/rules/security.md" ".claude/rules/security.md (template)"
+
+    scaffold_cp "$SCRIPT_DIR/templates/rules/design.md" ".claude/rules/design.md" ".claude/rules/design.md (template)"
+
+    scaffold_cp "$SCRIPT_DIR/templates/rules/testing.md" ".claude/rules/testing.md" ".claude/rules/testing.md (template)"
+
+    scaffold_cp "$SCRIPT_DIR/templates/settings.json" ".claude/settings.json" ".claude/settings.json"
+
+    # FR-13.1: a `cp`, never an execution. `.claude/statusline.js` is later
+    # invoked directly by Claude Code's own statusLine mechanism (the command
+    # templates/settings.json just installed above), never by this installer -
+    # this script itself still never invokes `node` or `jq`.
+    scaffold_cp "$SCRIPT_DIR/templates/statusline.js" ".claude/statusline.js" ".claude/statusline.js (statusline renderer template)"
+
+    # Skip-if-exists — four provisions share this shape and never overwrite a
+    # project's own file: CHANGELOG.md and .claude/instincts.md here in the
+    # fresh scaffold, .claude/scratchpad.md and .gitattributes in the
+    # maintenance region below.
+    if [ -f "CHANGELOG.md" ]; then
+      log_ok "CHANGELOG.md (already exists — skipped)"
+    else
+      scaffold_cp "$SCRIPT_DIR/templates/CHANGELOG.md" "CHANGELOG.md" "CHANGELOG.md"
+    fi
+
+    # FR-1.1: never overwrites a project's own accumulated instincts.
+    if [ -f ".claude/instincts.md" ]; then
+      log_ok ".claude/instincts.md (already exists — skipped)"
+    else
+      scaffold_cp "$SCRIPT_DIR/templates/instincts.md" ".claude/instincts.md" ".claude/instincts.md"
+    fi
+
+    if [ -L "docs/PRD.md" ]; then
+      log_warn "docs/PRD.md is a symlink — refusing to write through it (skipped)"
+    else
+    cat > "docs/PRD.md" << 'EOF'
 # Product Requirements Document
 
 ## Version History
@@ -1557,37 +1585,82 @@ TODO: High-level description of the product.
 
 <!-- New feature sections will be appended here by the prd-writer agent -->
 EOF
-  log_ok "docs/PRD.md (template)"
+    log_ok "docs/PRD.md (template)"
+    fi
+
+    touch docs/qa/.gitkeep
+    log_ok "docs/qa/"
+
+    touch docs/use-cases/.gitkeep
+    log_ok "docs/use-cases/"
   fi
 
-  touch docs/qa/.gitkeep
-  log_ok "docs/qa/"
+  # --------------------------------------------------------------------------
+  # Maintenance region — runs on EVERY --init-project, fresh or existing
+  # (PRD §15 UC-10). Every step is idempotent and skip-if-exists, so a re-run
+  # migrates an existing project without clobbering anything it owns.
+  # --------------------------------------------------------------------------
 
-  touch docs/use-cases/.gitkeep
-  log_ok "docs/use-cases/"
+  # Per-worktree pipeline session state (PRD §15 FR-1) — live local state a
+  # re-run must never clobber mid-feature.
+  if [ -f ".claude/scratchpad.md" ]; then
+    log_ok ".claude/scratchpad.md (already exists — skipped)"
+  else
+    scaffold_cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md" ".claude/scratchpad.md"
+  fi
 
-  # Ignore coverage for the hooks' transient state directory. Idempotent: adds
-  # the line only when absent, and never overwrites an existing .gitignore.
-  if [ ! -f ".gitignore" ]; then
+  # Union-merge declarations for the shared append-only files (PRD §15 FR-2):
+  # CHANGELOG.md and .claude/instincts.md merge line-additively across
+  # parallel feature branches. A consumer-authored file is never overwritten.
+  if [ -f ".gitattributes" ]; then
+    log_ok ".gitattributes (already exists — skipped)"
+  else
+    scaffold_cp "$SCRIPT_DIR/templates/.gitattributes" ".gitattributes" ".gitattributes (merge=union for CHANGELOG.md and .claude/instincts.md)"
+  fi
+
+  # Ignore coverage for the hooks' transient state dir and the per-worktree
+  # scratchpad. Idempotent: each key is evaluated independently, so a project
+  # that already ignores .claude/tmp/ still gains the scratchpad key, and an
+  # existing .gitignore is only ever appended to, never overwritten. Same
+  # symlink stance as scaffold_cp: appending THROUGH a symlinked .gitignore
+  # would write to whatever it points at.
+  if [ -L ".gitignore" ]; then
+    log_warn ".gitignore is a symlink — refusing to write through it (skipped)"
+  elif [ ! -f ".gitignore" ]; then
     cp -- "$SCRIPT_DIR/templates/.gitignore" ".gitignore"
     log_ok ".gitignore"
-  elif ! grep -q '\.claude/tmp' ".gitignore"; then
-    printf '\n# Transient state written by the claude-code-sdlc hooks.\n.claude/tmp/\n' >> ".gitignore"
-    log_ok ".gitignore (appended .claude/tmp/)"
   else
-    log_ok ".gitignore (already ignores .claude/tmp/)"
+    if ! grep -q '\.claude/tmp' ".gitignore"; then
+      printf '\n# Transient state written by the claude-code-sdlc hooks.\n.claude/tmp/\n' >> ".gitignore"
+      log_ok ".gitignore (appended .claude/tmp/)"
+    else
+      log_ok ".gitignore (already ignores .claude/tmp/)"
+    fi
+    # Anchored, unlike the tmp key above: a comment merely mentioning the
+    # path, or a negation line, must not fake "already ignored" for the
+    # session-state file this migration exists to de-track.
+    if ! grep -qE '^[[:space:]]*/?\.claude/scratchpad\.md[[:space:]]*$' ".gitignore"; then
+      printf '\n# Per-worktree pipeline session state — local to each checkout, never committed.\n.claude/scratchpad.md\n' >> ".gitignore"
+      log_ok ".gitignore (appended .claude/scratchpad.md)"
+    else
+      log_ok ".gitignore (already ignores .claude/scratchpad.md)"
+    fi
   fi
 
   echo ""
-  log_ok "Project template scaffolded"
-  echo ""
-  echo "  Next steps:"
-  echo "    1. Fill in TODO placeholders in .claude/CLAUDE.md"
-  echo "    2. Fill in .claude/rules/architecture.md"
-  echo "    3. Fill in .claude/rules/security.md"
-  echo "    4. Fill in .claude/rules/testing.md"
-  echo "    5. Fill in .claude/rules/design.md (or run /design-foundation to generate it)"
-  echo "    6. Start a Claude Code session and describe a feature"
+  if [ "$scaffold_fresh" = true ]; then
+    log_ok "Project template scaffolded"
+    echo ""
+    echo "  Next steps:"
+    echo "    1. Fill in TODO placeholders in .claude/CLAUDE.md"
+    echo "    2. Fill in .claude/rules/architecture.md"
+    echo "    3. Fill in .claude/rules/security.md"
+    echo "    4. Fill in .claude/rules/testing.md"
+    echo "    5. Fill in .claude/rules/design.md (or run /design-foundation to generate it)"
+    echo "    6. Start a Claude Code session and describe a feature"
+  else
+    log_ok "Project maintenance complete (fresh scaffold already in place — skipped)"
+  fi
   echo ""
 }
 

@@ -1,0 +1,6 @@
+# Merge strategy for the pipeline's shared append-only files (PRD §15 FR-2).
+# Union merge keeps both branches' added lines instead of raising conflict
+# markers; /merge-ready's Merge Reconciliation preamble repairs the folded
+# result (duplicate counters, duplicate entries) before consolidation.
+CHANGELOG.md merge=union
+.claude/instincts.md merge=union
