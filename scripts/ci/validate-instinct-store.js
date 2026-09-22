@@ -39,6 +39,24 @@
  *              hook enforces, so a rule that would be silently dropped at
  *              injection time is caught when it is written instead.
  *
+ * Merge-artifact detection (parallel-features S7). `.claude/instincts.md`
+ * carries `merge=union`, so a two-branch merge legitimately leaves duplicated
+ * lines behind — and this parser used to normalize every one of them SILENTLY:
+ * the Meta `.find()` half-read a duplicated counter, `parseStore` folded a
+ * duplicated `## X` heading's lines into the first, and `entriesOf` let a
+ * duplicated field line win last and emitted duplicated slugs as independent
+ * entries. Each of the five canonical reconciliation classes that
+ * `skills/merge-ready/SKILL.md`'s Merge Reconciliation preamble repairs is now
+ * DETECTED and reported here — never silently normalized, and never repaired:
+ * the repair is the preamble's job, this validator only refuses to let an
+ * unreconciled store stand.
+ *
+ *   class (a)  duplicated `Feature counter:` lines in `## Meta`.
+ *   class (b)  duplicated `### <slug>` entries (same or different section).
+ *   class (c)  `Last confirmed at` beyond the Meta feature counter.
+ *   class (d)  duplicated field lines within one entry.
+ *   class (e)  duplicated `## X` section headings.
+ *
  * An empty store (the shipped template) is valid and must pass: a project that
  * has not learned anything yet is a designed state, not an error.
  */
@@ -65,14 +83,27 @@ const STORE_PATHS = ['.claude/instincts.md', 'templates/instincts.md'];
 
 function parseStore(text) {
   const sections = { Meta: [], 'Prevention Rules': [], 'Instincts Log': [] };
+  // Class (e) bookkeeping: a duplicated heading's lines are still appended
+  // into the first occurrence's array (unchanged fold, so downstream checks
+  // keep working on SOME coherent view), but the fold is no longer silent —
+  // checkStore reports every heading seen more than once.
+  const headingLines = {};
   let current = null;
   const lines = text.split('\n');
   lines.forEach((line, i) => {
     const h2 = /^##\s+(.+?)\s*$/.exec(line);
-    if (h2) { current = h2[1]; if (!(current in sections)) sections[current] = []; return; }
+    if (h2) {
+      current = h2[1];
+      (headingLines[current] = headingLines[current] || []).push(i + 1);
+      if (!(current in sections)) sections[current] = [];
+      return;
+    }
     if (current) sections[current].push({ line: i + 1, text: line });
   });
-  return sections;
+  const duplicateHeadings = Object.keys(headingLines)
+    .filter((name) => headingLines[name].length > 1)
+    .map((name) => ({ name, lines: headingLines[name] }));
+  return { sections, duplicateHeadings };
 }
 
 function entriesOf(sectionLines) {
@@ -80,10 +111,18 @@ function entriesOf(sectionLines) {
   let cur = null;
   for (const { line, text } of sectionLines) {
     const h3 = /^###\s+(.+?)\s*$/.exec(text);
-    if (h3) { cur = { slug: h3[1], line, fields: {} }; entries.push(cur); continue; }
+    if (h3) { cur = { slug: h3[1], line, fields: {}, duplicateFields: [] }; entries.push(cur); continue; }
     if (!cur) continue;
     const f = /^([A-Za-z ]+):\s*(.*)$/.exec(text);
-    if (f) cur.fields[f[1].trim()] = f[2].trim();
+    if (f) {
+      const name = f[1].trim();
+      // Class (d) bookkeeping: keep the last value (unchanged last-wins, so
+      // downstream checks see one value per field), but record the collision
+      // for checkEntry to report instead of letting one branch's decay or
+      // confirmation vanish without a trace.
+      if (name in cur.fields) cur.duplicateFields.push({ name, line });
+      cur.fields[name] = f[2].trim();
+    }
   }
   return entries;
 }
@@ -99,6 +138,18 @@ function checkEntry(v, rel, entry, section, counter) {
   // path in every message.
   const where = `${section} / ${entry.slug}, line ${entry.line}`;
   const f = entry.fields;
+
+  // Reported before the required-fields gate: a duplicated field is present
+  // twice, not missing, so the early return below would never surface it.
+  for (const dup of entry.duplicateFields) {
+    v.error(
+      rel,
+      `${where}: \`${dup.name}:\` appears more than once in this entry (again at line ${dup.line}) — ` +
+        `a class (d) merge artifact. A union merge kept both branches' field lines, and last-wins ` +
+        `silently erased one branch's decay or confirmation. The reconciliation preamble keeps the ` +
+        `repaired value and drops the duplicates.`
+    );
+  }
 
   for (const field of REQUIRED_FIELDS) {
     if (!(field in f) || f[field] === '') {
@@ -157,6 +208,19 @@ function checkEntry(v, rel, entry, section, counter) {
     );
   }
 
+  // Class (c): a stamp from a discarded branch can sit beyond the kept
+  // counter, because class (a)'s max-repair deliberately undercounts by one
+  // per concurrent feature. Every later decay/retirement computation would
+  // then reason from a Finalization that never happened.
+  if (counter !== null && lastConfirmed !== null && lastConfirmed > counter) {
+    v.error(
+      rel,
+      `${where}: \`Last confirmed at: ${lastConfirmed}\` is beyond the Meta feature counter ` +
+        `(${counter}) — a class (c) merge artifact. The reconciliation preamble clamps the stamp ` +
+        `to the counter and recomputes \`Retires at\` from the clamped value.`
+    );
+  }
+
   if (lastConfirmed !== null && retires !== null && retires !== lastConfirmed + 10) {
     v.error(
       rel,
@@ -196,7 +260,20 @@ function checkEntry(v, rel, entry, section, counter) {
 }
 
 function checkStore(v, rel, text) {
-  const sections = parseStore(text);
+  const { sections, duplicateHeadings } = parseStore(text);
+
+  // Class (e): reported first because the fold it names is what every check
+  // below reads through — the preamble likewise folds duplicated headings
+  // before applying any other repair, for exactly this reason.
+  for (const dup of duplicateHeadings) {
+    v.error(
+      rel,
+      `\`## ${dup.name}\` appears ${dup.lines.length} times (lines ${dup.lines.join(', ')}) — a ` +
+        `class (e) merge artifact. A union merge kept both branches' section headings, and the ` +
+        `parser silently appends the duplicate's lines into the first. The reconciliation ` +
+        `preamble folds each section's blocks into one before any other repair.`
+    );
+  }
 
   for (const required of ['Meta', 'Prevention Rules', 'Instincts Log']) {
     if (!(required in sections)) {
@@ -205,20 +282,52 @@ function checkStore(v, rel, text) {
     }
   }
 
-  const counterLine = sections.Meta.find((l) => /^Feature counter:/.test(l.text));
-  if (!counterLine) {
+  const counterLines = sections.Meta.filter((l) => /^Feature counter:/.test(l.text));
+  if (counterLines.length === 0) {
     v.error(rel, '`## Meta` has no `Feature counter:` line.');
     return;
   }
+  // Class (a): the old `.find()` took whichever line came first and said
+  // nothing. The first-line read below is unchanged — but it is no longer
+  // silent when there was more than one line to choose from.
+  if (counterLines.length > 1) {
+    v.error(
+      rel,
+      `\`## Meta\` carries ${counterLines.length} \`Feature counter:\` lines ` +
+        `(lines ${counterLines.map((l) => l.line).join(', ')}) — a class (a) merge artifact. A ` +
+        `union merge kept both branches' counters, and every reader silently half-reads whichever ` +
+        `line comes first. The reconciliation preamble resolves this to the max.`
+    );
+  }
+  const counterLine = counterLines[0];
   const counter = num(counterLine.text);
   if (counter === null || counter < 0 || !Number.isInteger(counter)) {
     v.error(rel, `\`Feature counter\` must be a non-negative integer; got ${counterLine.text.trim()}.`);
     return;
   }
 
+  // Class (b) bookkeeping: `entriesOf` still emits a duplicated slug as
+  // independent entries (each is checked on its own merits), but the split
+  // itself is now reported — same or cross-section, since a cross-section
+  // twin is exactly what the preamble's section-placement clause repairs.
+  const slugLocations = {};
   for (const section of ['Prevention Rules', 'Instincts Log']) {
     for (const entry of entriesOf(sections[section])) {
+      (slugLocations[entry.slug] = slugLocations[entry.slug] || [])
+        .push(`${section} line ${entry.line}`);
       checkEntry(v, rel, entry, section, counter);
+    }
+  }
+  for (const slug of Object.keys(slugLocations)) {
+    if (slugLocations[slug].length > 1) {
+      v.error(
+        rel,
+        `\`### ${slug}\` appears ${slugLocations[slug].length} times (${slugLocations[slug].join('; ')}) ` +
+          `— a class (b) merge artifact. A union merge kept both branches' captures of the same ` +
+          `pattern, fragmenting its occurrence count so it neither elevates nor retires. The ` +
+          `reconciliation preamble unions the twins into one entry with re-derived ` +
+          `occurrences/confidence and a single section placement.`
+      );
     }
   }
 }

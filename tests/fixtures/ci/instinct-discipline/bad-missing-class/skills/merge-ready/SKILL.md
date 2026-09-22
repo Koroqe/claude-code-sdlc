@@ -7,11 +7,13 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
 
 # Command: Merge Ready (seeded CI fixture — trimmed mirror, NOT the real file)
 
-> This is a trimmed, structurally-identical mirror of `skills/merge-ready/SKILL.md`'s "Post-Gate
-> Instinct Capture" step, committed only so `scripts/ci/validate-instinct-discipline.js`'s falsify step
-> has a tree to run against. This file carries the C3/FR-1.5a dedup clause UNCHANGED, and the Merge
-> Reconciliation preamble below names all five classes (a)-(e) UNCHANGED — the deliberate defect in
-> this fixture lives only in `agents/planner.md`, isolating the failure to the FR-6.2a assertion.
+> This is a trimmed, structurally-identical mirror of `skills/merge-ready/SKILL.md`'s instinct
+> steps, committed only so `scripts/ci/validate-instinct-discipline.js`'s falsify step has a tree
+> to run against. This file carries the C3/FR-1.5a dedup clause UNCHANGED and MUST pass every
+> pre-existing discipline check. Its ONE deliberate defect: the Merge Reconciliation preamble's
+> class (d) bullet has been removed — as if a later, unrelated edit quietly trimmed one repair
+> class away — and nothing else is changed, proving the five-class assertion fires by name and
+> isolates to the dropped class rather than only ever passing on the real file.
 
 ## Post-Gate Instinct Capture
 
@@ -43,7 +45,6 @@ kept both branches' lines). Repair the five canonical classes, (e) first:
   `## Instincts Log`, deleting the other copy.
 - **(c)** `Last confirmed at` above the counter → clamp it to the counter and recompute
   `Retires at`.
-- **(d)** duplicate field lines within one entry → keep the repaired value, drop the duplicates.
 - **(e)** duplicated section headings → fold each section's blocks into one before the other
   repair classes are applied — the store parser silently appends a duplicate heading's lines into
   the first, so the earlier repairs would mis-read an unfolded store.

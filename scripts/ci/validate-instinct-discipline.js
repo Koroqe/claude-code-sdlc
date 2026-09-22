@@ -181,6 +181,77 @@ function checkDedupClause(v, rel, text) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Merge Reconciliation preamble — skills/merge-ready/SKILL.md only
+// ---------------------------------------------------------------------------
+// A THIRD assertion, beyond the two the file header enumerates (added by
+// parallel-features S7; the header's own text is deliberately untouched so
+// docs/verification/self-improvement-loop.md's `:75-137` location pin for the
+// FR-6.2a check stays true). The store now merges with `merge=union`, and the
+// preamble is the ONLY specification of how a union-merged
+// `.claude/instincts.md` is repaired: `validate-instinct-store.js` DETECTS
+// the five artifact classes (a)-(e) and fails the build on any of them, while
+// this prose is what a model follows to repair the store. Losing one class
+// from the prose while the detector still fires for it turns every merged
+// store into a failure with no documented fix — the same silent-trim rot the
+// other two assertions exist to catch.
+//
+// Each class is asserted as a PAIR — its `(x)` marker with its subject phrase
+// within range of SOME occurrence of that marker — never the bare marker.
+// The preamble's own prose legitimately writes marker ranges like `(a)-(d)`
+// (the real file's class (e) bullet does), so a bare-marker scan would keep
+// passing after the class (d) bullet itself was deleted — exactly the seeded
+// regression in tests/fixtures/ci/instinct-discipline/bad-missing-class.
+// Subject phrases are authored from the implementation plan's canonical class
+// list, never copied from the real file, keeping the prose and this check
+// free of a circular dependency.
+const RECONCILIATION_CLASSES = [
+  ['(a)', 'Feature counter', 'duplicate `Feature counter:` lines resolving to the max'],
+  ['(b)', '<slug>', 'duplicate `### <slug>` entries being unioned into one placed entry'],
+  ['(c)', 'Last confirmed at', 'a `Last confirmed at` beyond the counter being clamped'],
+  ['(d)', 'duplicate field', 'duplicate field lines within one entry collapsing to the repaired value'],
+  ['(e)', 'section headings', 'duplicated section headings being folded before the other repairs'],
+];
+
+// Window after the marker's own index: the real bullets put the subject
+// phrase within a few characters of their marker; 220 tolerates rewording
+// without reaching into a neighbouring bullet's subject.
+const CLASS_SUBJECT_WINDOW = 220;
+
+function classNamed(flat, marker, subject) {
+  let idx = flat.indexOf(marker);
+  while (idx !== -1) {
+    if (flat.slice(idx, idx + CLASS_SUBJECT_WINDOW).includes(subject)) return true;
+    idx = flat.indexOf(marker, idx + 1);
+  }
+  return false;
+}
+
+function checkMergeReconciliation(v, rel, text) {
+  const flat = flatten(text);
+  if (flat.indexOf('Merge Reconciliation') === -1) {
+    v.error(
+      rel,
+      'Merge Reconciliation preamble is missing entirely — no "Merge Reconciliation" marker found ' +
+        'anywhere in this file. The five-class repair procedure for a union-merged instinct store ' +
+        'is gone, while validate-instinct-store.js still fails the build on every artifact class ' +
+        'it repaired.'
+    );
+    return;
+  }
+  for (const [marker, subject, meaning] of RECONCILIATION_CLASSES) {
+    if (!classNamed(flat, marker, subject)) {
+      v.error(
+        rel,
+        `Merge Reconciliation preamble is weakened: class ${marker} — ${meaning} — is no longer ` +
+          `named (no "${marker}" marker carries "${subject}" within ${CLASS_SUBJECT_WINDOW} ` +
+          `characters). validate-instinct-store.js still detects this artifact class, so dropping ` +
+          `its repair prose leaves a merged store failing with no documented fix.`
+      );
+    }
+  }
+}
+
 core.run('validate-instinct-discipline', (v, args) => {
   const root = args.root;
 
@@ -211,5 +282,6 @@ core.run('validate-instinct-discipline', (v, args) => {
   }
   if (contents['skills/merge-ready/SKILL.md']) {
     checkDedupClause(v, 'skills/merge-ready/SKILL.md', contents['skills/merge-ready/SKILL.md']);
+    checkMergeReconciliation(v, 'skills/merge-ready/SKILL.md', contents['skills/merge-ready/SKILL.md']);
   }
 });

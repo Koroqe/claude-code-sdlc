@@ -317,6 +317,14 @@ jobs:
       - name: Falsify — instinct-discipline validator catches an OR-matched dedup scan
         run: node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-weakened-dedup --min 1 --expect-failure "to BOTH match" --expect-problems 1
 
+      # The validator's THIRD arm (parallel-features S7). The Merge
+      # Reconciliation preamble is the only specification of how a
+      # union-merged instinct store is repaired; this plan-authored mirror
+      # drops exactly the class (d) bullet and nothing else, proving the
+      # five-class assertion fires by name and isolates to the dropped class.
+      - name: Falsify — instinct-discipline validator catches a dropped reconciliation class
+        run: 'node scripts/ci/validate-instinct-discipline.js --root tests/fixtures/ci/instinct-discipline/bad-missing-class --min 1 --expect-failure "class (d)" --expect-problems 1'
+
       # Reproduces the shipped defect verbatim. The fixture keeps skills as a
       # directory string on purpose: measured one key at a time, `skills`
       # accepts that shape and only `agents` rejects it, so the exact-count
@@ -342,6 +350,27 @@ jobs:
       # legitimate decay and must not be flagged.
       - name: Falsify — instinct-store validator catches broken consolidation arithmetic
         run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-arithmetic --min 1 --expect-failure "exceeds what 2 occurrence(s) can produce" --expect-problems 5'
+
+      # Merge-artifact detection (parallel-features S7): the store now merges
+      # with `merge=union`, and each of these five fixtures seeds exactly one
+      # canonical reconciliation class at the site the parser used to read it
+      # silently. (a) and (e) are separate fixtures because a duplicated
+      # counter and a duplicated heading cannot be counted independently in
+      # one file.
+      - name: Falsify — instinct-store validator catches a duplicated Feature counter (class a)
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-merge-a --min 1 --expect-failure "class (a) merge artifact" --expect-problems 1'
+
+      - name: Falsify — instinct-store validator catches a duplicated entry slug (class b)
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-merge-b --min 1 --expect-failure "class (b) merge artifact" --expect-problems 1'
+
+      - name: Falsify — instinct-store validator catches a confirmation stamp beyond the counter (class c)
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-merge-c --min 1 --expect-failure "class (c) merge artifact" --expect-problems 1'
+
+      - name: Falsify — instinct-store validator catches a duplicated field line (class d)
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-merge-d --min 1 --expect-failure "class (d) merge artifact" --expect-problems 1'
+
+      - name: Falsify — instinct-store validator catches a duplicated section heading (class e)
+        run: 'node scripts/ci/validate-instinct-store.js --root tests/fixtures/ci/instinct-store/bad-merge-e --min 1 --expect-failure "class (e) merge artifact" --expect-problems 1'
 
       # PRD Section 10, FR-10.4: six seeded-bad-or-boundary fixtures for the
       # model-profile drift validator, each a passing mirror except one
@@ -439,6 +468,14 @@ jobs:
 
       - name: Anti-vacuity — instinct-discipline validator fails on an empty tree
         run: node scripts/ci/validate-instinct-discipline.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
+
+      # This block covered 11 validators and omitted instinct-store — only its
+      # Falsify step existed, so a change that made it match zero store files
+      # would have kept CI green (NFR-4 requires the Falsify/anti-vacuity
+      # pair for every extended validator). STORE_PATHS skips absent files,
+      # so an empty tree yields exactly the one too-few-files problem.
+      - name: Anti-vacuity — instinct-store validator fails on an empty tree
+        run: node scripts/ci/validate-instinct-store.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
       - name: Anti-vacuity — triage-parity validator fails on an empty tree
         run: node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
