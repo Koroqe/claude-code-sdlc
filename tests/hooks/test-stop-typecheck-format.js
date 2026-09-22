@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { runHook, tempDir, rimraf, Checks, REPO_ROOT } = require('./harness');
 
 const c = new Checks('stop:typecheck-format');
@@ -218,5 +219,186 @@ const remaining = fs.readdirSync(gcTmp).filter((f) => f.endsWith('.paths')).leng
 c.ok('GC removes at most 20 files per run', remaining >= 10, String(remaining));
 c.ok('GC leaves non-accumulator files alone', fs.existsSync(path.join(gcTmp, 'keep.txt')));
 
+// --- WORKTREE INHERITANCE (parallel-features S5) --------------------------
+// A linked worktree of a registered main checkout inherits its trust through
+// the git-safe helper's --git-common-dir fallback, confirmed bidirectionally
+// against the registered root's own worktree list. Everything else — plain
+// unregistered repos, subdirectories of a registered root, submodule-shaped
+// common dirs, fabricated gitlinks, git failures — stays untrusted, and the
+// fallback never fires at all when the exact match succeeds.
+const gitOk = spawnSync('git', ['--version'], { encoding: 'utf8' });
+if (gitOk.status !== 0) {
+  process.stdout.write('FAIL stop:typecheck-format — git is a declared dependency and is unavailable\n');
+  process.exit(1);
+}
+
+// Sandboxed git env for fixture setup: no user/system config interferes.
+const gitHome = tempDir('sdlc-stop-git-home-');
+const emptyCfg = path.join(gitHome, 'empty-gitconfig');
+fs.writeFileSync(emptyCfg, '');
+const GIT_ENV = Object.assign({}, process.env, {
+  HOME: gitHome,
+  GIT_CONFIG_GLOBAL: emptyCfg,
+  GIT_CONFIG_NOSYSTEM: '1',
+});
+function git(cwd, args) {
+  return spawnSync('git', args, { cwd, env: GIT_ENV, stdio: 'ignore' });
+}
+
+/** (Re)seed a directory as an edited project for session sess1 — the hook
+ * clears the accumulator on every run, so reused roots re-seed each time. */
+function seedEdits(root) {
+  fs.mkdirSync(path.join(root, '.claude', 'tmp'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'CLAUDE.md'), CLAUDE_MD);
+  fs.writeFileSync(path.join(root, '.claude', 'tmp', 'sess1.paths'), '/a.ts\n');
+}
+
+// A registered main checkout with a real linked worktree beside it.
+const wtMain = path.join(scratch, 'wt-main');
+fs.mkdirSync(wtMain, { recursive: true });
+git(wtMain, ['init', '-q']);
+git(wtMain, ['config', 'user.email', 't@e.com']);
+git(wtMain, ['config', 'user.name', 'T']);
+git(wtMain, ['commit', '--allow-empty', '-m', 'init', '--no-verify', '-q']);
+const wtLinked = path.join(scratch, 'wt-linked');
+// No `-q`: `git worktree add` grew that switch only in 2.17, and this suite's
+// floor is the same pre-2.31 git that rules out `--path-format` in the handler.
+git(wtMain, ['worktree', 'add', wtLinked]);
+const mainRegistry = homeTrusting([wtMain]); // the MAIN root alone is registered
+
+seedEdits(wtLinked);
+fs.writeFileSync(spyLog, '');
+r = stop(wtLinked, mainRegistry, { PATH: spyPath });
+c.equal('a worktree of a registered root exits 0', r.code, 0);
+c.contains('a worktree of a registered root is trusted', msg(r), 'passed');
+c.equal('the trusted worktree ran the command exactly once',
+  fs.readFileSync(spyLog, 'utf8').trim().split('\n').filter(Boolean).length, 1);
+
+// An unrelated repository is not trusted by the worktree fallback.
+const unrelated = path.join(scratch, 'unrelated-repo');
+fs.mkdirSync(unrelated, { recursive: true });
+git(unrelated, ['init', '-q']);
+seedEdits(unrelated);
+fs.writeFileSync(spyLog, '');
+r = stop(unrelated, mainRegistry, { PATH: spyPath });
+c.contains('an unrelated repo stays untrusted', msg(r), 'untrusted-project');
+c.equal('the unrelated repo ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
+// A subdirectory of a registered checkout is still not trusted by its parent:
+// rev-parse resolves upward to the registered root, but the root's worktree
+// list names the root itself, never its subdirectories.
+const subPkg = path.join(wtMain, 'packages', 'a');
+seedEdits(subPkg);
+fs.writeFileSync(spyLog, '');
+r = stop(subPkg, mainRegistry, { PATH: spyPath });
+c.contains('a subdirectory of a registered root stays untrusted', msg(r), 'untrusted-project');
+c.equal('the subdirectory ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
+// A submodule-shaped common dir (…/.git/modules/<name>) never inherits, even
+// with its host root registered: the realpathed basename is not `.git`.
+const subChild = path.join(scratch, 'sub-child');
+git(scratch, ['init', '-q', '--separate-git-dir',
+  path.join(wtMain, '.git', 'modules', 'child'), subChild]);
+seedEdits(subChild);
+fs.writeFileSync(spyLog, '');
+r = stop(subChild, mainRegistry, { PATH: spyPath });
+c.contains('a submodule-shaped common dir is untrusted', msg(r), 'untrusted-project');
+c.equal('the submodule shape ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
+// A fabricated `.git` gitlink pointing at a registered repository's git dir
+// must not borrow its trust: the registered root's own worktree list is the
+// bidirectional proof, and it does not name this directory.
+const gitlink = path.join(scratch, 'evil-gitlink');
+fs.mkdirSync(gitlink, { recursive: true });
+fs.writeFileSync(path.join(gitlink, '.git'),
+  'gitdir: ' + path.join(fs.realpathSync(wtMain), '.git') + '\n');
+seedEdits(gitlink);
+fs.writeFileSync(spyLog, '');
+r = stop(gitlink, mainRegistry, { PATH: spyPath });
+c.contains('a fabricated gitlink does not inherit trust', msg(r), 'untrusted-project');
+c.equal('the gitlink attempt ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
+// A `prunable` worktree block (git >= 2.36 marks entries whose directory
+// vanished) never confers trust — a squatter re-creating the path must not
+// inherit it. This machine's git may predate the marker, so a scripted git
+// serves the crafted porcelain; the no-prunable control proves the crafted
+// plumbing itself works, so the refusal can only come from the marker.
+const mainReal = fs.realpathSync(wtMain);
+const linkedReal = fs.realpathSync(wtLinked);
+function craftedGitDir(name, extraAttrLine) {
+  const dir = path.join(scratch, name);
+  fs.mkdirSync(dir, { recursive: true });
+  const script = '#!/bin/sh\n' +
+    'case "$*" in\n' +
+    '*rev-parse*) echo "' + mainReal + '/.git" ;;\n' +
+    "*worktree*) printf 'worktree " + mainReal + "\\nHEAD x\\n\\nworktree " +
+      linkedReal + "\\nHEAD x\\n" + extraAttrLine + "' ;;\n" +
+    '*) exit 1 ;;\n' +
+    'esac\n';
+  fs.writeFileSync(path.join(dir, 'git'), script);
+  fs.chmodSync(path.join(dir, 'git'), 0o755);
+  return dir;
+}
+const prunePath = craftedGitDir('crafted-prune-bin',
+  'prunable gitdir file points to non-existent location\\n') + path.delimiter + spyPath;
+const livePath = craftedGitDir('crafted-live-bin', '') + path.delimiter + spyPath;
+
+seedEdits(wtLinked);
+fs.writeFileSync(spyLog, '');
+r = stop(wtLinked, mainRegistry, { PATH: prunePath });
+c.contains('a prunable worktree entry does not confer trust', msg(r), 'untrusted-project');
+c.equal('the prunable-entry run executed nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
+seedEdits(wtLinked);
+fs.writeFileSync(spyLog, '');
+r = stop(wtLinked, mainRegistry, { PATH: livePath });
+c.contains('the same crafted listing without prunable trusts (control)', msg(r), 'passed');
+
+// Git failing entirely degrades to untrusted, report-only — and the git spy
+// log doubles as proof that the fallback consulted git at all.
+const fakeGitDir = path.join(scratch, 'fake-git-bin');
+fs.mkdirSync(fakeGitDir, { recursive: true });
+const gitSpyLog = path.join(scratch, 'git-spy.log');
+fs.writeFileSync(path.join(fakeGitDir, 'git'),
+  '#!/bin/sh\necho called >> "' + gitSpyLog + '"\nexit 1\n');
+fs.chmodSync(path.join(fakeGitDir, 'git'), 0o755);
+const brokenGitPath = fakeGitDir + path.delimiter + spyPath;
+
+seedEdits(wtLinked);
+fs.writeFileSync(gitSpyLog, '');
+fs.writeFileSync(spyLog, '');
+r = stop(wtLinked, mainRegistry, { PATH: brokenGitPath });
+c.equal('a git failure still exits 0', r.code, 0);
+c.contains('a git failure degrades to untrusted, report-only', msg(r), 'untrusted-project');
+c.equal('the degraded run executed nothing', fs.readFileSync(spyLog, 'utf8'), '');
+c.ok('the degraded run did consult git (the fallback fired)',
+  fs.readFileSync(gitSpyLog, 'utf8') !== '');
+
+// Empty and missing registries leave a worktree untrusted like anything else.
+const emptyRegHome = tempDir('sdlc-home-');
+const emptyReg = path.join(emptyRegHome, 'sdlc-trusted-projects');
+fs.writeFileSync(emptyReg, '');
+seedEdits(wtLinked);
+r = stop(wtLinked, emptyReg, { PATH: spyPath });
+c.contains('an empty registry leaves the worktree untrusted', msg(r), 'untrusted-project');
+seedEdits(wtLinked);
+r = stop(wtLinked, null, { PATH: spyPath });
+c.contains('a missing registry leaves the worktree untrusted', msg(r), 'untrusted-project');
+
+// The fallback NEVER fires when the exact match succeeds: with git broken,
+// an exactly-registered project still runs its command, and the git spy
+// records no invocation.
+const exact = project('exact-match', CLAUDE_MD, ['/a.ts']);
+fs.writeFileSync(gitSpyLog, '');
+fs.writeFileSync(spyLog, '');
+r = stop(exact, homeTrusting([exact]), { PATH: brokenGitPath });
+c.contains('an exact-match project stays trusted with git broken', msg(r), 'passed');
+c.equal('the exact-match run still executed the command once',
+  fs.readFileSync(spyLog, 'utf8').trim().split('\n').filter(Boolean).length, 1);
+c.equal('the fallback never fires when the exact match succeeds',
+  fs.readFileSync(gitSpyLog, 'utf8'), '');
+
+rimraf(gitHome);
+rimraf(emptyRegHome);
 rimraf(scratch);
 c.finish();

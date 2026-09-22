@@ -175,10 +175,13 @@ if (fs.existsSync(GIT_SAFE)) {
 // spawn — matched against BOTH spawn forms, because a spawnSync-only pattern
 // passes vacuously on a file whose real call is execFileSync (correction 1).
 //
-// S5 (worktree-aware trust registry) appends
-// 'hooks/handlers/stop-typecheck-format.js' to this list on its accept path;
-// until then session-start-spine.js is the only migrated consumer.
-for (const rel of ['hooks/handlers/session-start-spine.js']) {
+// S5 (worktree-aware trust registry) appended
+// 'hooks/handlers/stop-typecheck-format.js' on its accept path;
+// session-start-spine.js was the first migrated consumer (S4).
+for (const rel of [
+  'hooks/handlers/session-start-spine.js',
+  'hooks/handlers/stop-typecheck-format.js',
+]) {
   const src = fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8');
   c.ok(rel + ' requires the shared git-safe helper',
     /require\([^)]*git-safe/.test(src), rel);

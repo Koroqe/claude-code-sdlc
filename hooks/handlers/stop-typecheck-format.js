@@ -41,6 +41,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const accumulator = require('../lib/accumulator.js');
 const sanitize = require('../lib/sanitize.js');
+const gitSafe = require('../lib/git-safe.js');
 
 const MAX_CLAUDE_MD = 128 * 1024;
 const MAX_LINE = 500;
@@ -204,6 +205,59 @@ function isTrustedProject(projectRoot) {
     if (!resolved) continue;
     // Exact match only. A monorepo sub-package is not trusted by its parent.
     if (resolved.replace(/\/+$/, '') === normalizedTarget) return true;
+  }
+
+  // Worktree inheritance — reached ONLY when no registry line matched the
+  // checked root exactly. A linked worktree of a registered main checkout
+  // inherits that root's trust. The shared git-safe helper resolves the
+  // worktree's common git directory to the main checkout root (hardened
+  // spawn; realpathed; `path.dirname` only on a `.git` basename, so
+  // submodule `.git/modules/<name>` and bare shapes come back UNKNOWN), and
+  // the registry match is the same exact-line rule as above. Inheritance is
+  // then confirmed BIDIRECTIONALLY: the registered root's own
+  // `git worktree list` must name the checked root, so a fabricated `.git`
+  // gitlink or a symlinked common dir pointing at a registered repository —
+  // or a mere subdirectory of one — can never borrow its trust. Any git
+  // failure at either step means untrusted, and the caller stays
+  // report-only (fail-open, never a block). (An inherited worktree executes
+  // the CLAUDE.md of whatever ref is checked out there — exactly what
+  // exact-match trust already permits in the main checkout itself, so
+  // inheritance grants nothing new.)
+  const mainRoot = gitSafe.commonDirRoot(target);
+  if (mainRoot === gitSafe.UNKNOWN) return false;
+  const normalizedMain = mainRoot.replace(/\/+$/, '');
+  if (!normalizedMain || normalizedMain === normalizedTarget) return false;
+
+  let mainRegistered = false;
+  for (const line of registry.split('\n')) {
+    const entry = line.trim();
+    if (!entry || entry.charAt(0) === '#' || entry.charAt(0) !== '/') continue;
+    const resolved = realpathOrNull(entry);
+    if (!resolved) continue;
+    if (resolved.replace(/\/+$/, '') === normalizedMain) { mainRegistered = true; break; }
+  }
+  if (!mainRegistered) return false;
+
+  const listed = gitSafe.runGit(normalizedMain, ['worktree', 'list', '--porcelain']);
+  if (listed === gitSafe.UNKNOWN) return false;
+  // Porcelain blocks are blank-line separated: the `worktree <path>` line
+  // first, attribute lines after. Only a block's own first line names a
+  // worktree, and a block carrying `prunable` (git >= 2.36 marks entries
+  // whose directory vanished) is dead metadata a path-squatter could
+  // re-occupy — it never confers trust.
+  for (const block of listed.split('\n\n')) {
+    const lines = block.split('\n');
+    if (!lines[0] || lines[0].indexOf('worktree ') !== 0) continue;
+    let prunable = false;
+    for (let i = 1; i < lines.length; i += 1) {
+      if (lines[i].indexOf('prunable') === 0) { prunable = true; break; }
+    }
+    if (prunable) continue;
+    const resolved = realpathOrNull(lines[0].slice('worktree '.length));
+    if (!resolved || resolved.replace(/\/+$/, '') !== normalizedTarget) continue;
+    let st = null;
+    try { st = fs.lstatSync(resolved); } catch (err) { continue; }
+    if (st.isDirectory()) return true;
   }
   return false;
 }

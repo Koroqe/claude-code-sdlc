@@ -88,7 +88,10 @@ trust refusal as a defect for any auto-fix loop — it is a designed outcome of 
    fresh on every invocation; never reuse a result remembered from an earlier run. The project is
    trusted only when the canonicalized absolute path of the project root exactly matches a whole
    line of the registry — no prefix or substring matching, and a subdirectory of a listed path is
-   not itself trusted. A missing registry file means "not trusted" —
+   not itself trusted. The one inheritance: a linked git worktree is trusted when its common git
+   directory (`git rev-parse --git-common-dir`, realpathed, `.git`-basename only) resolves to a
+   registered root AND that root's own `git worktree list` names this worktree — submodules and
+   every other repository shape stay untrusted. A missing registry file means "not trusted" —
    it is not an error. When the project is not trusted, print `refused: project not trusted`,
    name the remedy — the developer runs `install.sh --trust-project` from the project directory —
    and fall through to evidence-chain step 3 (step 2 requires the same trust, so an untrusted
