@@ -2,10 +2,13 @@
 
 Prior-feature summaries for `planner`'s bounded prior-feature context read (PRD §10 FR-12.4). One row
 per `full`-tier feature whose documentation has been finalized through `/merge-ready` Gate 7
-(FR-12.1/FR-12.2). Gate 7 appends a new row, or refreshes an existing row in place (keyed on section
-number), each time a `full`-tier feature passes that gate — the same idempotency discipline
-`src/rules/changelog.md`'s guard already establishes, applied here to section number instead of entry
-name.
+(FR-12.1/FR-12.2). Gate 7 appends a new row, or refreshes an existing row in place — only when BOTH
+the section number AND slug match (the slug is read from the row's `Docs` links) — each time a
+`full`-tier feature passes that gate: the same idempotency discipline `src/rules/changelog.md`'s guard
+already establishes, applied here to the number-plus-slug dual key instead of entry name. A number
+match with a slug mismatch is a detected collision, never a refresh: it is routed through Gate 1's
+renumber path (the later merger renumbers their own PRD section, never the already-merged one) before
+any write, so an earlier feature's row is never overwritten.
 
 `quick`- and `fast`-tier changes never produce a row: `quick` reports Gate 7 `SKIPPED (tier: quick)` and
 never reaches this write; `fast` never runs `/merge-ready` at all (FR-3.4/FR-12.6).

@@ -110,6 +110,15 @@ Verify all agency deliverables exist:
 - [ ] `docs/use-cases/<feature>_use_cases.md` exists with all scenario types
 - [ ] `docs/qa/<feature>_test_cases.md` exists and maps to use-case scenarios
 - [ ] All use-case scenarios (UC-X, UC-X-A, UC-X-E1) have corresponding test cases
+- [ ] PRD section number unique — the post-sync section-number uniqueness re-check. Runs AFTER
+  Gate 0's sync so it sees the MERGED state: this feature's `## N.` heading must be the only
+  `## N.` in `docs/PRD.md`. On a duplicate, the LATER MERGER renumbers their OWN section to
+  `max(existing) + 1` — never a vacated gap, NEVER the already-merged section — then updates all
+  three reference classes by name: the `> Based on [PRD](../PRD.md) — Section N` header in
+  `docs/use-cases/<feature>_use_cases.md`, the equivalent header in
+  `docs/qa/<feature>_test_cases.md`, and any pending `docs/digest-index.md` row for this feature
+  (Section column and its `Docs` PRD anchor).
+  Gate 1 re-checks after renumbering; with no duplicate it PASSes on the first check.
 
 ## Gate 2: Code Review
 Delegate to `code-reviewer` agent:
@@ -210,14 +219,20 @@ Delegate to `doc-updater` agent:
 **Digest index write (`full` tier only).** After Gate 7 reports PASS on a run where `## Tier:` reads
 `full` or is absent — never for `quick`, which reports Gate 7 `SKIPPED (tier: quick)` and never reaches
 this step, and never for `fast`, which never runs `/merge-ready` at all — `doc-updater`'s delegation gains
-one more duty: append, or — if a row for this feature's PRD section number already exists — refresh in
-place, one row in `docs/digest-index.md`:
+one more duty: append, or — if an existing row matches on BOTH this feature's PRD section number AND
+its feature slug (read from the row's `Docs` links) — refresh in place, one row in
+`docs/digest-index.md`:
 
 `| Section | Title | Summary (≤300 characters) | Docs |`
 
-keyed on section number, using the same idempotency discipline `src/rules/changelog.md`'s guard already
-establishes (there: keyed on entry name; here: keyed on section number). `Docs` lists the PRD section
-anchor, `docs/use-cases/<slug>_use_cases.md`, and `docs/qa/<slug>_test_cases.md`. Quick and fast tiers
+keyed on section number AND slug together, using the same idempotency discipline
+`src/rules/changelog.md`'s guard already establishes (there: keyed on entry name; here: the dual key).
+A number match with a slug mismatch is a DETECTED COLLISION, never an in-place refresh: route it
+through Gate 1's renumber path (the later merger renumbers their own section) BEFORE any digest write
+occurs — the earlier feature's row is NEVER overwritten. Only when both number and slug match does the
+in-place refresh proceed, exactly as before. A Gate 7-triggered renumber borrows Gate 1's procedure
+only — Gate 1's PASS stands. `Docs` lists the PRD section anchor,
+`docs/use-cases/<slug>_use_cases.md`, and `docs/qa/<slug>_test_cases.md`. Quick and fast tiers
 produce no `docs/digest-index.md` row.
 
 ## Gate 8: UI/UX (if user-facing changes)
