@@ -2,7 +2,7 @@
 
 ## Meta
 
-Feature counter: 3
+Feature counter: 4
 
 ## Prevention Rules
 
@@ -15,8 +15,18 @@ Pattern: install.sh
 Rule: WHEN parsing semi-structured external text (gitignore lines, git porcelain, configs), anchor patterns and handle unexpected block shapes — security review keeps flagging naive matches
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: parallel-features)
-Last confirmed at: 3
-Retires at: 13
+Last confirmed at: 4
+Retires at: 14
+
+### validate-refs-before-interpolation
+Confidence: 0.3
+Category: security
+Pattern: skills/merge-ready/SKILL.md
+Rule: WHEN procedure text interpolates a git ref or other externally-derived name into a shell command, validate it against an allowlist pattern first — remote-advertised names are untrusted input
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: parallel-features)
+Last confirmed at: 4
+Retires at: 14
 
 ### new-channel-inherits-existing-controls
 Confidence: 0.3
@@ -29,14 +39,14 @@ Last confirmed at: 3
 Retires at: 13
 
 ### prd-tracks-security-hardening
-Confidence: 0.3
+Confidence: 0.5
 Category: general
 Pattern: docs/PRD.md
 Rule: WHEN a pre-review hardens an implementation beyond the PRD's wording, align the PRD in the same slice — otherwise Gate 7 finds the drift at merge time
 Trigger: Gate Auto-Fix
-Occurrences: 1 (features: design-capability)
-Last confirmed at: 3
-Retires at: 13
+Occurrences: 2 (features: design-capability, parallel-features)
+Last confirmed at: 4
+Retires at: 14
 
 ### preinstall-to-exercise-new-agent-types
 Confidence: 0.3
@@ -75,8 +85,8 @@ Pattern: hooks/handlers/pre-bash-git-guard.js
 Rule: WHEN a git commit or push follows a checkout in one chained Bash command, the guard evaluates the branch state before the chain runs — issue the checkout and the commit as separate calls
 Trigger: Repeated Deviation Rule
 Occurrences: 2 (features: post-live-run-reconciliation, parallel-features)
-Last confirmed at: 3
-Retires at: 13
+Last confirmed at: 4
+Retires at: 14
 
 ### fixed-limits-collide-with-autonomous-runs
 Confidence: 0.3

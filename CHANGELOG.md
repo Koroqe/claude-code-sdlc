@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-09-22
+
+### Parallel Feature Sessions — 22:55 UTC
+**Summary:** Running several features side by side in separate project worktrees is now safe — progress notes, project memory, and the project history file no longer step on each other, and the safety check that keeps work off the main branch now verifies against the real shared repository instead of trusting a worktree blindly.
+**Details:** De-tracks the per-worktree scratchpad so parallel sessions stop colliding; adds union-merge plus five-class repair for instinct/changelog conflicts; Gate 0 now does a real base sync (merge-never-rebase, offline degrade, injection-guarded ref validation); PRD number allocation with a uniqueness validator and digest dual-key; release version read from origin/main; worktree trust inherited via a hardened shared git helper; spine parse hole fixed. Version 4.10.0.
+**Technical details:** Touches merge-ready's Gate 0 (base-sync and ref validation), the instinct-store and changelog write paths (conflict reconciliation), the release-version derivation, and the shared git-trust helper used across hooks and installer. Impact/risk: no database or schema change, no new user-facing screens or endpoints; ships as a plugin/installer release only. One CRITICAL security finding (an injection vector in ref interpolation) was caught and closed during review before release.
+
 ## 2026-08-28
 
 ### The branch guard judged the wrong repository — 11:10 UTC
