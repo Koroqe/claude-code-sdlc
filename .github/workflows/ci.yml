@@ -144,6 +144,14 @@ jobs:
       - name: Validate instinct store arithmetic
         run: node scripts/ci/validate-instinct-store.js
 
+      # PRD section numbers are the join key every cross-reference uses
+      # (use-case headers, QA headers, digest rows). They are allocated
+      # max+1 and never reused, so the only illegal state is a duplicated
+      # `## N.` heading — the artifact two parallel feature sessions produce
+      # when both allocate the next number before either merge lands.
+      - name: Validate PRD section numbering
+        run: node scripts/ci/validate-prd-numbering.js
+
       # --- Falsifiability: each validator must FAIL on a seeded defect ---
       # A validator that only ever passes proves nothing. These steps invert
       # the exit code, so CI goes red if a validator stops catching the bug it
@@ -389,9 +397,19 @@ jobs:
       - name: Falsify — triage-parity validator catches a one-step divergence between the two copies
         run: "node scripts/ci/validate-triage-parity.js --root tests/fixtures/ci/triage-parity/bad-step4-drift --min 1 --expect-failure \"Step 4 differs between skills/develop-feature/SKILL.md and src/claude.md\" --expect-problems 1"
 
+      - name: Falsify — prd-numbering validator catches a duplicated section number
+        run: node scripts/ci/validate-prd-numbering.js --root tests/fixtures/ci/prd-numbering/bad-duplicate-number --min 1 --expect-failure "duplicate section number" --expect-problems 1
+
       # --- Positive control: allowlisted placeholders must still PASS ----
       - name: Control — documented path placeholders are accepted
         run: node scripts/ci/validate-personal-paths.js --root tests/fixtures/ci/good-personal-path --min 1
+
+      # A vacated number (renamed/moved section, file runs 1-6, 8, 9) is a
+      # designed gap, not a defect: allocation is max+1, never gap-refill.
+      # This control goes red if the validator ever starts demanding
+      # contiguous numbering — which would force the reuse the rule forbids.
+      - name: Control — prd-numbering validator accepts a vacated section number
+        run: node scripts/ci/validate-prd-numbering.js --root tests/fixtures/ci/prd-numbering/good-moved-section-gap --min 1
 
       # --- Anti-vacuity: a validator matching zero files must FAIL -------
       # This is the check that stops "exits 0" from meaning "found nothing".
@@ -430,6 +448,12 @@ jobs:
       # closes that gap so a future change that made it vacuous would be caught.
       - name: Anti-vacuity — model-profile validator fails on an empty tree
         run: node scripts/ci/validate-model-profile.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
+
+      # Counts headings, not files: a PRD that exists but carries no `## N.`
+      # heading has nothing to check, and "exits 0" must not mean "found
+      # nothing".
+      - name: Anti-vacuity — prd-numbering validator fails on an empty tree
+        run: node scripts/ci/validate-prd-numbering.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
   hook-tests:
     name: Hook contract tests

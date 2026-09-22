@@ -31,6 +31,12 @@ Each feature section in the PRD MUST include:
 - **Schema changes**: Database table/column additions or modifications
 - **UI changes**: Pages, components, or flows affected
 
+## Section Numbering (allocation rule)
+
+- The next section number is always `max(existing section numbers) + 1`. Numbering records allocation order, not chronology or importance.
+- NEVER reuse a number, even after a section is renamed, moved, or retired — its number is vacated forever, and a gap is the designed trace of that, not an error to repair.
+- Never fill a gap: cross-references (use-case headers, QA headers, digest rows) key on section numbers, and refilling a vacated one silently repoints them. Allocation is `max + 1`, never "next available gap".
+
 ## Constraints
 
 - Follow the existing PRD format (numbered sections, clear headers)
