@@ -68,10 +68,12 @@ function snap(p) {
 }
 
 // Repo-untouched guard: encode the loop-3 BLOCKER hazard permanently.
+// The per-worktree session-state file this guard used to include here was
+// de-tracked and gitignored, and is now scaffolded skip-if-exists rather than
+// held as a tracked repo file, so it no longer belongs in this list.
 const GUARDED = [
   path.join(REPO_ROOT, 'docs/PRD.md'),
   path.join(REPO_ROOT, '.claude/settings.json'),
-  path.join(REPO_ROOT, '.claude/scratchpad.md'),
 ];
 const before = GUARDED.map(snap);
 

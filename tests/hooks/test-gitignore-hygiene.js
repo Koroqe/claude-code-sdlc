@@ -84,8 +84,8 @@ for (const f of FIXTURES) {
     checkIgnore(REPO_ROOT, f), false);
 }
 
-c.equal('A5: .claude/scratchpad.md stays unignored',
-  checkIgnore(REPO_ROOT, '.claude/scratchpad.md'), false);
+c.equal('A5: .claude/scratchpad.md is ignored',
+  checkIgnore(REPO_ROOT, '.claude/scratchpad.md'), true);
 c.equal('A5: .claude/instincts.md stays unignored',
   checkIgnore(REPO_ROOT, '.claude/instincts.md'), false);
 
@@ -122,5 +122,29 @@ c.ok('B2: under separator-free debug/ the fixture-shaped path IS shadowed (machi
   !/\?\?.*tests\/fixtures.*some-feature/.test(status), status);
 
 rimraf(repo);
+
+// --- Section C: templates/.gitignore, the scaffold shipped to consumer repos
+// (its own temp repo — must NOT reuse Section B's repo, which was
+// deliberately overwritten above with the broken separator-free shape).
+
+const templateGitignorePath = path.join(REPO_ROOT, 'templates/.gitignore');
+const templateGitignoreText = fs.readFileSync(templateGitignorePath, 'utf8');
+
+const tmplRepo = tempDir('sdlc-gitignore-tmpl-');
+function tmplGit(args) {
+  return spawnSync('git', args, { cwd: tmplRepo, env: GIT_ENV, encoding: 'utf8' });
+}
+tmplGit(['init', '-q']);
+tmplGit(['config', 'user.email', 'test@example.invalid']);
+tmplGit(['config', 'user.name', 'gitignore-hygiene-test']);
+fs.writeFileSync(path.join(tmplRepo, '.gitignore'), templateGitignoreText);
+
+c.equal('C1: templates/.gitignore ignores .claude/scratchpad.md',
+  checkIgnore(tmplRepo, '.claude/scratchpad.md'), true);
+c.equal('C1: templates/.gitignore does not ignore .claude/instincts.md',
+  checkIgnore(tmplRepo, '.claude/instincts.md'), false);
+
+rimraf(tmplRepo);
+
 rimraf(sandboxHome);
 c.finish();

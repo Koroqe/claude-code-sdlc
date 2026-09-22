@@ -8,9 +8,16 @@
 # exists to catch exactly that mismatch.
 /.sdlc-model-profile
 
+# Per-worktree pipeline session state — live local state, never merged, never
+# committed (PRD §15 FR-1). Parallel worktrees each carry their own copy;
+# tracking it was the single biggest merge-collision source between parallel
+# feature branches. Curated project knowledge (.claude/instincts.md) stays
+# tracked — this entry is scoped to the scratchpad alone.
+/.claude/scratchpad.md
+
 # Transient wave-record and debugger state written by the harness's own hooks
-# during a run — never curated project knowledge (unlike .claude/scratchpad.md
-# and .claude/instincts.md, which stay tracked). The leading slash is stylistic,
+# during a run — never curated project knowledge (unlike .claude/instincts.md,
+# which stays tracked). The leading slash is stylistic,
 # matching the /.sdlc-model-profile convention above: per measured gitignore
 # semantics (docs/findings/remeasurement-2.1.237.md §5), any pattern with a
 # middle separator is already root-relative, so the anchor adds explicitness,

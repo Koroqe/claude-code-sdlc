@@ -5,8 +5,12 @@
 
 # Per-feature debugger diagnostic scratch (FR-8.8) — transient, per-invocation
 # hypothesis/result logs, never curated project knowledge like
-# .claude/instincts.md or .claude/scratchpad.md, both of which stay tracked.
+# .claude/instincts.md, which stays tracked.
 .claude/debug/
+
+# Per-worktree pipeline session state (PRD §15 FR-1) — live local state that
+# never merges between branches. Each worktree keeps its own copy on disk.
+.claude/scratchpad.md
 
 .DS_Store
 node_modules/

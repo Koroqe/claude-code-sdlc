@@ -2,6 +2,8 @@
 
 `.claude/scratchpad.md` is persistent memory that survives context compaction.
 
+It is per-worktree local state: gitignored, never committed, never merged. Each git worktree keeps its own copy on disk, so parallel feature sessions never collide on it.
+
 ## MUST Read
 - Read `.claude/scratchpad.md` at the START of every session or after context compaction
 - Use it to restore context about current feature, branch, and progress
