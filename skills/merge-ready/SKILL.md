@@ -80,7 +80,12 @@ precedent (see Gate 6, below). **Use `Edit`, never a whole-file `Write`** (Write
 - [ ] Working tree clean (`git status`)
 - [ ] Branch up to date with base — sync procedure:
   1. **Base:** `git rev-parse --abbrev-ref origin/HEAD`, strip `origin/`; on failure fall back to
-     `main`, then `master`.
+     `main`, then `master`. **Injection guard — validate before any interpolation:** `<base>` and
+     the current branch must both match `^[A-Za-z0-9._/-]{1,120}$` — the remote-advertised default
+     branch is untrusted input, and legal ref names may carry `;`, `$`, quotes and backticks. On a
+     mismatch emit `base sync unavailable (unsafe ref name) — comparing against local main`, take
+     the offline path with base `main`, and interpolate the failing name nowhere. Quote every
+     substitution; pass `--` before ref arguments.
   2. **Behind check:** `git fetch origin <base>`, then `git rev-list --count HEAD..origin/<base>`.
      Count `0` → up to date: a no-op; check the box.
   3. **Offline:** on fetch failure or bounded-timeout expiry, emit the literal

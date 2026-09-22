@@ -274,6 +274,24 @@ c.contains('a worktree of a registered root is trusted', msg(r), 'passed');
 c.equal('the trusted worktree ran the command exactly once',
   fs.readFileSync(spyLog, 'utf8').trim().split('\n').filter(Boolean).length, 1);
 
+// A vanished worktree directory re-occupied by a squatter: the block is not
+// `prunable` on this suite's git floor, and the squatter's `.git` points at
+// the main repository directly rather than its `.git/worktrees/<name>` entry.
+// Registry-side listing alone would trust it; the gitlink back-resolution
+// refuses it.
+const wtSquat = path.join(scratch, 'wt-squat');
+git(wtMain, ['worktree', 'add', wtSquat]);
+rimraf(wtSquat);
+fs.mkdirSync(wtSquat, { recursive: true });
+fs.writeFileSync(path.join(wtSquat, '.git'),
+  'gitdir: ' + fs.realpathSync(wtMain) + '/.git\n');
+seedEdits(wtSquat);
+fs.writeFileSync(spyLog, '');
+r = stop(wtSquat, mainRegistry, { PATH: spyPath });
+c.contains('a squatted worktree path with a non-worktree gitlink stays untrusted',
+  msg(r), 'untrusted-project');
+c.equal('the squatted path ran nothing', fs.readFileSync(spyLog, 'utf8'), '');
+
 // An unrelated repository is not trusted by the worktree fallback.
 const unrelated = path.join(scratch, 'unrelated-repo');
 fs.mkdirSync(unrelated, { recursive: true });

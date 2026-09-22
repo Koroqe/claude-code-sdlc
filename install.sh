@@ -1602,8 +1602,13 @@ EOF
   # --------------------------------------------------------------------------
 
   # Per-worktree pipeline session state (PRD §15 FR-1) — live local state a
-  # re-run must never clobber mid-feature.
-  if [ -f ".claude/scratchpad.md" ]; then
+  # re-run must never clobber mid-feature. Same symlink stance as the
+  # .gitignore arm below, one level up: a repository committing .claude
+  # itself as a symlink would route this write outside the project, and the
+  # leaf check inside scaffold_cp cannot see that.
+  if [ -L ".claude" ]; then
+    log_warn ".claude is a symlink — refusing to write session state through it (skipped)"
+  elif [ -f ".claude/scratchpad.md" ]; then
     log_ok ".claude/scratchpad.md (already exists — skipped)"
   else
     scaffold_cp "$SCRIPT_DIR/templates/scratchpad.md" ".claude/scratchpad.md" ".claude/scratchpad.md"

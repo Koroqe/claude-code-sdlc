@@ -257,7 +257,19 @@ function isTrustedProject(projectRoot) {
     if (!resolved || resolved.replace(/\/+$/, '') !== normalizedTarget) continue;
     let st = null;
     try { st = fs.lstatSync(resolved); } catch (err) { continue; }
-    if (st.isDirectory()) return true;
+    if (!st.isDirectory()) continue;
+    // Confirm the link from the worktree's own end too: its `.git` gitlink
+    // must resolve back under the registered root's `.git/worktrees/`. A
+    // path-squatter re-occupying a vanished worktree directory (which older
+    // git never marks `prunable`) fails this unless it also forges the
+    // exact gitlink target.
+    let gitlink = null;
+    try { gitlink = fs.readFileSync(path.join(resolved, '.git'), 'utf8'); } catch (err) { continue; }
+    const m = /^gitdir:[ \t]*([^\n]+)/.exec(gitlink);
+    if (!m) continue;
+    const gitdir = realpathOrNull(path.resolve(resolved, m[1].trim()));
+    if (!gitdir || gitdir.indexOf(normalizedMain + '/.git/worktrees/') !== 0) continue;
+    return true;
   }
   return false;
 }
