@@ -122,7 +122,9 @@ var HOOKS = {
     profiles: ['standard', 'strict']
   },
   // Not in `minimal`: that profile is defined as observe-only, and this hook
-  // is the one guard that refuses a claim rather than a call.
+  // is the one guard that refuses a claim rather than a call. Also blocks a
+  // mid-plan Stop (run-to-completion, docs/PRD.md Section 16) — escape
+  // SDLC_ALLOW_MIDPLAN_STOP=1.
   'stop:gate-evidence': {
     handler: 'stop-gate-evidence.js',
     timeoutMs: 10000,

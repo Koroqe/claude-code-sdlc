@@ -245,5 +245,54 @@ for (const [, input] of steps) {
 }
 c.equal('with every guard disabled, nothing is refused', stillRefusing, 0);
 
+// 6. Run-to-completion (docs/PRD.md Section 16): a pending-slice scratchpad
+// in an engaged session blocks; recording the remedy (a blocker + Status:
+// blocked) resolves it with no human — the same self-resolvability property
+// as every guard above. First use of stop:gate-evidence in this file, so no
+// prior case here has touched its own `.cont` counter.
+{
+  const scratchpadPath = path.join(root, '.claude', 'scratchpad.md');
+  fs.writeFileSync(scratchpadPath, [
+    '## Feature: Autonomy Regression',
+    '## Branch: feat/thing',
+    '## Status: implementing slice 5/9',
+    '',
+    '- [x] Slice 1: a',
+    '- [x] Slice 2: b',
+    '- [x] Slice 3: c',
+    '- [x] Slice 4: d',
+    '- [ ] Slice 5: e',
+    '- [ ] Slice 6: f',
+    '- [ ] Slice 7: g',
+    '- [ ] Slice 8: h',
+    '- [ ] Slice 9: i',
+    '',
+  ].join('\n'));
+  const transcriptFile = path.join(scratch, 'autonomy-cont-transcript.jsonl');
+  fs.writeFileSync(transcriptFile, JSON.stringify({
+    type: 'assistant',
+    isSidechain: false,
+    message: {
+      role: 'assistant',
+      content: [{ type: 'tool_use', name: 'Edit', input: { file_path: scratchpadPath } }],
+    },
+  }) + '\n');
+
+  r = hook('stop:gate-evidence', { hook_event_name: 'Stop', transcript_path: transcriptFile });
+  c.equal('a pending-slice, engaged session blocks the Stop', decisionOf(r), 'block');
+
+  fs.writeFileSync(scratchpadPath, [
+    '## Feature: Autonomy Regression',
+    '## Branch: feat/thing',
+    '## Status: blocked',
+    '',
+    '## Blockers',
+    'Waiting on a human decision about the migration.',
+    '',
+  ].join('\n'));
+  r = hook('stop:gate-evidence', { hook_event_name: 'Stop', transcript_path: transcriptFile });
+  c.equal('following the remedy — a recorded blocker + Status: blocked — resolves it', decisionOf(r), '');
+}
+
 rimraf(scratch);
 c.finish();

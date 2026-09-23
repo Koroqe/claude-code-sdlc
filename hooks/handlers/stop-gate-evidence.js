@@ -76,6 +76,30 @@
  * gates — and carries `SDLC_ALLOW_UNEVIDENCED_GATES=1` for the legitimate
  * cases (a resumed session whose gates ran in an earlier one, a tier that
  * skipped them by design). It can never dead-end a run.
+ *
+ * RUN-TO-COMPLETION (docs/PRD.md Section 16)
+ *
+ * This same Stop hook also runs the mid-plan continuation check
+ * (`hooks/lib/continuation.js`), for the same reason the MERGE-READY check
+ * lives here rather than as its own hook: the hook-id budget is full at 12,
+ * and the charter already covers "a step that was skipped, because an
+ * omission produces no tool call to intercept" — ending a turn with slices
+ * still pending, or with quality-gates reached and no verdict reported, is
+ * exactly that kind of omission. The two checks share one transcript read.
+ *
+ * In short: when this session is engaged with the pipeline (an Edit/Write of
+ * the scratchpad, a pipeline `Skill` call, or a pipeline slash command in the
+ * transcript) and the scratchpad shows pending work with no `## Blockers`
+ * recorded, a Stop is refused with the next step named. Refusals are bounded:
+ * two blocks in a row on an unchanged (status, next slice, done-slice count,
+ * git HEAD) key downgrade to a `systemMessage` so a run can never be wedged.
+ * Escape: `SDLC_ALLOW_MIDPLAN_STOP=1`. See `hooks/lib/continuation.js` for
+ * the full algorithm.
+ *
+ * Precedence: the MERGE-READY evidence check above runs first and, when it
+ * denies, short-circuits — continuation never gets a chance to fire. Its own
+ * escape, `SDLC_ALLOW_UNEVIDENCED_GATES=1`, no longer bypasses continuation
+ * too: the two checks are independent from here on.
  */
 
 const fs = require('fs');
@@ -244,13 +268,18 @@ function attribution(input) {
   }
 }
 
-module.exports = function stopGateEvidence(input) {
+/**
+ * The MERGE-READY evidence check, unchanged in behavior from before this
+ * file also ran continuation — parameterized on an already-read transcript
+ * `text` (or null) instead of reading it itself, so the two checks below can
+ * share one read of the transcript.
+ */
+function checkMergeReadyEvidence(input, text) {
   if (process.env[ESCAPE] === '1') return null;
 
   const transcript = input && input.transcript_path;
   if (!transcript || typeof transcript !== 'string') return null;
 
-  const text = readTail(transcript, MAX_BYTES);
   // Cannot read the transcript means cannot establish anything. "I could not
   // look" must never be reported as "I looked and it was fine", but it must
   // equally never block — this hook accuses, so it has to be certain.
@@ -281,4 +310,42 @@ module.exports = function stopGateEvidence(input) {
         '[deviation: rule-1 — run the gates, free]',
     },
   };
+}
+
+/** `a + ' | ' + b`, capped so a handler bug cannot push megabytes into context. */
+function joinSystemMessages(a, b) {
+  const joined = a + ' | ' + b;
+  const cap = MAX_MESSAGE * 2;
+  if (joined.length <= cap) return joined;
+  return joined.slice(0, cap - ' [truncated]'.length) + ' [truncated]';
+}
+
+module.exports = function stopGateEvidence(input) {
+  const transcriptPath = input && input.transcript_path;
+  const text = (transcriptPath && typeof transcriptPath === 'string')
+    ? readTail(transcriptPath, MAX_BYTES)
+    : null;
+
+  const mergeReady = checkMergeReadyEvidence(input, text);
+  if (mergeReady && mergeReady.deny) return mergeReady;
+
+  // Lazy require, matching this file's existing style for ../lib/accumulator
+  // inside attribution(): a missing/broken lib module must degrade to "no
+  // decision", never take this handler down with it.
+  let cont = null;
+  try {
+    cont = require('../lib/continuation.js')(input, text);
+  } catch (err) {
+    cont = null;
+  }
+  if (cont && cont.deny) return cont;
+
+  if (cont && cont.systemMessage) {
+    if (mergeReady && mergeReady.systemMessage) {
+      return { systemMessage: joinSystemMessages(mergeReady.systemMessage, cont.systemMessage) };
+    }
+    return cont;
+  }
+
+  return mergeReady; // null, or { systemMessage } from attribution()
 };

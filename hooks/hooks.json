@@ -130,7 +130,7 @@
           {
             "id": "stop:gate-evidence",
             "type": "command",
-            "description": "Blocks a MERGE READY verdict in a session where no subagent ever ran. Every other guard fires on an action taken; this is the only one that can fire on a step that was skipped, because an omission produces no tool call to intercept. Narrow by design: it asserts one unambiguous thing rather than guessing which gate mapped to which agent.",
+            "description": "Blocks a MERGE READY verdict in a session where no subagent ever ran (escape SDLC_ALLOW_UNEVIDENCED_GATES=1). Also blocks a mid-plan Stop when this session is engaged with the pipeline and the scratchpad shows pending slices or an unfinished quality-gates verdict with no recorded blocker, bounded to 2 no-progress blocks in a row (escape SDLC_ALLOW_MIDPLAN_STOP=1). Every other guard fires on an action taken; this is the only one that can fire on a step that was skipped or omitted rather than performed.",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lib/run-hook.js\" --hook stop:gate-evidence",
             "timeout": 10
           }

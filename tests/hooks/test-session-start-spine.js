@@ -1356,5 +1356,68 @@ c.equal('TC-4.11: the stale-install line is emitted in the worktree exactly once
   countOccurrences(ctx(r), buildStaleLine('0.0.1')), 1);
 rimraf(wtHome);
 
+// --- FR-8 (docs/PRD.md Section 16): legacy pre-plugin project files --------
+//
+// Also proves the early-return gate (parts.length === 0 && ... && !drift &&
+// !stale) was correctly widened to include the two legacy sources — every
+// positive case below has NO scratchpad, NO instincts, NO drift and NO
+// stale-install, so a non-null result here can only come from the widened
+// gate.
+
+const legacyCmdRoot = project('legacy-cmd', null);
+fs.mkdirSync(path.join(legacyCmdRoot, '.claude', 'commands'), { recursive: true });
+fs.writeFileSync(path.join(legacyCmdRoot, '.claude', 'commands', 'implement-slice.md'), '# legacy\n');
+fs.writeFileSync(path.join(legacyCmdRoot, '.claude', 'commands', 'develop-feature.md'), '# legacy\n');
+r = spine(legacyCmdRoot);
+c.ok('FR-8: legacy command files yield non-null output', !!ctx(r), ctx(r));
+c.contains('FR-8: names both legacy command files',
+  ctx(r), 'legacy project-level harness file(s): .claude/commands/implement-slice.md, .claude/commands/develop-feature.md');
+c.contains('FR-8: names the shadow sentence', ctx(r), 'pre-plugin copies shadow the plugin skills');
+rimraf(legacyCmdRoot);
+
+const legacyMdRoot = project('legacy-claudemd', null);
+fs.writeFileSync(path.join(legacyMdRoot, '.claude', 'claude.md'),
+  'Some memory file text.\nImplement one slice, then ask: "continue WITH next SLICE?"\n');
+r = spine(legacyMdRoot);
+c.contains('FR-8: legacy claude.md instruction is named (case-insensitive)',
+  ctx(r), '.claude/claude.md contains a legacy "Continue with next slice?" instruction');
+rimraf(legacyMdRoot);
+
+const noLegacyRoot = project('no-legacy', null);
+r = spine(noLegacyRoot);
+c.ok('FR-8: no legacy command line when neither file is present',
+  ctx(r).indexOf('legacy project-level harness file') === -1, ctx(r));
+c.ok('FR-8: no legacy claude.md line when neither file is present',
+  ctx(r).indexOf('Continue with next slice') === -1, ctx(r));
+c.equal('FR-8: with no legacy files and nothing else, output is null', ctx(r), '');
+rimraf(noLegacyRoot);
+
+{
+  const symRoot = project('legacy-symlink', null);
+  fs.mkdirSync(path.join(symRoot, '.claude', 'commands'), { recursive: true });
+  const target = path.join(scratch, 'legacy-symlink-target.md');
+  fs.writeFileSync(target, '# legacy\n');
+  let linked = true;
+  try {
+    fs.symlinkSync(target, path.join(symRoot, '.claude', 'commands', 'implement-slice.md'));
+  } catch (err) {
+    linked = false;
+  }
+  if (linked) {
+    r = spine(symRoot);
+    c.ok('FR-8: a symlinked legacy command file is refused, never named',
+      ctx(r).indexOf('legacy project-level harness file') === -1, ctx(r));
+  } else {
+    process.stdout.write(
+      'SKIP FR-8 symlinked legacy command file — symlink creation not permitted in this environment\n'
+    );
+  }
+  rimraf(symRoot);
+}
+
+// --- FR-7: 'paused' joins the status enum -----------------------------------
+r = spine(project('paused-status', '## Feature: Paused Thing\n## Branch: main\n## Status: paused\n'));
+c.contains('FR-7: a paused scratchpad reports status paused (not unrecognized)', ctx(r), 'status: paused');
+
 rimraf(scratch);
 c.finish();
