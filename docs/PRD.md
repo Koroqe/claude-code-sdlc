@@ -2964,3 +2964,90 @@ Not applicable. This project ships markdown prompt files, hook scripts, and CI v
 9. **Dependency: Section 9's nine-gate `/merge-ready` structure** is what Gate 0 and Gate 1 are extended within — the gate count stays 9, unchanged by this feature.
 10. **Dependency: Section 11's instinct-store shape** (`Feature counter`, `## Prevention Rules`, `## Instincts Log`, per-entry fields) is the exact structure FR-2's merge-safety layers read and repair; a future redesign of that schema (explicitly out of scope here) would require FR-2's artifact classes to be revisited.
 11. **Out of scope (explicitly rejected):** same-checkout locks/coordination beyond documentation; **branch-keyed scratchpad shard files** (a per-branch `.claude/scratchpad/<branch-slug>.md` design was evaluated and explicitly rejected in favor of the simpler de-tracked, per-worktree-local FR-1 design — worktrees already give each session its own working directory, making a second, in-repo sharding scheme redundant); instinct counter/schema redesign; network-fetching validators; automated worktree management; statusline changes; retroactive automated repair of already-diverged consumer instinct stores; a changelog-artifact validator (recorded as a future candidate per Risk 5); any new hook id, agent, or skill.
+
+---
+
+## 16. Run to Completion
+
+**Status:** [IMPLEMENTED]
+**Date:** 2026-09-23
+**Priority:** High
+**Related:** Section 2 (Execution Waves — the post-wave result collection whose partial-failure branch this section makes autonomous); Section 7 (Hook Infrastructure — the fail-open wrapper and deny channel this section reuses unchanged); Section 8 (Blocking Guards — `stop:changelog-guard`'s bounded Stop-block pattern, reused as the loop bound); Section 13 (Post-Live-Run Reconciliation — `stop:gate-evidence`, the hook this section extends rather than adding a thirteenth hook id); `src/rules/error-recovery.md` Rule 4 (narrowed to unplanned decisions).
+
+### 16.1 Description
+
+Make an approved plan run to its end without a human typing "continue". Observed across several consumer projects: after documentation and planning, the pipeline implements one to five slices and then ends its turn — "Slice 5 done. Shall I proceed with Slice 6?" — and waits. The developer who left the machine expecting a finished feature comes back to a question.
+
+**Why:** the autonomy contract was prose only. `implement-slice`'s Auto-Continue and `develop-feature`'s "NEVER stop to ask" asked the model to keep going; nothing enforced it, and every Stop hook was a quality check. Five compounding causes were found in the shipped text:
+
+1. **No mechanical continuation.** No hook looked at the plan when the model tried to end a turn.
+2. **The per-slice report was shaped like a hand-off** — it ended in a `### Next Slice` block, the natural place to stop and ask.
+3. **The unprefixed path carried the weakest instruction.** `src/claude.md` — the only text that applies to "work autonomously" typed in chat — described `/implement-slice` as "one iteration" and never carried the "never stop to ask" rule, which lived only inside `develop-feature`.
+4. **Rule 4 fired on planned work.** "New dependency / schema migration / API contract change → stop and ask" had no exemption for changes the approved plan already specified, so a slice with a planned migration stopped exactly there — at `full` tier, the escalation ceiling, with nothing to redirect to.
+5. **Partial wave failure asked the human** "retry / continue / abort" with no default.
+
+A sixth, environmental cause: pre-plugin installs left project-level `.claude/commands/*.md` and a `.claude/claude.md` that literally say "Implement one slice, then ask: 'Continue with next slice?'". Those copies shadow the plugin skills and win.
+
+**Design Decisions:**
+1. **Extend `stop:gate-evidence`, add no hook id.** The hook budget is at its 12-id ceiling. `stop:gate-evidence` exists to catch a step that was *skipped* — an omission produces no tool call to intercept — and ending a turn with slices pending is precisely an omitted remainder. The new check shares its transcript read.
+2. **The scratchpad is the plan of record; a recorded blocker is the only exit.** The check blocks only when `## Status:` says `implementing…` with a `- [ ] Slice N` pending, or `quality-gates` with no verdict reported, AND `## Blockers` is empty. Every legitimate stop in the rules (`error-recovery.md` Rule 4, retry budget exhausted, all-failed wave, architecture rejected twice) now writes `## Blockers` + `## Status: blocked` first — so the hook and the rules agree on what a stop is. `paused` is added as the status for "the user asked to pause".
+3. **Session-scoped, so a stale scratchpad cannot hijack unrelated work.** The check applies only when this session's transcript shows it running the pipeline: an Edit/Write of the scratchpad, a `Skill` call to a pipeline skill, or a pipeline slash command.
+4. **Bounded by progress, not by a flat count.** A continuation block is legitimate many times in one run — once per slice — so `stop_hook_active` cannot be the bound. Instead the hook keys each block on (status, next slice, done-slice count, git HEAD): two blocks with no change in that key release the turn with a message. A Stop hook that can refuse forever wedges a session.
+5. **Planned is not Rule 4.** A dependency, migration or contract change already specified by a slice's `Changes:`, the PRD section or the architecture verdict was decided at plan approval.
+6. **Partial wave failure has a policy, not a question:** retry once with a fresh budget; still failing and nothing later depends on it → continue, slice stays `FAILED` in `## Plan`; otherwise stop via `## Blockers`.
+7. **Legacy copies are named, never deleted.** `session:start:spine` warns, in fixed literals, when stop-inducing pre-plugin files are present.
+
+### 16.2 User Story
+
+As a developer, I approve a plan (or say "work autonomously"), walk away, and come back to every slice committed and a `/merge-ready` verdict — or to one clearly recorded blocker — never to a "shall I continue?".
+
+### 16.3 Functional Requirements
+
+1. **FR-1 (continuation check):** `stop:gate-evidence` MUST return a blocking Stop decision when all hold: `SDLC_ALLOW_MIDPLAN_STOP` is not `1`; `.claude/scratchpad.md` is a regular file under a safe project root; its status (above `## Archive`) is `implementing…` with at least one `- [ ] Slice N` line, or `quality-gates` while the last main-thread assistant text contains no `MERGE READY` verdict of either polarity; `## Blockers` is absent or holds only a none-marker; and the session is engaged (FR-2).
+2. **FR-2 (engagement):** the session is engaged when its main-thread transcript contains an Edit/Write/MultiEdit of `.claude/scratchpad.md`, a `Skill` call to `develop-feature`, `implement-slice`, `bootstrap-feature`, `merge-ready` or `sdlc-quick` (optionally plugin-prefixed), or a user record carrying `<command-name>` for one of those.
+3. **FR-3 (progress bound):** each block records a key of (status, first pending slice, checked-slice count, git HEAD) in a per-session counter file. A third consecutive block on an unchanged key MUST NOT block; it returns a fixed `systemMessage` instead. A counter that cannot be persisted degrades to a warning, never a block.
+4. **FR-4 (reason):** the deny reason names the next slice number (and total when known) from parsed digits only, names the remedy (continue with `/implement-slice`, then `/merge-ready`), the only legitimate exit (`## Blockers` + `Status: blocked`/`paused`), and the escape variable. No scratchpad free text is echoed.
+5. **FR-5 (existing check unchanged):** the MERGE READY-without-subagent deny keeps its behavior and precedence; its escape `SDLC_ALLOW_UNEVIDENCED_GATES` no longer short-circuits the continuation check.
+6. **FR-6 (fail-open):** any exception in the continuation path yields no decision.
+7. **FR-7 (shared parser):** scratchpad parsing moves to `hooks/lib/scratchpad-state.js`, used by both `session:start:spine` and the continuation check; `paused` joins the status enum.
+8. **FR-8 (legacy warning):** `session:start:spine` emits a fixed-literal warning when `.claude/commands/{implement-slice,develop-feature,bootstrap-feature,merge-ready,context-refresh}.md` exists, or when `.claude/claude.md` contains "Continue with next slice".
+9. **FR-9 (instruction text):** `src/claude.md` gains a mandatory Run to Completion section; `implement-slice`'s report ends with "Continuing to Slice N" and its Auto-Continue names the only legitimate stop; `develop-feature` Phase 2 gets the partial-failure policy; `bootstrap-feature` goes straight into Slice 1 unless the request was docs-only (`paused`); `error-recovery.md` Rule 4 exempts planned changes and every stop records `## Blockers` + `Status: blocked`; `scratchpad.md` defines `paused` and the meaning of `## Blockers`.
+
+### 16.4 Non-Functional Requirements
+
+1. **NFR-1:** no new hook id, agent or skill (budgets 12 / 16 / 8 unchanged).
+2. **NFR-2:** every edited skill stays within its `validate-context-budget.js` byte ceiling, with no ceiling raised.
+3. **NFR-3:** the hook never blocks an unengaged session, a `blocked`/`paused`/`complete`/`idle` scratchpad, or a scratchpad with a recorded blocker.
+
+### 16.5 Acceptance Criteria
+
+1. **AC-1:** an engaged session stopping with `implementing slice 3/7` and `- [ ] Slice 3` pending and `(none)` blockers gets `decision: block` whose reason names Slice 3 of 7.
+2. **AC-2:** the same scratchpad with `## Status: blocked` and a Blockers line, or `paused`, or `complete`, is allowed.
+3. **AC-3:** an unengaged session with the same scratchpad is allowed.
+4. **AC-4:** two blocks on an unchanged key, then a third Stop → no block, fixed `systemMessage`; a newly checked slice or a new commit resets the count.
+5. **AC-5:** `quality-gates` with no verdict blocks; with a MERGE READY or NOT MERGE READY verdict it does not.
+6. **AC-6:** the existing MERGE READY-without-subagent deny still fires, and with `SDLC_ALLOW_UNEVIDENCED_GATES=1` a pending-slice scratchpad still blocks.
+7. **AC-7:** following the remedy in the reason (record a blocker, set `blocked`) turns the next Stop into an allow — the autonomy regression suite proves the block is self-resolvable.
+8. **AC-8:** a project with `.claude/commands/implement-slice.md` gets the legacy warning at session start; a project without it gets none.
+9. **AC-9 (live):** an unattended run of a ≥7-slice plan containing a planned migration completes all slices and reports a `/merge-ready` verdict with zero human messages, both via `/develop-feature` and via an unprefixed "build X, work autonomously".
+
+### 16.6 Affected Endpoints
+
+None.
+
+### 16.7 Schema Changes
+
+None. `.claude/scratchpad.md` gains one legal `## Status:` value, `paused`.
+
+### 16.8 UI Changes
+
+None.
+
+### 16.9 Risks and Dependencies
+
+1. **Risk: a forced continuation after the user asked a side question.** Stop hooks do not fire on a user interrupt (Esc), so interrupting is always available; a user who wants the run to stop says so and the model sets `paused`. Bounded by FR-3 in every case.
+2. **Risk: a scratchpad that does not use checkbox slice lines** (hand-written or legacy) is invisible to the check — the hook then does nothing, which is the fail-open direction. `bootstrap-feature` Step 7 now states the `- [ ] Slice N:` form explicitly.
+3. **Risk: the model satisfies the hook by writing a fake blocker.** Visible in the scratchpad and the final report; a recorded blocker is reviewable, a silent stop was not.
+4. **Dependency:** AC-9 is a behavioral, paid check (live headless sessions) and runs outside CI, as `scripts/eval/` does.
+
+**Out of scope:** automatic deletion of legacy files; a thirteenth hook id; changing `stop:changelog-guard` or `stop:typecheck-format`.
