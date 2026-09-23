@@ -5,7 +5,7 @@
 16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.10.0-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.11.0-green.svg)]()
 
 Claude Code SDLC is an open-source (MIT) plugin that turns Anthropic's Claude Code into a
 16-agent software development team enforcing documentation-first planning, test-driven
@@ -56,7 +56,8 @@ operationalizes that advice: every plan slice carries `Files:`, `Changes:`, `Ver
 - **Documentation-first** — PRD, use cases, test cases documented before any code
 - **TDD enforcement** — tests written before implementation, every slice verified
 - **Goal-backward verification** — checks features are actually wired together, not just that code compiles (file existence, stub detection, wiring, data flow)
-- **Graduated error recovery** — auto-fix typos (free), auto-add validation (free), auto-resolve dependencies (costs retry), escalate architecture decisions (stop)
+- **Graduated error recovery** — auto-fix typos (free), auto-add validation (free), auto-resolve dependencies (costs retry), escalate architecture decisions the plan did not already make (stop)
+- **Runs to completion** — an approved plan runs every slice and the quality gates in one unattended run; a mid-plan stop without a recorded blocker is refused by a hook, not just discouraged in prose
 - **Executable plans** — each slice has `Files:`, `Changes:`, `Verify:`, `Done when:` fields — no interpretation drift
 - **Scope reduction detection** — Plan Critic flags hedging language ("v1", "placeholder", "for now") against PRD requirements
 - **Context integrity** — mandatory re-read before edit, scratchpad persistence, chunked reads for large files
@@ -423,7 +424,7 @@ carries a named escape.
 | `pre:edit:config-protection` | `Edit`/`Write` | Weakening tsconfig/eslint/biome/prettier/jest configs, `@ts-nocheck`, blanket `eslint-disable` — the usual way an unattended run turns a red build green dishonestly | `SDLC_ALLOW_CONFIG_EDIT=1` |
 | `pre:agent:isolation-guard` | `Edit`/`Write` inside a subagent | Parallel-wave subagents writing the scratchpad, changelog or instinct store | `SDLC_ALLOW_SUBAGENT_WRITE=1` |
 | `stop:changelog-guard` | End of a response | A changelog edit with a malformed entry, or a duplicate name under today's date | `SDLC_ALLOW_CHANGELOG_SHAPE=1` |
-| `stop:gate-evidence` | End of a response | A **MERGE READY** verdict in a session where no subagent ever ran | `SDLC_ALLOW_UNEVIDENCED_GATES=1` |
+| `stop:gate-evidence` | End of a response | A **MERGE READY** verdict in a session where no subagent ever ran; ending the turn **mid-plan** — slices pending or gates unfinished, no recorded blocker | `SDLC_ALLOW_UNEVIDENCED_GATES=1` / `SDLC_ALLOW_MIDPLAN_STOP=1` |
 
 ### The one guard that fires on what *didn't* happen
 
@@ -448,6 +449,22 @@ are model-writable self-reports; the block itself still rests solely on the tran
 A refusal is never a dead end. It returns a concrete remedy, which the 4-tier deviation rules
 classify and act on — auto-fix, auto-add, auto-resolve, or escalate. The escape is printed in the
 refusal message itself, deliberately, so a stuck run can resolve itself without waiting for a human.
+
+### Run to completion: stopping mid-plan is an omission too
+
+The same hook refuses the other thing an unattended run can skip: the rest of the plan. Measured in
+consumer projects, the pipeline would finish one to five slices and end its turn with "shall I
+continue?" — the autonomy instruction was prose, and nothing checked it. Now, when this session is
+running the pipeline and `.claude/scratchpad.md` still shows a pending `- [ ] Slice N` (or
+`quality-gates` with no verdict yet) and `## Blockers` is empty, ending the turn is refused and the
+reason names the next slice.
+
+The one legitimate exit is a recorded blocker: write it under `## Blockers` and set
+`## Status: blocked` (or `paused` if you asked it to pause). Every stop in the error-recovery rules
+goes through that path, and a dependency or migration the approved plan already specifies no longer
+counts as a stop. The refusal is bounded by progress: two refusals with no new commit or slice in
+between, and the turn is allowed to end. Pre-plugin project files that still say "Continue with
+next slice?" are named at session start.
 
 ### Wave results are verified, not trusted
 
@@ -551,7 +568,7 @@ Two traps worth knowing:
 ## How the harness checks itself
 
 A harness that enforces quality has to be held to it. This repo ships **19 CI validators** and
-**29 hook test files**, run by GitHub Actions across four jobs on every push.
+**31 hook test files**, run by GitHub Actions across four jobs on every push.
 
 The rule that matters: **every validator must fail on a deliberately broken asset, not merely pass on
 a good one.** Each has seeded fixtures pinned to an exact expected problem count, so a check cannot

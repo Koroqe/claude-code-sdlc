@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-09-23
+
+### Run to Completion — 15:04 UTC
+**Summary:** An approved plan now runs to the end on its own. The pipeline used to finish a few slices and then stop to ask "shall I continue?", so a developer who walked away came back to a question instead of a finished feature. It now keeps going until every slice and the quality checks are done, and stops only for a real, written-down blocker.
+**Details:** A check at the end of each response refuses to stop while the plan still has pending slices and no recorded blocker, naming the next slice; it lets go after two refusals with no progress. Planned migrations and dependencies no longer count as a reason to stop, a partly failed batch is retried and continued without asking, and old project files that told it to stop after each slice are flagged at startup. Version 4.11.0.
+**Technical details:** Extends the existing end-of-response evidence hook rather than adding a new one (hook budget unchanged at 12), sharing its transcript read; scratchpad parsing moves to a shared library used by the session-start hook too. The check is scoped to sessions actually running the pipeline, bounded by a progress key (status, next slice, done count, git HEAD), and fails open. Instruction text (memory layer, error-recovery Rule 4, scratchpad rules, three skills) now defines one legitimate stop: a recorded blocker. No screens, endpoints, schema or deployment impact.
+
 ## 2026-09-22
 
 ### Parallel Feature Sessions — 22:55 UTC
