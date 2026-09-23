@@ -22,10 +22,31 @@
  * The evidence is the session transcript itself, not a file the model writes.
  * That distinction is the whole design: anything the model records about its
  * own work is another self-report, and a self-report is exactly the wrong
- * source for "did I actually do this". Transcript records carry
- * `isSidechain: true` when they belong to a subagent, so subagent invocation
- * is observable as a byproduct of it happening, and is not forgeable by
- * claiming harder.
+ * source for "did I actually do this".
+ *
+ * On Claude Code 2.1.237 that evidence was a single signal: transcript
+ * records carry `isSidechain: true` when they belong to a subagent. Measured
+ * on 2.1.280 (Windows), that signal alone is a false-positive generator: the
+ * main transcript of a real run — 27 subagents dispatched, 9/9 gates,
+ * 226/226 tests, a genuine MERGE READY — contained ZERO `isSidechain`
+ * records. Subagent transcripts moved to separate files. `scan()` now checks
+ * THREE sources, any one of which is sufficient, none of them forgeable by
+ * the model claiming harder because each is written by the harness, not by
+ * assistant text:
+ *
+ *   (a) a transcript record with `isSidechain: true` (the 2.1.237 signal —
+ *       kept for older builds that still use it);
+ *   (b) a transcript record whose top-level `toolUseResult` is a plain
+ *       object carrying a non-empty string `agentId` — the harness writes
+ *       this onto the `tool_result` record that closes out an `Agent`
+ *       (formerly `Task`) tool call, so its presence is itself proof a
+ *       subagent ran, regardless of what the sidechain-record signal says;
+ *   (c) the sibling directory `<transcript path minus .jsonl>/subagents/`
+ *       (measured to hold `agent-<id>.jsonl` + `agent-<id>.meta.json` pairs,
+ *       one per dispatched subagent, on 2.1.280) containing at least one
+ *       `agent-*.jsonl` file.
+ *
+ * Full measurement: docs/findings/subagent-transcripts-2.1.280.md.
  *
  * DELIBERATELY NARROW — BLOCKING IS, ATTRIBUTION IS NOT
  *
@@ -108,6 +129,15 @@ const path = require('path');
 const ESCAPE = 'SDLC_ALLOW_UNEVIDENCED_GATES';
 const MAX_BYTES = 8 * 1024 * 1024;
 
+/** Source (c): the sibling per-subagent transcript file naming, measured on
+ *  Claude Code 2.1.280. Bounded so a directory-listing bug cannot become an
+ *  unbounded read: only the first MAX_SUBAGENT_DIR_ENTRIES entries are
+ *  examined, and finding a match within that window is sufficient — this is
+ *  a positive-evidence source, never a deny source on its own, so a
+ *  truncated scan can only under-report evidence, never fabricate a block. */
+const SUBAGENT_FILE_RE = /^agent-[A-Za-z0-9_-]{1,64}\.jsonl$/;
+const MAX_SUBAGENT_DIR_ENTRIES = 256;
+
 /** The only names that may ever appear in the advisory message. */
 const GATE_AGENTS = ['code-reviewer', 'security-auditor', 'build-runner', 'verifier', 'design-reviewer'];
 const MAX_RECORD_FILES = 64;
@@ -148,8 +178,23 @@ function readTail(file, maxBytes) {
 }
 
 /**
+ * Source (b): a `toolUseResult` the harness itself attaches to the `user`
+ * record that closes out a tool call. Own-property reads only, type-checked
+ * at every step, never spread — nothing from the record body is trusted
+ * beyond "is this one string non-empty".
+ */
+function hasToolUseResultAgentId(record) {
+  const tur = hasOwn.call(record, 'toolUseResult') ? record.toolUseResult : undefined;
+  if (!tur || typeof tur !== 'object' || Array.isArray(tur)) return false;
+  const agentId = hasOwn.call(tur, 'agentId') ? tur.agentId : undefined;
+  return typeof agentId === 'string' && agentId.length > 0;
+}
+
+/**
  * Walk the transcript once, collecting the two facts this hook needs:
- * whether any subagent ran, and what the main loop last said.
+ * whether any subagent ran (sources (a) and (b) — source (c) is a filesystem
+ * check made separately, since it does not come from transcript lines), and
+ * what the main loop last said.
  */
 function scan(text) {
   const result = { sawSubagent: false, lastMainText: '' };
@@ -164,23 +209,70 @@ function scan(text) {
       // A truncated final line is normal when reading a tail. Skip it.
       continue;
     }
-    if (!record || record.type !== 'assistant') continue;
+    if (!record || typeof record !== 'object') continue;
 
-    if (record.isSidechain === true) {
-      result.sawSubagent = true;
+    if (record.type === 'assistant') {
+      if (record.isSidechain === true) {
+        result.sawSubagent = true;
+        continue;
+      }
+
+      const content = record.message && record.message.content;
+      if (!Array.isArray(content)) continue;
+      const text_ = content
+        .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
+        .map((b) => b.text)
+        .join('\n');
+      if (text_.trim()) result.lastMainText = text_;
       continue;
     }
 
-    const content = record.message && record.message.content;
-    if (!Array.isArray(content)) continue;
-    const text_ = content
-      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-      .map((b) => b.text)
-      .join('\n');
-    if (text_.trim()) result.lastMainText = text_;
+    if (record.type === 'user' && hasToolUseResultAgentId(record)) {
+      result.sawSubagent = true;
+    }
   }
 
   return result;
+}
+
+/**
+ * Source (c): the sibling `subagents/` directory Claude Code 2.1.280 writes
+ * next to the main transcript file, holding one `agent-<id>.jsonl` (+
+ * `agent-<id>.meta.json`, not checked here) per dispatched subagent. Fails
+ * open to `false` on any error — a filesystem surprise here must degrade to
+ * "no evidence found", never to a thrown exception and never to a block on
+ * its own (this is a positive-evidence source only).
+ */
+function hasSubagentSiblingFiles(transcriptPath) {
+  try {
+    if (typeof transcriptPath !== 'string' || !transcriptPath) return false;
+    const suffix = '.jsonl';
+    if (transcriptPath.length <= suffix.length) return false;
+    if (transcriptPath.slice(-suffix.length) !== suffix) return false;
+
+    const base = transcriptPath.slice(0, -suffix.length);
+    const dir = path.join(base, 'subagents');
+
+    const dirStat = fs.lstatSync(dir); // absent/inaccessible -> throws -> catch -> false
+    if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) return false;
+
+    const entries = fs.readdirSync(dir);
+    const limit = Math.min(entries.length, MAX_SUBAGENT_DIR_ENTRIES);
+    for (let i = 0; i < limit; i += 1) {
+      const name = entries[i];
+      if (!SUBAGENT_FILE_RE.test(name)) continue;
+      try {
+        const stat = fs.lstatSync(path.join(dir, name));
+        if (stat.isSymbolicLink() || !stat.isFile()) continue;
+      } catch (err) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    return false;
+  }
 }
 
 /**
@@ -285,13 +377,17 @@ function checkMergeReadyEvidence(input, text) {
   // equally never block — this hook accuses, so it has to be certain.
   if (text === null) return null;
 
-  const { sawSubagent, lastMainText } = scan(text);
+  const { sawSubagent: sawSubagentInTranscript, lastMainText } = scan(text);
   if (!lastMainText) return null;
 
   if (!VERDICT_RE.test(lastMainText)) return null;
   if (NOT_A_CLAIM.some((re) => re.test(lastMainText))) return null;
 
-  // The claim is made. Is there any evidence behind it?
+  // The claim is made. Is there any evidence behind it? Sources (a) and (b)
+  // came from scan() above; source (c) is a filesystem check, made here (and
+  // only when the transcript alone did not already settle it) so a broken
+  // filesystem can never perturb a decision the transcript already answers.
+  const sawSubagent = sawSubagentInTranscript || hasSubagentSiblingFiles(transcript);
   if (sawSubagent) return attribution(input);
 
   // The wrapper owns the single deny channel and shapes it per event — for
