@@ -65,7 +65,7 @@ Delegate to `architect` agent:
 2. Revise the approach to address each violation
 3. Re-submit to `architect` for review
 4. Retry up to 2 times
-5. If still rejected: document the architectural concern in scratchpad as a blocker and ask the user
+5. If still rejected: record the concern under `## Blockers`, set `## Status: blocked`, and ask the user
 
 ### Step 4: QA Lead — Test Case Documentation
 Delegate to `qa-planner` agent:
@@ -128,8 +128,8 @@ Check whether `.claude/scratchpad.md` already exists (a `Read` or `Glob` suffice
 Update `.claude/scratchpad.md` with the full feature context:
 - **`## Tier:`** — write this field explicitly, every time this step runs, on every init or reinit (FR-2.8): `full`, for both a fresh, non-escalated `/bootstrap-feature` run and for the reinit FR-2.4(d) invokes after a quick→full escalation. In the escalation case, the escalation's own mandatory tier-rewrite step already set `## Tier: full` before this workflow was ever invoked — this write is a confirming no-op there, not a second, independent source of truth. Never leave `## Tier:` unwritten, and never let it inherit whatever value happened to be sitting in the file from a previous feature — a field written by one path and read by another (here, `/merge-ready`'s Tier Check preamble) MUST be affirmatively owned at every initialization point.
 - Feature name and branch
-- Status: "implementing wave 1 slice 1/N" (when plan has `Wave:` fields) or "implementing slice 1/N" (when no wave assignments)
-- Full plan with slices grouped by wave: each wave as a `### Wave N` subheading with its slices listed as "pending". When plan has no `Wave:` fields, list slices as a flat numbered list under `### Wave 1 (sequential)`
+- Status: "implementing wave 1 slice 1/N" (when plan has `Wave:` fields) or "implementing slice 1/N" (when no wave assignments) — then go straight into Slice 1 in the same turn. Exception: a docs-only request (`/bootstrap-feature` alone, no instruction to implement) sets `paused` and stops.
+- Full plan with slices grouped by wave: each wave as a `### Wave N` subheading with its slices as `- [ ] Slice N: <description>` lines (the form the hooks parse). When plan has no `Wave:` fields, list slices as a flat numbered list under `### Wave 1 (sequential)`
 - **When entered from a quick→full escalation:** the already-satisfied slice appears in the plan marked DONE with its existing commit hash (per Step 5 above), never as "pending" alongside the rest
 - Empty blockers section
 

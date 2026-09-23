@@ -218,10 +218,10 @@ After all subagents complete:
 4. **Update scratchpad** — mark succeeded slices DONE with commit hashes, mark failed slices with FAILED and reason. Update `## Status:` to reflect current wave progress
 5. **Handle failures** (per error-recovery parallel wave rules):
    - All succeeded → proceed to next wave
-   - Some failed → keep successful sibling commits (independent files), report failures, ask user: retry / continue / abort
-   - All failed → report as blocker, stop
+   - Some failed → keep successful sibling commits; **retry** the failed slice(s) once with a fresh budget. Still failing: if no later slice depends on their files, **continue**, leaving them `FAILED` in `## Plan` for the final report; otherwise **stop** (below). Never ask which — this is the policy.
+   - All failed → record the blocker, set `## Status: blocked`, stop
 
-**Continue until all waves show complete in the scratchpad.**
+**Continue until all waves show complete in the scratchpad — in one run.** Ending the turn mid-plan without a recorded blocker is refused by `stop:gate-evidence`.
 
 **Backward compatibility:** When slices have no `Wave:` fields, treat each slice as its own wave — sequential execution, identical to current behavior.
 
@@ -241,7 +241,7 @@ Follow the `/merge-ready` workflow to run all quality gates.
 
 ## Rules
 
-- NEVER stop to ask the user unless truly stuck (3 retries exhausted on a critical blocker)
+- NEVER stop to ask the user unless truly stuck (3 retries exhausted on a critical blocker, or an unplanned Rule 4 decision) — and then only after writing it under `## Blockers` and setting `## Status: blocked`
 - NEVER skip PRD, Use Cases, or QA documentation steps
 - ALWAYS update scratchpad after each slice (enforced by scratchpad rule)
 - ALWAYS commit each slice atomically (1 slice = 1 commit)

@@ -82,10 +82,8 @@ Delegate to `test-writer` agent:
 - Write tests for this slice's behavior using the project's test framework
 - **Run them and capture the RED result before writing any implementation.** `test-writer` reports
   the command, the exit status and which assertions failed, per its Output Format. This run is the
-  point of TDD here: a test never observed to fail is not evidence that the change did anything.
-  Measured basis — 23.8% of agent patches carry no bug-discriminating evidence at all, and 31% of
-  trajectories pass their local tests without actually resolving the task
-  (`docs/findings/harness-optimization-research.md` §3).
+  point of TDD here: a test never observed to fail is not evidence that the change did anything
+  (measured: `docs/findings/harness-optimization-research.md` §3).
 - **If the tests pass on that first run, that is a legitimate outcome — but it must be declared,
   never silent.** Two honest cases: the behaviour already exists and the slice *characterizes* it,
   or the test does not reach the new path and is therefore wrong. Say which. The forbidden state is
@@ -257,16 +255,15 @@ If either condition holds, do NOTHING here — `merge-ready` writes the single c
 ### Changelog
 - Entry written: Yes / Skipped (parallel-wave subagent) / Skipped (no-changelog flag — develop-feature owns it)
 
-### Next Slice
-- [description of next slice]
+### Next
+- `Continuing to Slice N` — or `All slices done — running /merge-ready`
 ```
 
-## Auto-Continue
+## Auto-Continue (run-to-completion)
 
 **When running as a parallel subagent** (wave context provided): do NOT auto-continue. Return your result (PASS with commit hash, or FAIL with error details) to the orchestrator. Wave progression is managed by develop-feature.
 
-**When running standalone** (no wave context), after committing this slice, if there are remaining slices in the plan:
-- Immediately proceed to the next slice
-- Do NOT wait for user input
-- Read `.claude/scratchpad.md` to identify the next slice
-- Continue the TDD flow for the next slice
+**When running standalone** (no wave context), after committing this slice, in the SAME turn:
+- Slices remain → read `.claude/scratchpad.md` and start the next slice's TDD flow. Never end the turn with a question like "continue?" — the report above is a log line, not a hand-off.
+- None remain → run `/merge-ready`.
+- The only legitimate stop is a real blocker: write it under `## Blockers`, set `## Status: blocked` (`paused` if the user asked to pause). `stop:gate-evidence` refuses any other mid-plan stop.
