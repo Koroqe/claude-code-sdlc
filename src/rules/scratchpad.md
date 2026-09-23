@@ -17,7 +17,7 @@ It is per-worktree local state: gitignored, never committed, never merged. Each 
 Use structured format with these sections:
 - `## Feature:` — current feature name (or "none active")
 - `## Branch:` — current git branch
-- `## Status:` — idle / bootstrapping / implementing wave W slice N/M / implementing slice N/M / quality-gates / complete / blocked
+- `## Status:` — idle / bootstrapping / implementing wave W slice N/M / implementing slice N/M / quality-gates / complete / blocked / paused (the user asked to pause)
 - `## Plan` — slices grouped by wave when wave assignments exist. Each wave is a subheading (`### Wave N`) containing its slices. Wave-level status: pending (no slices started), in progress (at least one started), complete (all DONE), failed (at least one FAILED). Individual slices use DONE/IN PROGRESS/pending/FAILED status. When no wave assignments exist (legacy plans), use a flat numbered list under `### Wave 1 (sequential)`. Example:
   ```
   ### Wave 1
@@ -32,7 +32,7 @@ Use structured format with these sections:
   - [ ] Slice 5: description
   ```
 - `## Completed` — history of completed work
-- `## Blockers` — any unresolved issues
+- `## Blockers` — what the run cannot proceed past; `(none)` when empty. A non-empty section plus `## Status: blocked` is the one legitimate way to end a turn mid-plan (`stop:gate-evidence` refuses the rest). A slice that failed but blocks nothing stays `FAILED` in `## Plan`, not here
 - `## Archive` — completed work moved here when scratchpad exceeds 100 lines
 
 ## Re-Read Before Edit (MANDATORY)

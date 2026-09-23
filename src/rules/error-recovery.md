@@ -42,7 +42,9 @@ Dependency conflicts, version mismatches, and configuration issues blocking prog
 
 ### Rule 4 — Escalate (Stop)
 
-Architectural decisions, new dependencies, API contract changes, or schema migrations. Stop and ask the user.
+Architectural decisions, new dependencies, API contract changes, or schema migrations **that the approved plan did not already make**. Stop and ask the user.
+
+**Planned is not Rule 4.** A dependency, migration or contract change already specified by the approved plan — a slice's `Changes:`, the PRD section, or the architecture review verdict — was decided at plan approval. Implement it; do not stop to re-ask. Rule 4 is for a decision the plan did not make, or one the plan got wrong.
 
 **Examples:**
 - Fix requires adding a new npm package or external dependency
@@ -50,14 +52,16 @@ Architectural decisions, new dependencies, API contract changes, or schema migra
 - Fix requires restructuring module boundaries or moving files across layers
 - Fix requires choosing between multiple valid architectural approaches
 
-**Action:** Stop implementation. Present to user: what decision is needed, what the options are, and the tradeoffs of each. This counts against retry budget.
+**Action:** Stop implementation. Write the decision under `## Blockers` in `.claude/scratchpad.md` and set `## Status: blocked`, then present to user: what decision is needed, what the options are, and the tradeoffs of each. This counts against retry budget.
+
+**A recorded blocker is the only legitimate mid-plan stop.** `stop:gate-evidence` refuses to let a turn end while the scratchpad shows pending slices (or unfinished gates) and no blocker — so every stop in this file goes through `## Blockers` + `## Status: blocked` first.
 
 ## Retry Budget
 
 - Maximum **3 retries per slice** (not per verification step)
 - Rules 1-2 are free — they do not consume retries
 - Rules 3-4 consume 1 retry each
-- After 3 retries exhausted: document the blocker in `.claude/scratchpad.md` and report to user
+- After 3 retries exhausted: document the blocker under `## Blockers`, set `## Status: blocked`, and report to user
 
 ## Error Classification
 
@@ -102,11 +106,11 @@ When multiple slices execute in parallel (same wave, different subagents):
 After all subagents in a wave complete, the orchestrator collects results and takes action:
 
 - **All succeeded** → update scratchpad, proceed to next wave
-- **Some failed** → report failures with slice numbers, error categories (per deviation rules), and retry counts. Present escalation options:
-  1. **Retry** — re-run failed slice(s) only with fresh retry budget
-  2. **Continue** — proceed to next wave, address failures later
-  3. **Abort** — stop implementation, report as blocker
-- **All failed** → report as blocker, stop and ask user
+- **Some failed** → record failures with slice numbers, error categories (per deviation rules), and retry counts, then apply this policy without asking:
+  1. **Retry** — re-run the failed slice(s) once with a fresh retry budget
+  2. **Continue** — still failing, and no later slice depends on their files: proceed to the next wave; mark those slices `FAILED` in `## Plan` for the final report (not `## Blockers` — that section means "stop here")
+  3. **Stop** — still failing, and a later slice depends on them: set `## Status: blocked` and report
+- **All failed** → record under `## Blockers`, set `## Status: blocked`, stop and ask user
 
 ### Rule 4 in Parallel Mode
 When a subagent encounters a Rule 4 escalation (architectural decision needed), it returns the escalation context to the orchestrator (decision needed, options, tradeoffs). The orchestrator presents it during post-wave result collection — the decision is not made mid-wave.

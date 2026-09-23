@@ -126,10 +126,18 @@ When you exit plan mode OR receive approval to proceed with a feature, you MUST:
 **Do NOT skip step 1. Do NOT start writing code before `/bootstrap-feature` completes.**
 **Do NOT write PRD, use cases, or test cases yourself — delegate to the specialized agents.**
 
+### Run to Completion (MANDATORY)
+
+Plan approval — or an instruction like "work autonomously" / "finish the plan" — authorizes the WHOLE plan: steps 1-3 run in one unattended run, the same as `/develop-feature`. The human reviews the result at the end, not each slice.
+
+- Never end a turn between slices or before `/merge-ready`'s verdict to ask "continue?" / "shall I proceed?". A per-slice report is a log line, not a hand-off.
+- A dependency, migration or contract change the approved plan already specifies is not a Rule 4 stop (`error-recovery.md`).
+- The only legitimate mid-plan stop: write the blocker under `## Blockers`, set `## Status: blocked` (`paused` if the user asked to pause), then report. `stop:gate-evidence` refuses any other mid-plan stop and names the next slice.
+
 ### Pipeline Commands
 - `/develop-feature` — Full autonomous pipeline (steps 1-3 above)
 - `/bootstrap-feature` — Documentation phases only (step 1)
-- `/implement-slice` — Single TDD slice (step 2, one iteration)
+- `/implement-slice` — TDD slice (step 2); standalone, it continues through the remaining slices
 - `/merge-ready` — Quality gates (step 3)
 - `/context-refresh` — Rebuild session context from scratchpad
 - `/design-foundation` — Generate the project's `.claude/rules/design.md` design declaration (subject-grounded tokens, motion scale, preview recipe); run when a project has UI work and no declaration yet
