@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-09-23
 
+### Every real merge-ready verdict was refused on current Claude Code — 17:33 UTC
+**Summary:** On current Claude Code versions the final "ready to merge" verdict was always rejected, even after every quality check had run, so a fully finished unattended run ended on a false blocker. The check that guards that verdict now recognises how current versions record the specialist agents' work.
+**Details:** The guard looked for subagent records inside the main session transcript. Claude Code 2.1.280 writes them to separate files, so it saw none and refused every verdict: a live run with 27 agents, 9/9 gates and 226/226 tests ended blocked. It now accepts two more tamper-proof signals written by Claude Code itself. A verdict with no agent activity at all is still refused. Version 4.11.2.
+**Technical details:** Evidence sources are now the legacy sidechain records, the harness-written tool result carrying the subagent's id, and the per-session subagent transcript folder; all fail open and none can be written by the model. Replayed against the live run's real transcript: old handler refuses, new handler allows. Finding recorded in docs/findings. No screens, endpoints, schema or deployment impact.
+
 ### Run to Completion did not fire on Windows — 16:44 UTC
 **Summary:** The new "keep going until the plan is done" check silently did nothing on Windows whenever the progress notes had been saved with Windows line endings — which a live test run did on its own. It now reads those notes correctly.
 **Details:** A live unattended run on Windows rewrote its scratchpad with Python, which writes CRLF line endings. The status, feature and branch fields then failed to parse, so the run-to-completion check saw no status and let the turn end mid-plan; the session-start state summary lost the same fields. Line endings are now normalized before parsing, with a regression test. Version 4.11.1.

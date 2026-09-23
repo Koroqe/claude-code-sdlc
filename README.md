@@ -5,7 +5,7 @@
 16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.11.1-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.11.2-green.svg)]()
 
 Claude Code SDLC is an open-source (MIT) plugin that turns Anthropic's Claude Code into a
 16-agent software development team enforcing documentation-first planning, test-driven
