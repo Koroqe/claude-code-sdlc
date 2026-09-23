@@ -4,6 +4,11 @@ All notable changes to this project, newest first. Entries are grouped by UTC da
 
 ## 2026-09-23
 
+### Run to Completion did not fire on Windows — 16:44 UTC
+**Summary:** The new "keep going until the plan is done" check silently did nothing on Windows whenever the progress notes had been saved with Windows line endings — which a live test run did on its own. It now reads those notes correctly.
+**Details:** A live unattended run on Windows rewrote its scratchpad with Python, which writes CRLF line endings. The status, feature and branch fields then failed to parse, so the run-to-completion check saw no status and let the turn end mid-plan; the session-start state summary lost the same fields. Line endings are now normalized before parsing, with a regression test. Version 4.11.1.
+**Technical details:** One normalization in the shared scratchpad parser, used by both the Stop-hook continuation check and the session-start hook; found by replaying the live run's real transcript against the handler. No screens, endpoints, schema or deployment impact.
+
 ### Run to Completion — 15:04 UTC
 **Summary:** An approved plan now runs to the end on its own. The pipeline used to finish a few slices and then stop to ask "shall I continue?", so a developer who walked away came back to a question instead of a finished feature. It now keeps going until every slice and the quality checks are done, and stops only for a real, written-down blocker.
 **Details:** A check at the end of each response refuses to stop while the plan still has pending slices and no recorded blocker, naming the next slice; it lets go after two refusals with no progress. Planned migrations and dependencies no longer count as a reason to stop, a partly failed batch is retried and continued without asking, and old project files that told it to stop after each slice are flagged at startup. Version 4.11.0.

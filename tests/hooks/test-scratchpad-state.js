@@ -100,4 +100,15 @@ c.ok('firstPendingSlice: word-bounded (UNFAILEDX is not FAILED)', firstPendingSl
 c.ok('firstPendingSlice: only FAILED left -> undefined', firstPendingSlice(['- [x] Slice 1: a', '- [ ] Slice 2: b FAILED'].join(NL)) === undefined);
 c.ok('firstPendingSlice: ignores archive', firstPendingSlice(['- [x] Slice 1: a', '## Archive', '- [ ] Slice 9: z'].join(NL)) === undefined);
 
+// --- CRLF (measured regression: a Python-rewritten scratchpad on Windows) ---
+const CRLF = String.fromCharCode(13, 10);
+const crlfPad = ['## Feature: X', '## Branch: feat/x', '## Status: implementing wave 2 slice 2-4/8', '',
+  '- [x] Slice 1: a', '- [ ] Slice 2: b', '', '## Blockers', '(none)', ''].join(CRLF);
+const crlfState = extractState(crlfPad);
+c.ok('CRLF: status still parses', crlfState.status === 'implementing', JSON.stringify(crlfState));
+c.ok('CRLF: feature and branch still parse', crlfState.feature === 'X' && crlfState.branch === 'feat/x', JSON.stringify(crlfState));
+c.ok('CRLF: pending slice found', firstPendingSlice(crlfPad) === 2);
+c.ok('CRLF: "(none)" blockers still read as empty', blockersPresent(crlfPad) === false);
+c.ok('CRLF: done count', doneSliceCount(crlfPad) === 1);
+
 c.finish();

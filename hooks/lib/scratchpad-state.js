@@ -73,7 +73,12 @@ function matchLine(lines, re) {
  * on where "current" ends.
  */
 function linesAboveArchive(text) {
-  const all = text.split('\n');
+  // CRLF-normalize first. Measured in a live Windows run: the orchestrator
+  // rewrote the scratchpad with Python, whose text mode writes CRLF; every
+  // `(.+)$` field regex below then failed on the trailing `\r` (`.` does not
+  // match it), so Feature/Branch/Status vanished and the run-to-completion
+  // check saw no status and never blocked. Lone `\r` is normalized too.
+  const all = String(text).replace(/\r\n?/g, '\n').split('\n');
   const archiveAt = all.findIndex((l) => /^##\s*Archive\b/i.test(l));
   return archiveAt === -1 ? all : all.slice(0, archiveAt);
 }
