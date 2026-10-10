@@ -279,9 +279,12 @@ function commandIsSafeShape(command) {
   return ARGV0_RE.test(command.split(' ')[0]);
 }
 
-/** Run a vetted command with argv (never a shell) and a scrubbed environment. */
-function runCommand(command, cwd) {
-  const argv = command.split(' ').filter(Boolean);
+/** Run a vetted argv array (never a shell) with a scrubbed environment. */
+function runCommand(argv, cwd) {
+  const [exe, ...args] = argv;
+  if (!exe || !ARGV0_RE.test(exe)) {
+    return { ok: false, timedOut: false, output: 'unsafe executable rejected' };
+  }
   const env = {};
   // Allowlist, not a blocklist. NODE_OPTIONS alone would inject code into
   // every child Node process, and DYLD_/LD_ preloads do the same natively.
@@ -289,7 +292,7 @@ function runCommand(command, cwd) {
     if (process.env[key]) env[key] = process.env[key];
   }
 
-  const result = spawnSync(argv[0], argv.slice(1), {
+  const result = spawnSync(exe, args, {
     cwd,
     env,
     shell: false,
@@ -332,8 +335,8 @@ module.exports = function stopTypecheckFormat(input) {
 
   const declared = discoverCommands(projectRoot);
   const commands = [];
-  if (declared.format) commands.push({ kind: 'format', command: declared.format });
-  if (declared.typecheck) commands.push({ kind: 'typecheck', command: declared.typecheck });
+  if (declared.format) commands.push({ kind: 'format', cmdStr: declared.format });
+  if (declared.typecheck) commands.push({ kind: 'typecheck', cmdStr: declared.typecheck });
 
   if (commands.length === 0) {
     // The everyday path in a repo like this one, which has no package.json.
@@ -359,14 +362,14 @@ module.exports = function stopTypecheckFormat(input) {
     let reason = '';
     if (disabled) reason = 'disabled';
     else if (!trusted) reason = 'untrusted-project';
-    else if (!commandIsSafeShape(entry.command)) reason = 'unsafe-command-shape';
+    else if (!commandIsSafeShape(entry.cmdStr)) reason = 'unsafe-command-shape';
 
     if (reason) {
       // Report, never run. The raw value goes through JSON encoding so control
       // bytes arrive as visible backslash text rather than live escapes.
       messages.push(
         'declared ' + entry.kind + ' command NOT executed (' + reason + '): ' +
-        sanitize.quoteForDisplay(entry.command, 200) +
+        sanitize.quoteForDisplay(entry.cmdStr, 200) +
         (reason === 'untrusted-project'
           ? ' — run `bash install.sh --trust-project` in this project to enable it'
           : '')
@@ -374,8 +377,9 @@ module.exports = function stopTypecheckFormat(input) {
       continue;
     }
 
-    messages.push('running ' + entry.kind + ': "' + entry.command + '"');
-    const result = runCommand(entry.command, projectRoot);
+    messages.push('running ' + entry.kind + ': "' + entry.cmdStr + '"');
+    const safeArgv = entry.cmdStr.split(' ').filter(Boolean);
+    const result = runCommand(safeArgv, projectRoot);
     if (result.timedOut) {
       messages.push(entry.kind + ' timed out — reported, not blocking');
     } else if (!result.ok) {
