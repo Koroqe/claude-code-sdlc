@@ -122,6 +122,8 @@ configure the harness. Never reuse a published number.
   whether a cut worked until after you have shipped it. Conversion is measured, not assumed
   (tokens ≈ bytes / 2.78, `docs/findings/context-cost-calibration.md`). Weight before you cut:
   `implement-slice` is paid once **per slice**, so a byte there costs ~8× a byte in `merge-ready`.
+  The memory layer is scored too, since it loads every session: `src/claude.md` 23500 and
+  `src/rules/topic-closure.md` 5000 (the rule itself is held to 4,950 by `validate-topic-closure.js`).
 - **Every validator must fail on a seeded broken fixture**, pinned to an exact problem count. A check
   that only ever passes is not evidence.
 - **Measure Claude Code's behaviour; do not read it off the docs.** Several documented claims have

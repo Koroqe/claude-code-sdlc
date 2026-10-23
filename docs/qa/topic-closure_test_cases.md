@@ -118,7 +118,7 @@ Every case runs `install.sh` with a temp `HOME`; nothing touches the real `~/.cl
 | TC-7.11 | UC-7-E1 | STATIC | Uninstall when the rule file is already absent | Exit 0; uninstall continues with the remaining files |
 | TC-7.12 | UC-7-EC1 | STATIC | Uninstall with `mine.md` and an unrelated `rules/other.md` present | Both survive; static check that the uninstall path iterates manifest entries and never globs `rules/*` |
 | TC-7.13 | UC-5 | STATIC | Grep `install.sh` and `README.md` for the message and count wording | `rule_count` is derived from `MANIFEST_OWNS` (no `ls ... rules/*.md` count). The help text and the banner necessarily hard-code 6, because the banner prints before `load_manifest`; every message reads six, none reads five (AC-12) |
-| TC-7.14 | UC-5-EC1 | STATIC | `SDLC_KEEP_BACKUPS` set to `00`, `000`, or a 20-digit number, with two old `backup-YYYYMMDD-HHMMSS` dirs seeded and a hand-made `rules/topic-closure.md` forcing a new backup; also unset (default 5) (security MEDIUM-1, MEDIUM-7) | Notice says "never pruned" for `00`/`000`/overflow and no backup is deleted (seeded two plus the run's own all survive, no "Pruned" line); unset says "pruned after 5 newer ones". Both `backup_retention_note` and `prune_old_backups` read one helper, `backup_keep_count` |
+| TC-7.14 | UC-5-EC3 | STATIC | `SDLC_KEEP_BACKUPS` set to `00`, `000`, or a 20-digit number, with two old `backup-YYYYMMDD-HHMMSS` dirs seeded and a hand-made `rules/topic-closure.md` forcing a new backup; also unset (default 5) (security MEDIUM-1, MEDIUM-7) | Notice says "never pruned" for `00`/`000`/overflow and no backup is deleted (seeded two plus the run's own all survive, no "Pruned" line); unset says "pruned after 5 newer ones". Both `backup_retention_note` and `prune_old_backups` read one helper, `backup_keep_count`. Note: a zero-padded value of 5 or more digits (`00005`) also means never prune, by the at-most-4-digits rule (length is checked before base-10 normalising) |
 
 ## 8. Session-Start Drift Check (STATIC, `tests/hooks/test-session-start-spine.js`)
 
@@ -325,6 +325,7 @@ Run after the release commit is pushed to `main`. Record the command output in t
 | UC-5-E3 | TC-7.7 |
 | UC-5-EC1 | TC-7.3 |
 | UC-5-EC2 | TC-3.1, TC-3.2, TC-7.3, TC-12.5 |
+| UC-5-EC3 | TC-7.14 |
 | UC-6 | TC-8.1 |
 | UC-6-A1 | TC-8.2 |
 | UC-6-A2 | TC-8.3 |

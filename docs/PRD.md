@@ -3056,7 +3056,7 @@ None.
 
 ## 17. Topic Closure — Prompted Decisions and a Finished Topic
 
-**Status:** [PLANNED]
+**Status:** [IMPLEMENTED]
 **Date:** 2026-10-22
 **Priority:** High
 **Related:** Section 16 (Run to Completion — unchanged; this section governs what happens at the END of a run and never adds a mid-plan stop); Section 15 (Parallel Feature Sessions — the worktree model whose cleanup this section completes, and whose out-of-scope line "automated worktree management" this section **explicitly supersedes for topic closure only**, see 17.9 item 7); Section 12 (Stale Project-Scope Plugin Install Detection) and Section 7 (Hook Infrastructure — the session-start drift check reused unchanged); `src/rules/error-recovery.md` Rule 4. Tracked upstream as Koroqe/claude-code-sdlc#11. The shipped rule references no user-level file (output-shaping and OPOS rules exist only on one machine and are not part of the plugin).

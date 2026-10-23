@@ -64,11 +64,11 @@ Exercised (criterion (a), tests that call the code and assert on output, with re
 
 Not exercised by anything:
 - The rule's behaviour inside a live model session: AskUserQuestion prompts, the fallback when the tool is unavailable, the unattended record-only path, the own-process-tree lsof claim, own-cwd removal, and the TC-11.10 launch-directory prompt. These are the 10 LIVE QA cases and the BEHAVIORAL TC-10.x rows. Four are deferred to Koroqe/claude-code-sdlc#12 by maintainer decision, and `docs/findings/topic-closure-live-checks.md` records no result for any of them. TC-11.10 needs a real interactive session. As instructed, these are carried in `human_verification_required` and not as gaps that automation could close.
-- The validator guards the presence of the instructing text (68 REQUIRED literals, FR-2.9 literals scoped to their paragraph), not compliance by the model.
+- The validator guards the presence of the instructing text (76 REQUIRED literals, FR-2.9 literals scoped to their paragraph), not compliance by the model.
 
 Process notes (not defects in the shipped code):
 - The scratchpad shows the Gate 3 auto-fix commit 7000e72 (rule v5 at 4,942 B against the DD-1b cap of 4,950, `## Release` push guard in `CLAUDE.md`, PRD amendment) followed by "Next: re-run Gates 2+3 over the fix commit". Whether that re-run has happened is not recorded. I read the post-fix tree: the validator `MAX_BYTES = 4950` and the rule text are consistent with it.
-- `docs/findings/topic-closure-live-checks.md:35` still says "within its 4,800 B cap", while the validator cap is now 4,950. This is a stale number in a docs file, not a wiring defect; the corrected cap is DD-1b in the PRD.
+- `docs/findings/topic-closure-live-checks.md:35` said "within its 4,800 B cap" while the validator cap is 4,950. This was a stale number in a docs file, not a wiring defect; it has since been corrected to 4,950 B (DD-1b in the PRD).
 
 ### Overall: PRESENT_BEHAVIOR_UNVERIFIED
 Levels 1-3 pass, no stubs or BLOCKER markers, and nothing is undeterminable. The delivery and drift paths are exercised by tests with recorded red phases. The rule's runtime behaviour in a live session (AC-9, AC-10 and the launch-directory prompt) has never been observed, and five items remain open (four deferred to #12 plus TC-11.10), so by the verdict table `VERIFIED` and `passed: true` are not available. `gaps` is intentionally empty: per the delegation these are human or later-run checks, not slices a replan should add.

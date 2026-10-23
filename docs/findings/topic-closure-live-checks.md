@@ -32,7 +32,7 @@ Each behaviour below fails closed today, so the risk is non-compliance by the mo
 - Caps: `--max-turns 8` and `--max-budget-usd 1` per run; at most 5 runs in total.
 - State the model used in the results.
 - Record results in this file. If a behaviour contradicts the rule, fix `src/rules/topic-closure.md`
-  within its 4,800 B cap; that also means re-mirroring the three seeded fixtures and re-pinning
+  within its 4,950 B cap; that also means re-mirroring the three seeded fixtures and re-pinning
   their counts.
 
 ## (a) Own process tree: `lsof -a -d cwd` versus the `ps` ancestor chain

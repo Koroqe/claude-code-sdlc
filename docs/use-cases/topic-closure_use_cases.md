@@ -52,7 +52,7 @@
 
 ### Alternative Flows
 - **UC-1-A1: more than 4 open items** — diverges at step 5. Orchestrator ranks by consequence, asks the 4 most consequential in the first call, acts on those answers, then asks the remainder in a following call (FR-2.3). Repeats until none remain; closure starts only after the last answer is acted on.
-- **UC-1-A2: a step only the user can take** (founder approval, credential, console click) — diverges at step 3. The step is still asked as a decision, with options such as "I'll do it now", "Remind me via an issue", "Skip" (FR-2.4). Selecting "Remind me via an issue" files the issue and records its link; "Skip" is recorded as a decision.
+- **UC-1-A2: a step only the user can take** (founder approval, credential, console click) — diverges at step 3. The step is still asked as a decision, with options such as "I'll do it now", "Remind me via an issue", "Skip" (FR-2.4). Selecting "Remind me via an issue" files the issue and records its link; "Skip" is recorded as a decision. The issue text is passed through files, never inline in the command: `gh issue create --title "$(cat <file>)" --body-file <file>`, because finding text can quote `$(...)` or backticks (FR-2.11).
 - **UC-1-A3: pure information needing no decision** (e.g. an unrelated failure already filed) — diverges at step 1. No question is created; the item appears as one line in the closing summary, or not at all (FR-2.5). If this leaves zero decisions, no `AskUserQuestion` call is made (see UC-1-EC1).
 - **UC-1-A4: non-compressible content among the items** — diverges at step 2. A blocker, failure, or bad news is given in full: in the question text, in option descriptions, or in the summary printed immediately before the prompt; never summarized, never capped, never moved to a trailing list (FR-2.6).
 
@@ -160,7 +160,7 @@
 ### Primary Flow (Happy Path)
 1. Orchestrator confirms C0, then runs `git fetch origin <base>` and verifies C1: for each topic branch `git merge-base --is-ancestor <branch> origin/<base>` succeeds.
 2. Verifies C2: `git status --short` is empty; `git status --short --ignored` lists only regenerable output; `git log <branch> --not --remotes` shows no unique commit.
-3. Verifies C3: `lsof -a -d cwd` shows no process inside the worktree; this session created the worktree.
+3. Verifies C3: `lsof -a -d cwd` shows no process inside the worktree (compared against the resolved `pwd -P` path); this session created the worktree, proven by a durable record of its path in an untracked `.claude/tmp/` file (not a symlink), never by a branch name (FR-3.4).
 4. Leaves the worktree (no shell or process of its own stays in it).
 5. Runs `git worktree remove <path>` (never `--force`); it succeeds.
 6. Runs `git worktree prune`.
@@ -247,6 +247,7 @@ All closure errors are never forced; each becomes a decision prompt in an intera
 ### Edge Cases
 - **UC-5-EC1**: a developer's local edits to the installed copy are overwritten on the next run (accepted: file is installer-owned); the previous content is recoverable from `backup-*/rules/`.
 - **UC-5-EC2**: the transition — the hand-made `~/.claude/rules/topic-closure.md` is overwritten (backed up first) once the installer owns it; no duplicate copy remains. Its maintenance note says to delete the hand-made file once the plugin ships the rule, which the overwrite accomplishes.
+- **UC-5-EC3**: backup retention. The overwrite in UC-5-A1 creates a `backup-YYYYMMDD-HHMMSS` directory, and old ones are pruned after `SDLC_KEEP_BACKUPS` (default 5) newer ones. One helper, `backup_keep_count`, serves both the pruner and the "replacing a file this installer did not place" notice, so the notice never promises a backup that pruning deleted. Digits only, at most 4 digits, normalised with base 10: `0`, `00` or `000` means never prune (opt-out); a non-numeric or over-long value (including a zero-padded one of 5 or more digits such as `00005`, rejected by the length rule before normalising) also means never prune. The backup just created is never deleted (FR-5.6, MEDIUM-1).
 
 ### Data Requirements
 - **Input**: manifest, rule source, target HOME
@@ -392,4 +393,4 @@ A content test must assert that the rule text states: every check C1 to C4 (incl
 | Primary | 9 (UC-1 to UC-9) |
 | Alternative | 30 (UC-1: 4, UC-2: 4, UC-3: 2, UC-4: 9, UC-5: 4, UC-6: 3, UC-7: 2, UC-8: 1, UC-9: 1) |
 | Error | 32 (UC-1: 4, UC-2: 2, UC-3: 1, UC-4: 15, UC-5: 3, UC-6: 2, UC-7: 1, UC-8: 2, UC-9: 2) |
-| Edge | 28 (UC-1: 4, UC-2: 3, UC-3: 2, UC-4: 11, UC-5: 2, UC-6: 2, UC-7: 1, UC-8: 1, UC-9: 2) |
+| Edge | 29 (UC-1: 4, UC-2: 3, UC-3: 2, UC-4: 11, UC-5: 3, UC-6: 2, UC-7: 1, UC-8: 1, UC-9: 2) |
