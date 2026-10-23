@@ -117,3 +117,13 @@ Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
 Last confirmed at: 4
 Retires at: 14
+
+### run-multiline-ci-steps-by-hand
+Confidence: 0.3
+Category: security
+Pattern: .github/workflows/ci.yml
+Rule: WHEN a change touches a file that a multi-line run step in ci.yml checks, run that step body by hand with bash -c — ci-parity.js runs only single node lines, so a local green sweep skips it
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: topic-closure)
+Last confirmed at: 4
+Retires at: 14
