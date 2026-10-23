@@ -14,6 +14,10 @@
  *           problem, then the validator stops).
  *   FR-5.2  manifests/owned-files.txt lists `rules/topic-closure.md` under
  *           `owns` — not `legacy`, which would REMOVE it on install.
+ *   FR-5.4  the four pointer files (src/claude.md, skills/merge-ready,
+ *           skills/develop-feature, src/rules/error-recovery.md) carry their
+ *           pointer / Rule 4 wording, restate no substance, and the two skills
+ *           list AskUserQuestion in `allowed-tools`. FR-2.8 for the Rule 4 text.
  *   FR-5.8(b) the rule carries no maintainer-environment literal. The shipped
  *           file is generic; those literals belong to the author's own setup.
  *           One problem per occurrence. (`/Users/` is left to
@@ -27,6 +31,20 @@ const core = require('./lib/validate-core.js');
 const RULE = 'src/rules/topic-closure.md';
 const MANIFEST = 'manifests/owned-files.txt';
 const OWNED_ENTRY = 'rules/topic-closure.md';
+const POINTER = 'rules/topic-closure.md';
+
+const CLAUDE_MD = 'src/claude.md';
+const MERGE_READY = 'skills/merge-ready/SKILL.md';
+const DEVELOP_FEATURE = 'skills/develop-feature/SKILL.md';
+const ERROR_RECOVERY = 'src/rules/error-recovery.md';
+const POINTER_FILES = [CLAUDE_MD, MERGE_READY, DEVELOP_FEATURE, ERROR_RECOVERY];
+
+const RULE4_LITERALS = [
+  'record it first, then ask with AskUserQuestion',
+  'in an interactive session',
+  'record only',
+];
+const SUBSTANCE = ['lsof', 'rm -rf', 'branch -D'];
 
 const FORBIDDEN = [
   'this Mac',
@@ -145,16 +163,48 @@ function ownsEntries(text) {
   return out;
 }
 
+/** Lines after the first line matching `startRe`, up to (excluding) the next line matching `endRe`, or EOF. */
+function section(text, startRe, endRe) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((l) => startRe.test(l));
+  if (start === -1) return [];
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (endRe.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start + 1, end);
+}
+
+/** The `**Action:**` paragraph under `### Rule 4` (to the next blank line). */
+function rule4Action(text) {
+  const body = section(text, /^### Rule 4\b/, /^### /);
+  const i = body.findIndex((l) => l.indexOf('**Action:**') === 0);
+  if (i === -1) return '';
+  let j = i;
+  while (j < body.length && body[j].trim() !== '') j++;
+  return body.slice(i, j).join('\n');
+}
+
+function allowedTools(text) {
+  const m = /^allowed-tools:(.*)$/m.exec(text);
+  return m ? m[1] : '';
+}
+
 core.run('validate-topic-closure', (v, args) => {
   const root = args.root;
   const rule = tryRead(root, RULE);
   const manifest = tryRead(root, MANIFEST);
 
-  const present = (rule !== null ? 1 : 0) + (manifest !== null ? 1 : 0);
-  const missing = [RULE, MANIFEST].filter((rel, i) => (i === 0 ? rule : manifest) === null);
-  const desc = 'topic-closure source files (' + RULE + ' and ' + MANIFEST + ')' +
+  const pointers = {};
+  for (const rel of POINTER_FILES) pointers[rel] = tryRead(root, rel);
+
+  const sources = [RULE, MANIFEST].concat(POINTER_FILES);
+  const contents = [rule, manifest].concat(POINTER_FILES.map((r) => pointers[r]));
+  const present = contents.filter((c) => c !== null).length;
+  const missing = sources.filter((rel, i) => contents[i] === null);
+  const desc = 'topic-closure source files (' + sources.join(', ') + ')' +
     (missing.length ? ' — ' + missing.map((m) => 'missing: ' + m).join(', ') : '');
-  const minimum = args.min === null ? 2 : args.min;
+  const minimum = args.min === null ? 6 : args.min;
   if (!v.requireMinimum(present, minimum, desc)) return;
 
   if (rule !== null && rule.trim() === '') {
@@ -189,6 +239,56 @@ core.run('validate-topic-closure', (v, args) => {
         v.error(RULE, r.fr + ': required literal missing' +
           (FR29_SCOPED.indexOf(r.literal) !== -1 ? ' from the FR-2.9 paragraph' : '') + ': "' + r.literal + '"');
       }
+    }
+  }
+
+  // FR-5.4: the four pointers.
+  const cm = pointers[CLAUDE_MD];
+  if (cm !== null) {
+    const bullets = section(cm, /^### Run to Completion\b/, /^### /)
+      .filter((l) => /^\s*[-*]\s/.test(l) && l.indexOf(POINTER) !== -1);
+    if (bullets.length !== 1) {
+      v.error(CLAUDE_MD, 'FR-5.4: expected exactly one bullet containing ' + POINTER +
+        ' inside `### Run to Completion`, found ' + bullets.length);
+    }
+  }
+  const mr = pointers[MERGE_READY];
+  if (mr !== null) {
+    const hit = section(mr, /^## Finalization: Release\b/, /^## /).some((l) => l.indexOf(POINTER) !== -1);
+    if (!hit) v.error(MERGE_READY, 'FR-5.4: no line containing ' + POINTER + ' inside `## Finalization: Release`');
+  }
+  const df = pointers[DEVELOP_FEATURE];
+  if (df !== null) {
+    const line = df.split(/\r?\n/).find((l) => l.indexOf('Output final MERGE READY / NOT MERGE READY verdict') !== -1);
+    if (line === undefined || line.indexOf(POINTER) === -1) {
+      v.error(DEVELOP_FEATURE, 'FR-5.4: the `Output final MERGE READY / NOT MERGE READY verdict` line does not contain ' + POINTER);
+    }
+  }
+  const er = pointers[ERROR_RECOVERY];
+  if (er !== null) {
+    const action = rule4Action(er);
+    for (const lit of RULE4_LITERALS) {
+      if (action.indexOf(lit) === -1) {
+        v.error(ERROR_RECOVERY, 'FR-2.8: Rule 4 **Action:** paragraph missing: "' + lit + '"');
+      }
+    }
+  }
+  for (const rel of POINTER_FILES) {
+    const t = pointers[rel];
+    if (t === null) continue;
+    for (const l of t.split(/\r?\n/)) {
+      if (l.indexOf('topic-closure.md') === -1) continue;
+      for (const bad of SUBSTANCE) {
+        if (l.indexOf(bad) !== -1) {
+          v.error(rel, 'FR-5.4: a pointer line restates substance ("' + bad + '"); point at the rule, do not copy it');
+        }
+      }
+    }
+  }
+  for (const rel of [MERGE_READY, DEVELOP_FEATURE]) {
+    const t = pointers[rel];
+    if (t !== null && allowedTools(t).indexOf('AskUserQuestion') === -1) {
+      v.error(rel, 'FR-5.4: frontmatter `allowed-tools` does not include AskUserQuestion');
     }
   }
 

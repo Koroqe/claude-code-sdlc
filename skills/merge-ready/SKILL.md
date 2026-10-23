@@ -2,7 +2,7 @@
 description: Run all quality gates before merge — git hygiene, documentation completeness, code review, security audit, build, E2E, goal-backward verification, doc accuracy and UI/UX — then write the changelog entry.
 argument-hint: "[gate name to rerun]"
 arguments: [gate]
-allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite, AskUserQuestion
 ---
 
 # Command: Merge Ready
@@ -654,3 +654,5 @@ finished.
 failure here is a **WARNING** and does NOT fail the merge; the result remains MERGE READY. But the
 report MUST name what did not ship and the exact command a human needs to run to finish it. A release
 step that fails quietly is worse than one that never ran, because the merge report reads as complete.
+
+**Then close the topic** (`rules/topic-closure.md`): open items, including anything that did not ship, become decision prompts, never a trailing list.

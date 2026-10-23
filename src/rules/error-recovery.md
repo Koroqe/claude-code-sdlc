@@ -52,7 +52,7 @@ Architectural decisions, new dependencies, API contract changes, or schema migra
 - Fix requires restructuring module boundaries or moving files across layers
 - Fix requires choosing between multiple valid architectural approaches
 
-**Action:** Stop implementation. Write the decision under `## Blockers` in `.claude/scratchpad.md` and set `## Status: blocked`, then present to user: what decision is needed, what the options are, and the tradeoffs of each. This counts against retry budget.
+**Action:** Stop implementation. Write the decision under `## Blockers` in `.claude/scratchpad.md` and set `## Status: blocked` — in an interactive session, record it first, then ask with AskUserQuestion (unattended runs and subagents: record only): what decision is needed, what the options are, and the tradeoffs of each. This counts against retry budget.
 
 **A recorded blocker is the only legitimate mid-plan stop.** `stop:gate-evidence` refuses to let a turn end while the scratchpad shows pending slices (or unfinished gates) and no blocker — so every stop in this file goes through `## Blockers` + `## Status: blocked` first.
 

@@ -133,6 +133,7 @@ Plan approval — or an instruction like "work autonomously" / "finish the plan"
 - Never end a turn between slices or before `/merge-ready`'s verdict to ask "continue?" / "shall I proceed?". A per-slice report is a log line, not a hand-off.
 - A dependency, migration or contract change the approved plan already specifies is not a Rule 4 stop (`error-recovery.md`).
 - The only legitimate mid-plan stop: write the blocker under `## Blockers`, set `## Status: blocked` (`paused` if the user asked to pause), then report. `stop:gate-evidence` refuses any other mid-plan stop and names the next slice.
+- After `/merge-ready`'s verdict and Release step, close the topic: open items become decision prompts, never a trailing list (`rules/topic-closure.md`).
 
 ### Pipeline Commands
 - `/develop-feature` — Full autonomous pipeline (steps 1-3 above)

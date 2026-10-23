@@ -2,7 +2,7 @@
 description: Autonomously implement a complete feature from request to merge-ready — documentation phase, wave-based TDD implementation, then all quality gates, without stopping for human input.
 argument-hint: "<feature description>"
 arguments: [feature]
-allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash, Agent, TodoWrite, AskUserQuestion
 ---
 
 # Command: Develop Feature
@@ -237,7 +237,7 @@ Follow the `/merge-ready` workflow to run all quality gates.
 - **Changelog**: the single `CHANGELOG.md` entry for the feature is written here by merge-ready — NOT by any individual slice. Each slice ran under the `no-changelog` suppression flag, so merge-ready is the sole owner of the feature changelog entry.
 - If any gate FAILS: the main agent reads the gate's output and fixes the issues directly, then reruns only the failed gate(s) — **except** that any fix which produced a commit invalidates the earlier Gate 2 and Gate 3 passes, so those two re-run over the new commits. This is what stops Gate 6's `--gaps` replan loop from committing code that no reviewer ever inspects.
 - Repeat until all gates pass OR 3 fix attempts exhausted per gate
-- Output final MERGE READY / NOT MERGE READY verdict
+- Output final MERGE READY / NOT MERGE READY verdict, then close the topic per `rules/topic-closure.md`
 
 ## Rules
 
