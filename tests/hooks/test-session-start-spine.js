@@ -1441,25 +1441,35 @@ c.contains('TC-8.1: a missing rules/topic-closure.md is named as drift', ctx(r),
 rimraf(home);
 
 // --- TC-8.9: a manifest-only addition is covered, in a self-contained root ---
-// run-hook.js ignores a handlers dir outside the plugin root, so the temp root
+// run-hook.js ignores a handlers dir outside the plugin root, so a temp root
 // carries its own copy of hooks/, src/ and manifests/.
-{
-  const tr = path.join(scratch, 'plugin-root');
+function pluginRootCopy(name, mutate) {
+  const tr = path.join(scratch, name);
   fs.cpSync(path.join(REPO_ROOT, 'hooks'), path.join(tr, 'hooks'), { recursive: true });
   fs.cpSync(path.join(REPO_ROOT, 'src'), path.join(tr, 'src'), { recursive: true });
   fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(tr, 'manifests'), { recursive: true });
-  const mf = path.join(tr, 'manifests', 'owned-files.txt');
-  fs.writeFileSync(mf, fs.readFileSync(mf, 'utf8').replace(/^owns\n/m, 'owns\nrules/zz-throwaway.md\n'));
-  fs.writeFileSync(path.join(tr, 'src', 'rules', 'zz-throwaway.md'), 'throwaway\n');
-  const tOwned = ownedFromManifest(mf);
-  const tHandlers = path.join(tr, 'hooks', 'handlers');
-  function tempHome(mutate) {
-    const h = tempDir('sdlc-home-');
-    fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
-    for (const rel of tOwned) fs.copyFileSync(path.join(tr, 'src', rel), path.join(h, '.claude', rel));
-    if (mutate) mutate(path.join(h, '.claude'));
-    return h;
+  if (mutate) mutate(tr);
+  return tr;
+}
+/** A HOME whose memory layer mirrors a plugin root's owned files that exist in its src/. */
+function layerFor(tr, mutate) {
+  const h = tempDir('sdlc-home-');
+  fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
+  for (const rel of ownedFromManifest(path.join(tr, 'manifests', 'owned-files.txt'))) {
+    const from = path.join(tr, 'src', rel);
+    if (fs.existsSync(from)) fs.copyFileSync(from, path.join(h, '.claude', rel));
   }
+  if (mutate) mutate(path.join(h, '.claude'));
+  return h;
+}
+{
+  const tr = pluginRootCopy('plugin-root', function (root) {
+    const mf = path.join(root, 'manifests', 'owned-files.txt');
+    fs.writeFileSync(mf, fs.readFileSync(mf, 'utf8').replace(/^owns\n/m, 'owns\nrules/zz-throwaway.md\n'));
+    fs.writeFileSync(path.join(root, 'src', 'rules', 'zz-throwaway.md'), 'throwaway\n');
+  });
+  const tHandlers = path.join(tr, 'hooks', 'handlers');
+  const tempHome = function (mutate) { return layerFor(tr, mutate); };
   const tenv = function (h) { return { HOME: h, CLAUDE_PLUGIN_ROOT: tr }; };
 
   home = tempHome(function (d) { fs.unlinkSync(path.join(d, 'rules', 'zz-throwaway.md')); });
@@ -1538,24 +1548,6 @@ rimraf(home);
   // TC-8.6: a plugin root that does not ship the rule is silent. Its positive
   // control is a SEPARATE root: in the same root the missing shipped file (last
   // in owns order) makes driftLine return '' and would silence the control too.
-  function pluginRootCopy(name, mutate) {
-    const tr = path.join(scratch, name);
-    fs.cpSync(path.join(REPO_ROOT, 'hooks'), path.join(tr, 'hooks'), { recursive: true });
-    fs.cpSync(path.join(REPO_ROOT, 'src'), path.join(tr, 'src'), { recursive: true });
-    fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(tr, 'manifests'), { recursive: true });
-    if (mutate) mutate(tr);
-    return tr;
-  }
-  function layerFor(tr, mutate) {
-    const h = tempDir('sdlc-home-');
-    fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
-    for (const rel of ownedFromManifest(path.join(tr, 'manifests', 'owned-files.txt'))) {
-      const from = path.join(tr, 'src', rel);
-      if (fs.existsSync(from)) fs.copyFileSync(from, path.join(h, '.claude', rel));
-    }
-    if (mutate) mutate(path.join(h, '.claude'));
-    return h;
-  }
   {
     const noRule = pluginRootCopy('plugin-root-norule', function (tr) {
       fs.rmSync(path.join(tr, 'src', 'rules', 'topic-closure.md'), { force: true });

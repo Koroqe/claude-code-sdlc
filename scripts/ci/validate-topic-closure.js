@@ -30,7 +30,6 @@ const core = require('./lib/validate-core.js');
 
 const RULE = 'src/rules/topic-closure.md';
 const MANIFEST = 'manifests/owned-files.txt';
-const OWNED_ENTRY = 'rules/topic-closure.md';
 const POINTER = 'rules/topic-closure.md';
 
 const CLAUDE_MD = 'src/claude.md';
@@ -212,8 +211,8 @@ core.run('validate-topic-closure', (v, args) => {
     return;
   }
 
-  if (manifest !== null && ownsEntries(manifest).indexOf(OWNED_ENTRY) === -1) {
-    v.error(MANIFEST, 'FR-5.2: ' + OWNED_ENTRY + ' is not listed under `owns` — the installer would never deliver it');
+  if (manifest !== null && ownsEntries(manifest).indexOf(POINTER) === -1) {
+    v.error(MANIFEST, 'FR-5.2: ' + POINTER + ' is not listed under `owns` — the installer would never deliver it');
   }
 
   if (rule !== null) {
@@ -226,9 +225,7 @@ core.run('validate-topic-closure', (v, args) => {
         from = i + lit.length;
       }
     }
-  }
 
-  if (rule !== null) {
     if (Buffer.byteLength(rule, 'utf8') > MAX_BYTES) {
       v.error(RULE, 'FR-5.1: ' + RULE + ' is ' + Buffer.byteLength(rule, 'utf8') + ' B, over the ' + MAX_BYTES + ' B cap');
     }
