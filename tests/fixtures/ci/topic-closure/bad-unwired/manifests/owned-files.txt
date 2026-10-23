@@ -1,0 +1,57 @@
+# claude-code-sdlc — installer file manifest
+#
+# Every path is RELATIVE to ~/.claude. Absolute paths, `..` segments, and
+# anything outside the allowlisted structure are rejected by install.sh before
+# any file is touched. Blank lines and lines whose first character is `#` are
+# ignored.
+#
+# Two sections:
+#
+#   owns    — the files this version of install.sh places in ~/.claude.
+#             These are refreshed on install and removed on --uninstall.
+#
+#   legacy  — paths installed by EARLIER versions that this version retires.
+#             These are removed on upgrade and on --uninstall, and never
+#             written. Retired paths must stay listed here permanently:
+#             forgetting one leaves a stale file that silently shadows its
+#             replacement.
+#
+# This manifest never lists a file the harness did not install. Removal is
+# scoped to these entries only — never a glob — which is what guarantees a
+# user's own agents in ~/.claude/agents/ survive every install and uninstall.
+
+owns
+claude.md
+rules/changelog.md
+rules/error-recovery.md
+rules/git.md
+rules/scratchpad.md
+rules/tool-limitations.md
+
+legacy
+# v3.1 installed the 13 agents to ~/.claude/agents/. v4.0 ships them in the
+# plugin instead. User-level agents take precedence over plugin agents AND
+# plugin subagents are not namespaced, so any surviving copy here would
+# permanently shadow its plugin replacement — every future agent update would
+# silently do nothing while /agents still listed 13 healthy agents.
+agents/architect.md
+agents/ba-analyst.md
+agents/build-runner.md
+agents/code-reviewer.md
+agents/doc-updater.md
+agents/e2e-runner.md
+agents/planner.md
+agents/prd-writer.md
+agents/qa-planner.md
+agents/refactor-cleaner.md
+agents/security-auditor.md
+agents/test-writer.md
+agents/verifier.md
+# v3.1 installed the 5 pipeline commands to ~/.claude/commands/. v4.0 ships
+# them as plugin skills. A surviving copy here would resolve ahead of the
+# plugin skill, running last year's prompt under this year's name.
+commands/bootstrap-feature.md
+commands/context-refresh.md
+commands/develop-feature.md
+commands/implement-slice.md
+commands/merge-ready.md

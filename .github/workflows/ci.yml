@@ -486,6 +486,41 @@ jobs:
       - name: Anti-vacuity — triage-parity validator fails on an empty tree
         run: node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
+      # topic-closure validator: one seeded fixture per arm. Each is a complete
+      # passing mirror of every file the validator opens except its single
+      # defect, so the pinned count proves THAT arm fired and nothing else did.
+      - name: Falsify — topic-closure validator catches a deleted FR-2.9 fallback paragraph
+        run: node scripts/ci/validate-topic-closure.js --root tests/fixtures/ci/topic-closure/bad-missing-fallback --min 1 --expect-failure "FR-2.9" --expect-problems 4
+
+      - name: Falsify — topic-closure validator catches an unwired rule
+        run: node scripts/ci/validate-topic-closure.js --root tests/fixtures/ci/topic-closure/bad-unwired --min 1 --expect-failure "FR-5.2" --expect-problems 2
+
+      - name: Falsify — topic-closure validator catches a maintainer-environment literal
+        run: node scripts/ci/validate-topic-closure.js --root tests/fixtures/ci/topic-closure/bad-forbidden-literal --min 1 --expect-failure "FR-5.8(b)" --expect-problems 2
+
+      # Throwaway copies of the six real files, because the assertions are about
+      # a real tree losing or emptying its rule, which no committed fixture can
+      # express without duplicating the whole set a fourth time.
+      - name: Falsify — topic-closure validator catches a deleted rule file
+        run: |
+          T="$(mktemp -d)"
+          for f in src/rules/topic-closure.md manifests/owned-files.txt src/claude.md src/rules/error-recovery.md skills/merge-ready/SKILL.md skills/develop-feature/SKILL.md; do
+            mkdir -p "$T/$(dirname "$f")"
+            cp "$f" "$T/$f"
+          done
+          rm "$T/src/rules/topic-closure.md"
+          node scripts/ci/validate-topic-closure.js --root "$T" --expect-failure "missing: src/rules/topic-closure.md" --expect-problems 1
+
+      - name: Falsify — topic-closure validator catches an empty rule file
+        run: |
+          T="$(mktemp -d)"
+          for f in src/rules/topic-closure.md manifests/owned-files.txt src/claude.md src/rules/error-recovery.md skills/merge-ready/SKILL.md skills/develop-feature/SKILL.md; do
+            mkdir -p "$T/$(dirname "$f")"
+            cp "$f" "$T/$f"
+          done
+          : > "$T/src/rules/topic-closure.md"
+          node scripts/ci/validate-topic-closure.js --root "$T" --expect-failure "is empty" --expect-problems 1
+
       - name: Anti-vacuity — topic-closure validator fails on an empty tree
         run: node scripts/ci/validate-topic-closure.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
