@@ -97,3 +97,13 @@ Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: stale-install-detection)
 Last confirmed at: 1
 Retires at: 11
+
+### red-tests-fail-on-assertions-not-crashes
+Confidence: 0.3
+Category: general
+Pattern: tests/hooks/*.js
+Rule: WHEN a RED test removes or reads a fixture that may not exist yet, guard it so the test fails on its assertion instead of crashing — a crash is not red-phase evidence
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: topic-closure)
+Last confirmed at: 4
+Retires at: 14
