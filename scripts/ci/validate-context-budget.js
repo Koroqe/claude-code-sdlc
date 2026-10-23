@@ -74,6 +74,13 @@ const CEILINGS = {
   // content cut or an unplanned validator edit. Overrunning 14,000 is a
   // FAILED slice, never a further raise.
   'agents/design-reviewer.md': 14000,
+  // PRD §17 FR-5.7. The shipped rule is capped at 4,800 B by FR-5.1 (Design
+  // Decision 1a); 5,000 leaves a little slack above that cap. Memory-layer
+  // files load into every session, so their cost is paid on every turn.
+  'src/rules/topic-closure.md': 5000,
+  // PRD §17 FR-5.7. Loads every session like the rules do; measured 22,987 B
+  // when set, so 23,500 leaves ~513 B for the topic-closure pointer.
+  'src/claude.md': 23500,
 };
 // Every other agent: none is near this today (next largest is debugger at ~9.1k).
 const DEFAULT_AGENT_CEILING = 12000;

@@ -5,7 +5,7 @@
  * The context budget must FAIL on an over-ceiling tree, pinned to an exact
  * problem count — the same anti-vacuity discipline every validator here carries.
  * Trees are built in a temp dir rather than committed as a fixture: the budget
- * scores 22 components, and a committed fixture would mean 22 stub files whose
+ * scores 24 components, and a committed fixture would mean 24 stub files whose
  * only job is to be the right size.
  */
 
@@ -71,6 +71,21 @@ const threeOver = buildTree({
 equal('SEEDED BROKEN — three oversized components are exactly 3 problems',
   scoreTree(threeOver).problems.length, 3);
 
+// --- memory-layer files carry byte ceilings (PRD §17 FR-5.7) --------------
+equal('the topic-closure rule ceiling is 5000', CEILINGS['src/rules/topic-closure.md'], 5000);
+equal('the memory-layer claude.md ceiling is 23500', CEILINGS['src/claude.md'], 23500);
+const ruleOver = buildTree({ 'src/rules/topic-closure.md': 5001 });
+const ruleRes = scoreTree(ruleOver);
+equal('SEEDED BROKEN — rule one byte over 5000 is exactly 1 problem', ruleRes.problems.length, 1);
+ok('the rule problem names the file and its 5000 ceiling',
+  !!ruleRes.problems[0] && ruleRes.problems[0].indexOf('src/rules/topic-closure.md') !== -1 &&
+  ruleRes.problems[0].indexOf('5000') !== -1);
+const claudeOver = buildTree({ 'src/claude.md': 23501 });
+const claudeRes = scoreTree(claudeOver);
+equal('SEEDED BROKEN — claude.md one byte over 23500 is exactly 1 problem', claudeRes.problems.length, 1);
+ok('the claude.md problem names the 23500 ceiling',
+  !!claudeRes.problems[0] && claudeRes.problems[0].indexOf('23500') !== -1);
+
 // --- an unscored agent is caught by the DEFAULT ceiling, not ignored ------
 const bigNewAgent = buildTree({ 'agents/build-runner.md': DEFAULT_AGENT_CEILING + 1 });
 equal('an agent with no explicit ceiling is still bounded by the default',
@@ -90,7 +105,7 @@ equal('the shipped tree is within its own context budget', realRes.problems.leng
 ok('the shipped tree scores implement-slice as a per-slice cost',
   realRes.rows.some((r) => r.rel === 'skills/implement-slice/SKILL.md' && r.times > 1));
 
-for (const d of [good, oneOver, threeOver, bigNewAgent, empty]) {
+for (const d of [good, oneOver, threeOver, bigNewAgent, empty, ruleOver, claudeOver]) {
   try { fs.rmSync(d, { recursive: true, force: true }); } catch (err) { /* best effort */ }
 }
 
@@ -98,4 +113,4 @@ if (failures) {
   process.stdout.write('FAIL context budget guard — ' + failures + ' problem(s)\n');
   process.exit(1);
 }
-process.stdout.write('PASS context budget guard — 12 check(s)\n');
+process.stdout.write('PASS context budget guard — 18 check(s)\n');
