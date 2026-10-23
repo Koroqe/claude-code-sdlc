@@ -112,7 +112,7 @@ Retires at: 14
 Confidence: 0.3
 Category: general
 Pattern: scripts/ci/validate-*.js
-Rule: WHEN a validator tags each problem with a requirement id, take every tag from the PRD's own FR headings, never from a plan summary — a mis-tagged id silently breaks fixture expectations matched on that id
+Rule: WHEN a validator tags problems with requirement ids, take each tag from the PRD FR headings, never a plan summary — a wrong tag breaks fixtures matched on it
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
 Last confirmed at: 4
