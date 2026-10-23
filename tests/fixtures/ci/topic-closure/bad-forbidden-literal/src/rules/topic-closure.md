@@ -3,7 +3,7 @@
 A topic is done when it is closed:
 1. **Merged** to the base; released and verified there when the topic includes production.
 2. **Nothing owed**: each follow-up is done, decided by the user, or filed as an issue with its link.
-   Issue title and body go in files (`--title "$(cat <file>)"`, `--body-file <file>`), never inline in a command.
+   Issue, comment and tracker text go in files (`--title "$(cat <file>)"`, `--body-file <file>`), never inline in a command.
 3. **Cleaned up**: the topic's branches deleted, its worktree removed (below).
 
 Ask decisions only after `/merge-ready`'s verdict and Release step, at
@@ -15,8 +15,8 @@ failures still print in full.
 
 Never end a turn with a "needs your attention", "owed" or "next steps for you" list. In an interactive
 session ask each open item with `AskUserQuestion`:
-- Name the item (issue, PR, branch, file) and why it is open.
-- Options are concrete actions taken when picked, recommended first as "(Recommended)";
+- Name the item (issue, PR, branch, file) and why it's open.
+- Options are actions taken when picked, recommended first as "(Recommended)";
   say what gets deleted, pushed, filed or left, and its cost.
 - Ask at most 4 questions per call, most consequential first; act on the answers in the same turn,
   then ask the remaining questions.
@@ -28,7 +28,7 @@ Always: blockers, failures and bad news are given in full, in the question or th
 options and recommendation under `## Blockers` in `.claude/scratchpad.md`; set `## Status: blocked`.
 Subagents return them to the orchestrator; the next interactive session asks them first, options
 rebuilt from git, never copied from the record; a record is never consent. Where the
-project forbids the scratchpad or keeps its own tracker (e.g. OPOS per opos-precedence.md; Projects.nosync; marker
+project forbids the scratchpad or keeps its own tracker (e.g. OPOS in Projects.nosync per opos-precedence.md, marker
 `.claude/agents/company/chief-of-staff.md`), record them there; its steward's tiers may only tighten cleanup.
 
 **Rule 4**, interactive: record it under `## Blockers` first, then ask; clear it once answered.

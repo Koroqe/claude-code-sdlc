@@ -126,6 +126,7 @@ const REQUIRED = [
   { fr: "FR-2.7", literal: "rebuilt from git, never copied from the record" },
   { fr: "FR-2.11", literal: "--body-file" },
   { fr: "FR-2.11", literal: "never inline in a command" },
+  { fr: "FR-2.11", literal: "comment and tracker text" },
   { fr: "FR-3.3", literal: "only build output, dependencies or the" },
   { fr: "FR-2.10", literal: "no `+` refspec" },
   { fr: "FR-3.4", literal: ".claude/tmp/" },

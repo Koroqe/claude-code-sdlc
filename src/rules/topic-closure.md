@@ -3,7 +3,7 @@
 A topic is done when it is closed:
 1. **Merged** to the base; released and verified there when the topic includes production.
 2. **Nothing owed**: each follow-up is done, decided by the user, or filed as an issue with its link.
-   Issue title and body go in files (`--title "$(cat <file>)"`, `--body-file <file>`), never inline in a command.
+   Issue, comment and tracker text go in files (`--title "$(cat <file>)"`, `--body-file <file>`), never inline in a command.
 3. **Cleaned up**: the topic's branches deleted, its worktree removed (below).
 
 Ask decisions only after `/merge-ready`'s verdict and Release step, at
@@ -15,8 +15,8 @@ failures still print in full.
 
 Never end a turn with a "needs your attention", "owed" or "next steps for you" list. In an interactive
 session ask each open item with `AskUserQuestion`:
-- Name the item (issue, PR, branch, file) and why it is open.
-- Options are concrete actions taken when picked, recommended first as "(Recommended)";
+- Name the item (issue, PR, branch, file) and why it's open.
+- Options are actions taken when picked, recommended first as "(Recommended)";
   say what gets deleted, pushed, filed or left, and its cost.
 - Ask at most 4 questions per call, most consequential first; act on the answers in the same turn,
   then ask the remaining questions.

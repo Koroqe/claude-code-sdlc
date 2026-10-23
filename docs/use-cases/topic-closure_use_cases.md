@@ -23,10 +23,11 @@
 **Reference: closure checks (referenced by UC-4, not restated)**
 - **C0 (gate)**: closure removal runs only in an interactive session, only with `## Blockers` empty and no pending decision (decisions live in the gitignored scratchpad, which removal would erase).
 - **C1 (on base)**: `git fetch origin <base>` first; then each topic branch is an ancestor of `origin/<base>` (`git merge-base --is-ancestor`), or content reached base via a named release/cherry-pick commit with the tree comparison stated (FR-3.2).
-- **C2 (nothing lost)**: `git status --short` empty in the worktree; `git status --short --ignored` lists nothing that cannot be regenerated (build output is fine); `git log <branch> --not --remotes` shows no commit on neither base nor a remote (FR-3.3).
+- **C2 (nothing lost)**: `git status --short` empty in the worktree; `git status --short --ignored` lists nothing that cannot be regenerated (build output is fine); `git log <branch> --not --remotes` shows no commit on neither base nor a remote, and `git log HEAD --not --remotes` is also empty (FR-3.3).
+- **C-safe (verbatim names, FR-3.10)**: paths and branch names are taken verbatim from git output and quoted in every command; a name containing a quote, `$`, a backtick or a newline is asked about rather than run.
 - **C3 (nobody else)**: `lsof -a -d cwd` shows no process inside (`lsof` unavailable = check failed); the session created the worktree or was asked to finish it; it is not this session's own launch directory (else UC-4-A9); no worktree is removed on "merged upstream" alone (FR-3.4). `IN-USE-BY-CLAUDE-SESSION.txt` is a secondary signal only.
 - **C4 (branches)**: `-d` normally; `-D` only when `-d` refuses solely because HEAD is elsewhere and the C1 ancestor check is re-run immediately before `-D` and passes; never delete a branch with commits on no base without asking; remote-branch deletion is a prompt option only (FR-3.6).
-- **P (pushing)**: merging or pushing to the base and deleting a remote branch are prompt options only; run after the user picks them, with `SDLC_ALLOW_GIT_GUARD=1`; never in an unattended run. P governs only closure-time merges, pushes and remote-branch deletions: the push performed by a project's declared `## Release` procedure inside `/merge-ready` Finalization: Release is unchanged.
+- **P (pushing)**: merging or pushing to the base and deleting a remote branch are prompt options only; run after the user picks them, with `SDLC_ALLOW_GIT_GUARD=1`; never in an unattended run; closure-time pushes are never forced (no `--force`, no `+` refspec). P governs only closure-time merges, pushes and remote-branch deletions: the push performed by a project's declared `## Release` procedure inside `/merge-ready` Finalization: Release is unchanged.
 
 ---
 
@@ -52,7 +53,7 @@
 
 ### Alternative Flows
 - **UC-1-A1: more than 4 open items** — diverges at step 5. Orchestrator ranks by consequence, asks the 4 most consequential in the first call, acts on those answers, then asks the remainder in a following call (FR-2.3). Repeats until none remain; closure starts only after the last answer is acted on.
-- **UC-1-A2: a step only the user can take** (founder approval, credential, console click) — diverges at step 3. The step is still asked as a decision, with options such as "I'll do it now", "Remind me via an issue", "Skip" (FR-2.4). Selecting "Remind me via an issue" files the issue and records its link; "Skip" is recorded as a decision. The issue text is passed through files, never inline in the command: `gh issue create --title "$(cat <file>)" --body-file <file>`, because finding text can quote `$(...)` or backticks (FR-2.11).
+- **UC-1-A2: a step only the user can take** (founder approval, credential, console click) — diverges at step 3. The step is still asked as a decision, with options such as "I'll do it now", "Remind me via an issue", "Skip" (FR-2.4). Selecting "Remind me via an issue" files the issue and records its link; "Skip" is recorded as a decision. Issue, comment and tracker text go in files, never inline in the command (e.g. `--body-file <file>`; a title is also read from a file, not typed into the command line), because finding text can quote `$(...)` or backticks (FR-2.11).
 - **UC-1-A3: pure information needing no decision** (e.g. an unrelated failure already filed) — diverges at step 1. No question is created; the item appears as one line in the closing summary, or not at all (FR-2.5). If this leaves zero decisions, no `AskUserQuestion` call is made (see UC-1-EC1).
 - **UC-1-A4: non-compressible content among the items** — diverges at step 2. A blocker, failure, or bad news is given in full: in the question text, in option descriptions, or in the summary printed immediately before the prompt; never summarized, never capped, never moved to a trailing list (FR-2.6).
 
@@ -95,9 +96,9 @@
 ### Alternative Flows
 - **UC-2-A1: subagent returns decisions to the orchestrator** — diverges at step 3. The subagent does not write the scratchpad (parallel-wave subagents are refused scratchpad writes by `pre:agent:isolation-guard`); it returns each decision, its options and recommendation in its result to the orchestrator (FR-2.7).
 - **UC-2-A2: orchestrator is interactive and receives subagent decisions** — after A1, the orchestrator (with a human present) asks them as `AskUserQuestion` prompts per UC-1 (post-wave, as with Rule 4 in parallel mode), acting on answers in the same turn.
-- **UC-2-A3: next interactive session picks up recorded Blockers** — step 5. At session start the orchestrator reads `## Blockers`, asks those decisions first (before any new work), acts on answers, clears resolved entries, and resets `## Status`.
+- **UC-2-A3: next interactive session picks up recorded Blockers** — step 5. At session start the orchestrator reads `## Blockers`, asks those decisions first (before any new work), acts on answers, clears resolved entries, and resets `## Status`. Options are rebuilt from current git state, never copied from the record, and a record is never consent: a recorded recommendation or earlier "yes" authorizes nothing until the user answers the re-asked prompt.
 
-- **UC-2-A4: project forbids the scratchpad or uses its own tracker** (e.g. an OPOS repo, where work is tracked in GitHub issues and `.claude/scratchpad.md` is not written) — diverges at step 3. Unattended decisions go to that project's tracker (e.g. the task issue) with the same options and recommendation instead of `## Blockers`; the steward's permission tiers govern any cleanup (UC-4-A5). No pipeline state file is created.
+- **UC-2-A4: project forbids the scratchpad or uses its own tracker** (e.g. an OPOS repo, where work is tracked in GitHub issues and `.claude/scratchpad.md` is not written) — diverges at step 3. Unattended decisions go to that project's tracker (e.g. the task issue) with the same options and recommendation instead of `## Blockers`. Writes to the tracker put their text through a file (e.g. `gh issue comment <n> --body-file <file>`), never inline in the command. The steward's permission tiers govern any cleanup (UC-4-A5). No pipeline state file is created.
 
 ### Error Flows
 - **UC-2-E1: an unattended run or subagent calls `AskUserQuestion` anyway** — a violation of FR-2.7. Expected behaviour is that it is not called; the QA/E2E check asserts no such call in headless runs and in subagent transcripts.
@@ -163,7 +164,7 @@
 3. Verifies C3: `lsof -a -d cwd` shows no process inside the worktree (compared against the resolved `pwd -P` path); this session created the worktree, proven by a durable record of its path in an untracked `.claude/tmp/` file (not a symlink), never by a branch name (FR-3.4).
 4. Leaves the worktree (no shell or process of its own stays in it).
 5. Runs `git worktree remove <path>` (never `--force`); it succeeds.
-6. Runs `git worktree prune`.
+6. Runs no `git worktree prune`: `git worktree remove` already cleans its own metadata. Prune runs only on the old-git (<2.17) folder-deletion path, after `git worktree prune --dry-run -v` lists just this worktree (UC-4-A3, UC-4-E15).
 7. Deletes each topic local branch with `git branch -d <branch>` (C4).
 8. Does not ask again (FR-3.1); removal is part of the goal.
 9. Prints the closing message: one short paragraph — what shipped, where it is verified, which issues closed, that the worktree is removed (FR-3.9).

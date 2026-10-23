@@ -14,7 +14,7 @@ generated_at: 2026-10-23 01:35
 
 ## Verification Report
 
-Feature: topic-closure (PRD section 17, Koroqe/claude-code-sdlc#11). Worktree `/Users/aleksei/Documents/Projects.nosync/claude-code-sdlc-worktrees/topic-closure`, branch `feat/topic-closure`. Static analysis only; no command was run.
+Feature: topic-closure (PRD section 17, Koroqe/claude-code-sdlc#11). Worktree a git worktree of this repository, branch `feat/topic-closure`. Static analysis only; no command was run.
 
 ### Level 1 - File Existence: PASS
 - `src/rules/topic-closure.md`, `scripts/ci/validate-topic-closure.js`, `docs/findings/topic-closure-live-checks.md`, `docs/use-cases/topic-closure_use_cases.md`, `docs/qa/topic-closure_test_cases.md` all exist.
