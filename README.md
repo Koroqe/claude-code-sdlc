@@ -5,7 +5,7 @@
 16 specialized AI agents. Documentation-first. TDD. Quality gates. Hardened against Claude Code's known limitations.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.11.2-green.svg)]()
+[![Version](https://img.shields.io/badge/version-4.12.0-green.svg)]()
 
 Claude Code SDLC is an open-source (MIT) plugin that turns Anthropic's Claude Code into a
 16-agent software development team enforcing documentation-first planning, test-driven
@@ -567,7 +567,7 @@ Two traps worth knowing:
 
 ## How the harness checks itself
 
-A harness that enforces quality has to be held to it. This repo ships **19 CI validators** and
+A harness that enforces quality has to be held to it. This repo ships **20 CI validators** and
 **32 hook test files**, run by GitHub Actions across four jobs on every push.
 
 The rule that matters: **every validator must fail on a deliberately broken asset, not merely pass on

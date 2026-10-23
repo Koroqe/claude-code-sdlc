@@ -102,6 +102,19 @@ c.ok('run1: memory layer landed in sandbox HOME',
   fs.existsSync(path.join(one.home, '.claude/claude.md')));
 c.ok('run1: scaffold landed in the temp project cwd',
   fs.existsSync(path.join(one.proj, 'docs')));
+// TC-7.1: the topic-closure rule is delivered byte-identical and receipted.
+{
+  const shipped = path.join(REPO_ROOT, 'src/rules/topic-closure.md');
+  const installed = path.join(one.home, '.claude/rules/topic-closure.md');
+  c.ok('TC-7.1: installed rules/topic-closure.md exists', fs.existsSync(installed));
+  c.ok('TC-7.1: installed rules/topic-closure.md is byte-identical to src',
+    fs.existsSync(installed) && fs.existsSync(shipped) &&
+    fs.readFileSync(installed).equals(fs.readFileSync(shipped)));
+  const receiptPath = path.join(one.home, '.claude/.sdlc-receipt');
+  const receipt = fs.existsSync(receiptPath) ? fs.readFileSync(receiptPath, 'utf8').split('\n') : [];
+  c.ok('TC-7.1: .sdlc-receipt lists rules/topic-closure.md', receipt.indexOf('rules/topic-closure.md') !== -1,
+    receipt.join('|'));
+}
 rimraf(one.home); rimraf(one.proj);
 
 // --- Runs 2-4: the three --dry-run variants write nothing -----------------

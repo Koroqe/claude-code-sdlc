@@ -27,11 +27,11 @@ function project(name, scratchpadText) {
   return root;
 }
 
-function spine(root, env) {
+function spine(root, env, handlersDir) {
   return runHook(
     'session:start:spine',
     { session_id: 's1', cwd: root, hook_event_name: 'SessionStart' },
-    Object.assign({ SDLC_HOOK_HANDLERS_DIR: HANDLERS, HOME: path.join(scratch, 'nohome') }, env || {})
+    Object.assign({ SDLC_HOOK_HANDLERS_DIR: handlersDir || HANDLERS, HOME: path.join(scratch, 'nohome') }, env || {})
   );
 }
 function ctx(r) {
@@ -173,8 +173,21 @@ function homeWith(version) {
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).version;
 
 const DRIFT_MARK = 'memory layer differs';
-const OWNED = ['claude.md', 'rules/git.md', 'rules/changelog.md',
-  'rules/error-recovery.md', 'rules/scratchpad.md', 'rules/tool-limitations.md'];
+// Derived from the manifest's `owns` section (never `legacy`), mirroring
+// ownedFiles() in hooks/handlers/session-start-spine.js, so a newly owned file
+// cannot be forgotten here.
+function ownedFromManifest(manifestPath) {
+  const out = [];
+  let section = '';
+  for (const raw of fs.readFileSync(manifestPath, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    if (line === 'owns' || line === 'legacy') { section = line; continue; }
+    if (section === 'owns') out.push(line);
+  }
+  return out;
+}
+const OWNED = ownedFromManifest(path.join(REPO_ROOT, 'manifests', 'owned-files.txt'));
 
 /** A HOME whose memory layer mirrors src/, then optionally mutated. */
 function homeWithLayer(mutate, receiptVersion) {
@@ -1418,6 +1431,56 @@ rimraf(noLegacyRoot);
 // --- FR-7: 'paused' joins the status enum -----------------------------------
 r = spine(project('paused-status', '## Feature: Paused Thing\n## Branch: main\n## Status: paused\n'));
 c.contains('FR-7: a paused scratchpad reports status paused (not unrecognized)', ctx(r), 'status: paused');
+
+// --- TC-8.1: a layer missing the topic-closure rule is drift -----------------
+home = homeWithLayer(function (claudeDir) {
+  fs.rmSync(path.join(claudeDir, 'rules', 'topic-closure.md'), { force: true });
+}, null);
+r = spine(midFeature, { HOME: home });
+c.contains('TC-8.1: a missing rules/topic-closure.md is named as drift', ctx(r), 'rules/topic-closure.md (missing)');
+rimraf(home);
+
+// --- TC-8.9: a manifest-only addition is covered, in a self-contained root ---
+// run-hook.js ignores a handlers dir outside the plugin root, so the temp root
+// carries its own copy of hooks/, src/ and manifests/.
+{
+  const tr = path.join(scratch, 'plugin-root');
+  fs.cpSync(path.join(REPO_ROOT, 'hooks'), path.join(tr, 'hooks'), { recursive: true });
+  fs.cpSync(path.join(REPO_ROOT, 'src'), path.join(tr, 'src'), { recursive: true });
+  fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(tr, 'manifests'), { recursive: true });
+  const mf = path.join(tr, 'manifests', 'owned-files.txt');
+  fs.writeFileSync(mf, fs.readFileSync(mf, 'utf8').replace(/^owns\n/m, 'owns\nrules/zz-throwaway.md\n'));
+  fs.writeFileSync(path.join(tr, 'src', 'rules', 'zz-throwaway.md'), 'throwaway\n');
+  const tOwned = ownedFromManifest(mf);
+  const tHandlers = path.join(tr, 'hooks', 'handlers');
+  function tempHome(mutate) {
+    const h = tempDir('sdlc-home-');
+    fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
+    for (const rel of tOwned) fs.copyFileSync(path.join(tr, 'src', rel), path.join(h, '.claude', rel));
+    if (mutate) mutate(path.join(h, '.claude'));
+    return h;
+  }
+  const tenv = function (h) { return { HOME: h, CLAUDE_PLUGIN_ROOT: tr }; };
+
+  home = tempHome(function (d) { fs.unlinkSync(path.join(d, 'rules', 'zz-throwaway.md')); });
+  r = spine(midFeature, tenv(home), tHandlers);
+  c.contains('TC-8.9: a manifest-only owned file that is absent is named as missing',
+    ctx(r), 'rules/zz-throwaway.md (missing)');
+  rimraf(home);
+
+  // Positive control: the harness really runs the copied handler.
+  home = tempHome(function (d) { fs.appendFileSync(path.join(d, 'rules', 'git.md'), '\nedited\n'); });
+  r = spine(midFeature, tenv(home), tHandlers);
+  c.contains('TC-8.9 control: a differing owned file warns in the temp root', ctx(r), 'rules/git.md');
+  rimraf(home);
+
+  // And a fully identical layer is silent in the temp root.
+  home = tempHome(null);
+  r = spine(midFeature, tenv(home), tHandlers);
+  c.ok('TC-8.9 control: an identical layer is silent in the temp root',
+    ctx(r).indexOf(DRIFT_MARK) === -1, ctx(r));
+  rimraf(home);
+}
 
 rimraf(scratch);
 c.finish();

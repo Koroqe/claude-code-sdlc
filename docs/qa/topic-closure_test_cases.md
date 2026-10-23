@@ -63,7 +63,7 @@ Each row is asserted by the Validator against `src/rules/topic-closure.md`. A mi
 
 | ID | Covers | Kind | Test Case | Expected |
 |---|---|---|---|---|
-| TC-4.1 | UC-5-E1 | STATIC | `manifests/owned-files.txt` lists `rules/topic-closure.md` under `owns` (not under `legacy`); `node scripts/ci/validate-manifest.js` (or the repo's manifest validator, as named in `ci-parity.js`) passes | Entry present in `owns`; validator exit 0 |
+| TC-4.1 | UC-5-E1 | STATIC | `manifests/owned-files.txt` lists `rules/topic-closure.md` under `owns` (not under `legacy`). There is no `validate-manifest.js`: the manifest check is `validate-topic-closure.js`'s FR-5.2 arm plus `install.sh` `load_manifest` | Entry present in `owns`; `node scripts/ci/validate-topic-closure.js` exit 0 |
 | TC-4.2 | UC-5-E2 | STATIC | `src/rules/topic-closure.md` exists and is non-empty | File present; Validator reports no missing-source problem |
 | TC-4.3 | UC-9 | STATIC | `src/claude.md` carries one pointer to `rules/topic-closure.md` in the Run to Completion section, as a bullet | Exactly one bullet naming the rule, inside that section |
 | TC-4.4 | UC-3 | STATIC | `src/rules/error-recovery.md` Rule 4 carries the pointer "record it first, then ask with AskUserQuestion" | Pointer present in the Rule 4 section; existing Rule 4 text otherwise unchanged |
@@ -82,7 +82,7 @@ Each row is asserted by the Validator against `src/rules/topic-closure.md`. A mi
 | TC-5.3 | UC-5-E1, UC-9-E1 | STATIC | `... bad-unwired --expect-failure --expect-problems N2` (fixture has the manifest entry removed and a pointer removed) | Exactly N2 problems: one for the manifest entry, one per missing pointer; a changed count fails the run |
 | TC-5.4 | UC-5-E2 | STATIC | Throwaway root (temp copy, not committed) with `src/rules/topic-closure.md` deleted | Non-zero exit with a missing-source problem; no crash or silent pass |
 | TC-5.5 | UC-9 | STATIC | Anti-vacuity: run against an empty root, and against a rule file that is empty | Non-zero exit in both; a validator that checks zero literals does not pass |
-| TC-5.6 | UC-9 | STATIC | The Validator is invoked by a step in `.github/workflows/ci.yml` and both seeded fixtures run there with `--expect-failure --expect-problems`; `node scripts/ci/ci-parity.js --check-coverage` | Coverage passes; removing the step makes `--check-coverage` fail (checked once on a temp copy) |
+| TC-5.6 | UC-9 | STATIC | The Validator is invoked by a step in `.github/workflows/ci.yml` and both seeded fixtures run there with `--expect-failure --expect-problems`; `node scripts/ci/ci-parity.js --check-coverage`. Falsification: remove the new ci.yml steps locally, run `--check-coverage`, then restore the file | Coverage passes (20 validators). Falsified at implementation: with the steps removed it exited 1 with `validate-topic-closure.js is never referenced in .github/workflows/ci.yml`; with the file restored it passed again. (Restore from a backup copy: `git checkout -- .github/workflows/ci.yml` reverts to HEAD and also drops uncommitted step additions.) |
 | TC-5.7 | UC-9 | STATIC | `node scripts/ci/ci-parity.js` (the sweep, not a bare validator loop) | Exit 0 |
 | TC-5.8 | UC-9 | STATIC | `node scripts/ci/validate-fixture-manifest.js` | Exit 0; this document contributes zero FIXTURE ids and needs no manifest entry; the doc-count floor still met (11 documents) |
 

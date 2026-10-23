@@ -27,6 +27,7 @@ rules/error-recovery.md
 rules/git.md
 rules/scratchpad.md
 rules/tool-limitations.md
+rules/topic-closure.md
 
 legacy
 # v3.1 installed the 13 agents to ~/.claude/agents/. v4.0 ships them in the

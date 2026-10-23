@@ -91,6 +91,12 @@ jobs:
       - name: Validate triage parity
         run: node scripts/ci/validate-triage-parity.js
 
+      # The topic-closure rule ships to ~/.claude/rules/ through the installer
+      # manifest and must stay generic: owned in the manifest, non-empty, and
+      # free of personal-environment literals.
+      - name: Validate topic-closure rule and wiring
+        run: node scripts/ci/validate-topic-closure.js
+
       # Confirms the 52 FIXTURE-class test cases in
       # verification-review-upgrade_test_cases.md still have the committed
       # inputs they need. This does NOT execute any FIXTURE case — no API
@@ -479,6 +485,9 @@ jobs:
 
       - name: Anti-vacuity — triage-parity validator fails on an empty tree
         run: node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
+
+      - name: Anti-vacuity — topic-closure validator fails on an empty tree
+        run: node scripts/ci/validate-topic-closure.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
       # Every other validator already had this step; validate-model-profile.js
       # did not, despite already failing correctly on an empty tree — this
