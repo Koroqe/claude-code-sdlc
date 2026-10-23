@@ -1482,5 +1482,135 @@ rimraf(home);
   rimraf(home);
 }
 
+// --- TC-8.2 / TC-8.4 / TC-8.5 / TC-8.7 / TC-8.8: topic-closure delivery -------
+{
+  const RULE = 'rules/topic-closure.md';
+  const spineIntact = function (label, out) {
+    c.contains(label + ': spine still names the feature', out, 'Hook Infrastructure');
+    c.contains(label + ': spine still names the branch', out, 'feat/hook-infrastructure');
+  };
+
+  // TC-8.2: a differing installed rule is named.
+  home = homeWithLayer(function (d) {
+    fs.writeFileSync(path.join(d, 'rules', 'topic-closure.md'), '# hand-made version\n');
+  }, null);
+  r = spine(midFeature, { HOME: home });
+  c.contains('TC-8.2: a differing rules/topic-closure.md is named', ctx(r), DRIFT_MARK);
+  c.contains('TC-8.2: the differing rule is the one named', ctx(r), RULE);
+  c.ok('TC-8.2: the differing rule is not reported as missing',
+    ctx(r).indexOf(RULE + ' (missing)') === -1, ctx(r));
+  c.ok('TC-8.2: differing content is never echoed', ctx(r).indexOf('hand-made version') === -1, ctx(r));
+  rimraf(home);
+
+  // TC-8.4: plugin-only install — no claude.md, no rules/, no receipt.
+  home = tempDir('sdlc-home-');
+  r = spine(midFeature, { HOME: home });
+  c.equal('TC-8.4: plugin-only install exits 0', r.code, 0);
+  c.ok('TC-8.4: plugin-only install is silent about the memory layer',
+    ctx(r).indexOf(DRIFT_MARK) === -1 && ctx(r).indexOf('install.sh') === -1, ctx(r));
+  rimraf(home);
+
+  // TC-8.5a: unreadable rules/ (skipped as root). A drift line is allowed; the
+  // requirement is exit 0, no throw, spine intact.
+  if (!skipIfRoot('TC-8.5 unreadable rules/')) {
+    let rulesDir = null;
+    home = homeWithLayer(function (d) { rulesDir = path.join(d, 'rules'); fs.chmodSync(rulesDir, 0o000); }, null);
+    r = spine(midFeature, { HOME: home });
+    if (rulesDir) fs.chmodSync(rulesDir, 0o755);
+    c.equal('TC-8.5: unreadable rules/ exits 0', r.code, 0);
+    c.ok('TC-8.5: unreadable rules/ produces no hook error note',
+      !(r.json && r.json.systemMessage), JSON.stringify(r.json || null).slice(0, 300));
+    spineIntact('TC-8.5 unreadable rules/', ctx(r));
+    rimraf(home);
+  }
+
+  // TC-8.5b: a 2 MB installed rule.
+  home = homeWithLayer(function (d) {
+    fs.writeFileSync(path.join(d, 'rules', 'topic-closure.md'), Buffer.alloc(2 * 1024 * 1024, 0x61));
+  }, null);
+  r = spine(midFeature, { HOME: home });
+  c.equal('TC-8.5: 2 MB installed rule exits 0', r.code, 0);
+  c.ok('TC-8.5: 2 MB installed rule produces no hook error note',
+    !(r.json && r.json.systemMessage), JSON.stringify(r.json || null).slice(0, 300));
+  spineIntact('TC-8.5 2 MB rule', ctx(r));
+  rimraf(home);
+
+  // TC-8.6: a plugin root that does not ship the rule is silent. Its positive
+  // control is a SEPARATE root: in the same root the missing shipped file (last
+  // in owns order) makes driftLine return '' and would silence the control too.
+  function pluginRootCopy(name, mutate) {
+    const tr = path.join(scratch, name);
+    fs.cpSync(path.join(REPO_ROOT, 'hooks'), path.join(tr, 'hooks'), { recursive: true });
+    fs.cpSync(path.join(REPO_ROOT, 'src'), path.join(tr, 'src'), { recursive: true });
+    fs.cpSync(path.join(REPO_ROOT, 'manifests'), path.join(tr, 'manifests'), { recursive: true });
+    if (mutate) mutate(tr);
+    return tr;
+  }
+  function layerFor(tr, mutate) {
+    const h = tempDir('sdlc-home-');
+    fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
+    for (const rel of ownedFromManifest(path.join(tr, 'manifests', 'owned-files.txt'))) {
+      const from = path.join(tr, 'src', rel);
+      if (fs.existsSync(from)) fs.copyFileSync(from, path.join(h, '.claude', rel));
+    }
+    if (mutate) mutate(path.join(h, '.claude'));
+    return h;
+  }
+  {
+    const noRule = pluginRootCopy('plugin-root-norule', function (tr) {
+      fs.rmSync(path.join(tr, 'src', 'rules', 'topic-closure.md'), { force: true });
+    });
+    c.ok('TC-8.6 setup: the temp root really lacks the shipped rule',
+      !fs.existsSync(path.join(noRule, 'src', 'rules', 'topic-closure.md')));
+    home = layerFor(noRule, function (d) {
+      fs.writeFileSync(path.join(d, 'rules', 'topic-closure.md'), '# installed, but not shipped\n');
+    });
+    r = spine(midFeature, { HOME: home, CLAUDE_PLUGIN_ROOT: noRule }, path.join(noRule, 'hooks', 'handlers'));
+    c.equal('TC-8.6: a plugin root without the rule exits 0', r.code, 0);
+    c.ok('TC-8.6: a plugin root without the rule is silent', ctx(r).indexOf(DRIFT_MARK) === -1, ctx(r));
+    rimraf(home);
+
+    const full = pluginRootCopy('plugin-root-full', null);
+    home = layerFor(full, function (d) { fs.appendFileSync(path.join(d, 'rules', 'git.md'), '\nedited\n'); });
+    r = spine(midFeature, { HOME: home, CLAUDE_PLUGIN_ROOT: full }, path.join(full, 'hooks', 'handlers'));
+    c.contains('TC-8.6 control: a separate root shipping every owned file warns on one differing file',
+      ctx(r), 'rules/git.md');
+    rimraf(home);
+  }
+
+  // TC-8.7: drift line and the project-scope stale-install line are independent.
+  home = homeWithLayer(function (d) {
+    fs.writeFileSync(path.join(d, 'rules', 'topic-closure.md'), '# different\n');
+    fs.mkdirSync(path.join(d, 'plugins'), { recursive: true });
+    fs.writeFileSync(path.join(d, 'plugins', 'installed_plugins.json'), JSON.stringify({
+      version: 2,
+      plugins: { 'claude-code-sdlc@claude-code-sdlc': [staleEntryFor(midFeature)] },
+    }));
+  }, null);
+  r = spine(midFeature, { HOME: home });
+  c.contains('TC-8.7: the memory-layer drift line is present', ctx(r), DRIFT_MARK + ' from the plugin in 1 file(s): ' + RULE);
+  c.contains('TC-8.7: the stale project-scope line is present too', ctx(r), 'stale project-scope install:');
+  rimraf(home);
+
+  // TC-8.8: warn, copy the file in, then compact / resume sessions are silent.
+  home = homeWithLayer(function (d) {
+    fs.writeFileSync(path.join(d, 'rules', 'topic-closure.md'), '# stale\n');
+  }, null);
+  r = spine(midFeature, { HOME: home });
+  c.contains('TC-8.8: the first invocation warns', ctx(r), RULE);
+  fs.copyFileSync(path.join(REPO_ROOT, 'src', RULE), path.join(home, '.claude', RULE));
+  for (const source of ['compact', 'resume']) {
+    const rr = runHook(
+      'session:start:spine',
+      { session_id: 's1', cwd: midFeature, hook_event_name: 'SessionStart', source: source },
+      { SDLC_HOOK_HANDLERS_DIR: HANDLERS, HOME: home }
+    );
+    c.equal('TC-8.8: source ' + source + ' exits 0', rr.code, 0);
+    c.ok('TC-8.8: source ' + source + ' is silent after the file is copied in',
+      ctx(rr).indexOf(DRIFT_MARK) === -1, ctx(rr));
+  }
+  rimraf(home);
+}
+
 rimraf(scratch);
 c.finish();

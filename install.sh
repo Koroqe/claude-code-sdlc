@@ -194,7 +194,7 @@ for the full quality/balanced/budget/inherit table):
 
 WHAT GETS INSTALLED (~/.claude/):
   claude.md        Main workflow instructions (loaded as user memory)
-  rules/           5 process rules (loaded as user memory)
+  rules/           6 process rules (loaded as user memory)
   .sdlc-receipt    Record of exactly what this install placed
 
 WHAT DOES NOT COME FROM HERE:
@@ -1327,7 +1327,7 @@ install_user_config() {
   echo ""
   echo "  This installs the memory layer to $HOME/.claude:"
   echo "    claude.md   (workflow instructions)"
-  echo "    rules/      (5 files — process rules)"
+  echo "    rules/      (6 files — process rules)"
   echo ""
   echo "  Agents and skills ship in the plugin, not here."
   echo "  Any retired v3.x agent/command copies will be removed."
@@ -1364,6 +1364,19 @@ install_user_config() {
     guarded_write_target "$entry"
   done
 
+  # Tell the user before overwriting a file the receipt does not claim: it is
+  # either hand-made or from an install that predates the receipt. backup_existing
+  # has already copied rules/ and claude.md, so their copy survives in the backup
+  # (which is pruned after SDLC_KEEP_BACKUPS newer ones).
+  local receipt_file="$CLAUDE_DIR/.sdlc-receipt"
+  for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+    if [ -f "$CLAUDE_DIR/$entry" ] && ! cmp -s -- "$SCRIPT_DIR/src/$entry" "$CLAUDE_DIR/$entry"; then
+      if [ ! -f "$receipt_file" ] || ! grep -Fxq -- "$entry" "$receipt_file"; then
+        say_untrusted "  replacing a file this installer did not place (your copy is in the backup, pruned after ${SDLC_KEEP_BACKUPS:-5} newer ones): " "$entry"
+      fi
+    fi
+  done
+
   for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
     src="$SCRIPT_DIR/src/$entry"
     cp -- "$src" "$CLAUDE_DIR/$entry"
@@ -1374,7 +1387,12 @@ install_user_config() {
   write_receipt
 
   local rule_count
-  rule_count=$(ls -1 "$CLAUDE_DIR/rules/"*.md 2>/dev/null | wc -l | tr -d ' ')
+  rule_count=0
+  for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
+    case "$entry" in
+      rules/*.md) rule_count=$((rule_count + 1)) ;;
+    esac
+  done
 
   echo ""
   log_ok "Memory layer installed (1 workflow file + $rule_count rules)"

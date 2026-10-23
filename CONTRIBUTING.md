@@ -60,7 +60,7 @@ Project scaffold templates live in `templates/`. These are what users get when t
 bash install.sh --local --yes
 
 # Verify the memory layer was installed. This is ALL install.sh writes:
-# claude.md plus the 5 rules. Agents and skills ship in the plugin, and
+# claude.md plus the 6 rules. Agents and skills ship in the plugin, and
 # install.sh deliberately does not copy them to ~/.claude — a user-level copy
 # would shadow the plugin's and freeze that agent at the version you copied.
 ls ~/.claude/rules/

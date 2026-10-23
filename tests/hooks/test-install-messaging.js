@@ -62,6 +62,24 @@ function runInstall(args) {
   return { r, home, proj };
 }
 
+// Caller-seeded HOME variant. Same sandbox contract as runInstall: --local, a
+// temp cwd that is never the repo root, mockDir first on PATH so the real
+// `claude` CLI is never reached (including uninstall runs without --no-plugin).
+function runInstallIn(home, args) {
+  const proj = tempDir('sdlc-install-proj-');
+  const r = spawnSync('bash', [INSTALL].concat(args), {
+    cwd: proj,
+    encoding: 'utf8',
+    timeout: 120000,
+    env: Object.assign({}, process.env, {
+      HOME: home,
+      PATH: mockDir + ':' + process.env.PATH,
+    }),
+  });
+  rimraf(proj);
+  return r;
+}
+
 function snap(p) {
   const s = fs.statSync(p);
   return s.size + ':' + s.mtimeMs;
@@ -136,6 +154,160 @@ for (const args of variants) {
   c.ok('dry-run scaffolds nothing into cwd: ' + label,
     !fs.existsSync(path.join(v.proj, 'docs')) && !fs.existsSync(path.join(v.proj, '.claude')));
   rimraf(v.home); rimraf(v.proj);
+}
+
+// --- TC-7.2 .. TC-7.13: rules delivery, upgrade, uninstall -------------------
+{
+  const SRC_RULE = path.join(REPO_ROOT, 'src/rules/topic-closure.md');
+  const SRC_BYTES = fs.readFileSync(SRC_RULE);
+  const BASE = ['--local', '--no-plugin', '--yes'];
+  const rulesOf = function (h) { return path.join(h, '.claude', 'rules'); };
+  const seedHome = function () {
+    const h = tempDir('sdlc-install-home-');
+    fs.mkdirSync(path.join(h, '.claude', 'rules'), { recursive: true });
+    return h;
+  };
+  const both = function (r) { return (r.stdout || '') + (r.stderr || ''); };
+  const readOr = function (f) { return fs.existsSync(f) ? fs.readFileSync(f) : null; };
+  const sameBytes = function (a, b) { return a !== null && b !== null && a.equals(b); };
+  const backupsOf = function (h) {
+    return fs.existsSync(path.join(h, '.claude'))
+      ? fs.readdirSync(path.join(h, '.claude')).filter(function (n) { return n.indexOf('backup-') === 0; })
+      : [];
+  };
+
+  // TC-7.2 / TC-7.6: a user-owned rule is neither counted nor touched.
+  {
+    const h = seedHome();
+    const mine = Buffer.from('# my own rule\nkeep me\n');
+    fs.writeFileSync(path.join(rulesOf(h), 'mine.md'), mine);
+    const r = runInstallIn(h, BASE);
+    c.equal('TC-7.2: exit 0', r.status, 0);
+    c.contains('TC-7.2: summary counts the six owned rules, not mine.md', both(r),
+      '1 workflow file + 6 rules');
+    c.ok('TC-7.6: mine.md byte-identical after install',
+      sameBytes(readOr(path.join(rulesOf(h), 'mine.md')), mine));
+    // TC-7.4: second run is idempotent.
+    const r2 = runInstallIn(h, BASE);
+    c.equal('TC-7.4: second run exits 0', r2.status, 0);
+    c.ok('TC-7.4: rule still identical to src after second run',
+      sameBytes(readOr(path.join(rulesOf(h), 'topic-closure.md')), SRC_BYTES));
+    c.ok('TC-7.4: second run prints no foreign-file notice',
+      both(r2).indexOf('replacing a file this installer did not place') === -1, both(r2).slice(0, 300));
+    rimraf(h);
+  }
+
+  // TC-7.3: a differing hand-made copy is overwritten, backed up, and announced.
+  {
+    const h = seedHome();
+    const handMade = Buffer.from('# hand-made topic closure\nmine, not yours\n');
+    fs.writeFileSync(path.join(rulesOf(h), 'topic-closure.md'), handMade);
+    const r = runInstallIn(h, BASE);
+    c.equal('TC-7.3: exit 0', r.status, 0);
+    c.ok('TC-7.3: installed copy is the plugin version',
+      sameBytes(readOr(path.join(rulesOf(h), 'topic-closure.md')), SRC_BYTES));
+    const bks = backupsOf(h);
+    c.ok('TC-7.3: a backup directory exists', bks.length >= 1, bks.join(','));
+    c.ok('TC-7.3: a backup holds the hand-made bytes',
+      bks.some(function (b) {
+        return sameBytes(readOr(path.join(h, '.claude', b, 'rules', 'topic-closure.md')), handMade);
+      }));
+    const copies = fs.readdirSync(rulesOf(h)).filter(function (n) { return n === 'topic-closure.md'; });
+    c.equal('TC-7.3: exactly one installed copy', copies.length, 1);
+    c.contains('MEDIUM-7: notice names the replaced foreign file', both(r),
+      'replacing a file this installer did not place');
+    c.contains('MEDIUM-7: notice names the entry', both(r), 'rules/topic-closure.md');
+    c.ok('MEDIUM-7: nothing inside rules/ other than owned files was created',
+      fs.readdirSync(rulesOf(h)).every(function (n) { return /^[a-z-]+\.md$/.test(n); }));
+    rimraf(h);
+  }
+
+  // TC-7.5: upgrade from a seeded 4.11.2 install (claude.md + five rules + receipt).
+  {
+    const h = seedHome();
+    const five = ['changelog', 'error-recovery', 'git', 'scratchpad', 'tool-limitations'];
+    fs.writeFileSync(path.join(h, '.claude', 'claude.md'), 'old claude.md\n');
+    five.forEach(function (n) { fs.writeFileSync(path.join(rulesOf(h), n + '.md'), 'old ' + n + '\n'); });
+    fs.writeFileSync(path.join(h, '.claude', '.sdlc-receipt'),
+      '4.11.2\nclaude.md\n' + five.map(function (n) { return 'rules/' + n + '.md\n'; }).join(''));
+    const r = runInstallIn(h, BASE);
+    c.equal('TC-7.5: exit 0', r.status, 0);
+    c.ok('TC-7.5: topic-closure.md installed by the upgrade',
+      sameBytes(readOr(path.join(rulesOf(h), 'topic-closure.md')), SRC_BYTES));
+    c.contains('TC-7.5: summary reports 6 rules', both(r), '1 workflow file + 6 rules');
+    c.ok('TC-7.5: no foreign-file notice for receipted files',
+      both(r).indexOf('replacing a file this installer did not place') === -1, both(r).slice(0, 400));
+    rimraf(h);
+  }
+
+  // TC-7.7: an unwritable rules/ fails loudly.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    process.stdout.write('SKIP TC-7.7 — running as root, permission bits do not bind\n');
+  } else {
+    const h = seedHome();
+    fs.chmodSync(rulesOf(h), 0o555);
+    const r = runInstallIn(h, BASE);
+    fs.chmodSync(rulesOf(h), 0o755);
+    c.ok('TC-7.7: non-zero exit when rules/ is not writable', r.status !== 0, 'status ' + r.status);
+    c.ok('TC-7.7: no success line printed',
+      both(r).indexOf('Memory layer installed') === -1, both(r).slice(0, 300));
+    rimraf(h);
+  }
+
+  // TC-7.8 / 7.9 / 7.12: uninstall after an install, mine.md and other.md survive.
+  // The uninstall runs omit --no-plugin on purpose: the mock claude must absorb it.
+  {
+    const h = seedHome();
+    fs.writeFileSync(path.join(rulesOf(h), 'mine.md'), 'mine\n');
+    fs.writeFileSync(path.join(rulesOf(h), 'other.md'), 'other\n');
+    const inst = runInstallIn(h, BASE);
+    c.equal('TC-7.8: setup install exit 0', inst.status, 0);
+    fs.appendFileSync(path.join(rulesOf(h), 'topic-closure.md'), '\nhand edit\n');
+    const un = runInstallIn(h, ['--local', '--yes', '--uninstall']);
+    c.equal('TC-7.8: uninstall exit 0', un.status, 0);
+    c.ok('TC-7.8/7.9: rule removed even though hand-edited',
+      !fs.existsSync(path.join(rulesOf(h), 'topic-closure.md')));
+    c.ok('TC-7.8: mine.md kept', fs.existsSync(path.join(rulesOf(h), 'mine.md')));
+    c.ok('TC-7.12: mine.md and other.md survive',
+      fs.existsSync(path.join(rulesOf(h), 'mine.md')) && fs.existsSync(path.join(rulesOf(h), 'other.md')));
+    rimraf(h);
+  }
+
+  // TC-7.10: only the rule present, no receipt (manifest fallback).
+  {
+    const h = seedHome();
+    fs.writeFileSync(path.join(rulesOf(h), 'topic-closure.md'), SRC_BYTES);
+    const un = runInstallIn(h, ['--local', '--yes', '--uninstall']);
+    c.equal('TC-7.10: uninstall exit 0', un.status, 0);
+    c.ok('TC-7.10: rule removed via manifest fallback',
+      !fs.existsSync(path.join(rulesOf(h), 'topic-closure.md')));
+    rimraf(h);
+  }
+
+  // TC-7.11: already absent.
+  {
+    const h = seedHome();
+    const un = runInstallIn(h, ['--local', '--yes', '--uninstall']);
+    c.equal('TC-7.11: uninstall of an absent rule exits 0', un.status, 0);
+    rimraf(h);
+  }
+
+  // TC-7.13: static wording and derivation.
+  {
+    const inst = fs.readFileSync(INSTALL, 'utf8');
+    const readme = fs.readFileSync(path.join(REPO_ROOT, 'README.md'), 'utf8');
+    c.ok('TC-7.13: install.sh does not count rules with ls',
+      inst.indexOf('ls -1 "$CLAUDE_DIR/rules/"') === -1);
+    c.ok('TC-7.13: install.sh says no "5 process rules"', inst.indexOf('5 process rules') === -1);
+    c.ok('TC-7.13: install.sh says no "(5 files"', inst.indexOf('(5 files') === -1);
+    c.ok('TC-7.13: install.sh help says 6 process rules', inst.indexOf('6 process rules') !== -1);
+    c.ok('TC-7.13: install.sh banner says 6 files', inst.indexOf('(6 files') !== -1);
+    c.ok('TC-7.13: rule_count is derived from MANIFEST_OWNS',
+      /rule_count=0[\s\S]{0,200}MANIFEST_OWNS[\s\S]{0,200}rules\/\*\.md\)/.test(inst));
+    c.ok('TC-7.13: README says "all six process rules"', readme.indexOf('all six process rules') !== -1);
+    c.ok('TC-7.13: README no longer says "all five process rules"',
+      readme.indexOf('all five process rules') === -1);
+  }
 }
 
 // Static cross-check + repo-untouched guard.

@@ -105,17 +105,17 @@ Every case runs `install.sh` with a temp `HOME`; nothing touches the real `~/.cl
 |---|---|---|---|---|
 | TC-7.1 | UC-5 | STATIC | Fresh HOME, run `install.sh` | `$HOME/.claude/rules/topic-closure.md` exists and `cmp`s byte-identical to `src/rules/topic-closure.md`; the receipt records it among installed files |
 | TC-7.2 | UC-5, UC-5-A4 | STATIC | Fresh HOME with a user-owned `rules/mine.md` already present, run install | Summary reads "1 workflow file + 6 rules" (count from the manifest's owned rules, not `ls`), so `mine.md` is not counted |
-| TC-7.3 | UC-5-A1, UC-5-EC1, UC-5-EC2 | STATIC | HOME with a different hand-made `rules/topic-closure.md`, run install | File overwritten with the plugin's version; `backup-*/rules/topic-closure.md` holds the pre-overwrite content byte for byte; exactly one copy remains |
+| TC-7.3 | UC-5-A1, UC-5-EC1, UC-5-EC2 | STATIC | HOME with a different hand-made `rules/topic-closure.md`, run install | File overwritten with the plugin's version; `backup-*/rules/topic-closure.md` holds the pre-overwrite content byte for byte; exactly one copy remains; the output carries the notice "replacing a file this installer did not place" naming `rules/topic-closure.md` (security MEDIUM-7) |
 | TC-7.4 | UC-5-A2 | STATIC | Run install twice | Second run exits 0; file still identical; no error |
 | TC-7.5 | UC-5-A3 | STATIC | Seed a prior-version install (five rules, receipt from the previous version, no topic-closure file), run install | File now installed; summary reports 6 |
-| TC-7.6 | UC-5-A4, UC-7-EC1 | STATIC | `rules/mine.md` with known content, run install | `mine.md` byte-identical afterwards and not in any backup |
+| TC-7.6 | UC-5-A4, UC-7-EC1 | STATIC | `rules/mine.md` with known content, run install | `mine.md` byte-identical afterwards (`backup_existing` copies `rules/` wholesale by design, so a backup may hold it) |
 | TC-7.7 | UC-5-E3 | STATIC | `$HOME/.claude/rules` made non-writable (skipped where the runner is root), run install | Failure reported for that file; the run does not print success for it |
 | TC-7.8 | UC-7 | STATIC | After TC-7.1 with `mine.md` present, run `install.sh --uninstall` | `rules/topic-closure.md` gone; `mine.md` still present |
 | TC-7.9 | UC-7-A1 | STATIC | Hand-edit the installed rule, run uninstall | Still removed (removal is manifest-scoped, not content-scoped) |
 | TC-7.10 | UC-7-A2 | STATIC | Partial install: only `rules/topic-closure.md` exists under `rules/` | Removed without error |
 | TC-7.11 | UC-7-E1 | STATIC | Uninstall when the rule file is already absent | Exit 0; uninstall continues with the remaining files |
 | TC-7.12 | UC-7-EC1 | STATIC | Uninstall with `mine.md` and an unrelated `rules/other.md` present | Both survive; static check that the uninstall path iterates manifest entries and never globs `rules/*` |
-| TC-7.13 | UC-5 | STATIC | Grep `install.sh` and `README.md` for the message and count wording | `rule_count` is derived from the manifest (no `ls ... rules/*.md` count and no hardcoded 5 or 6); every message reads six, none reads five (AC-12) |
+| TC-7.13 | UC-5 | STATIC | Grep `install.sh` and `README.md` for the message and count wording | `rule_count` is derived from `MANIFEST_OWNS` (no `ls ... rules/*.md` count). The help text and the banner necessarily hard-code 6, because the banner prints before `load_manifest`; every message reads six, none reads five (AC-12) |
 
 ## 8. Session-Start Drift Check (STATIC, `tests/hooks/test-session-start-spine.js`)
 
@@ -127,7 +127,7 @@ The test's OWNED list is derived from `manifests/owned-files.txt` (TC-8.9). Temp
 | TC-8.2 | UC-6-A1 | STATIC | Installed `rules/topic-closure.md` has different content | Warning names `rules/topic-closure.md` as differing |
 | TC-8.3 | UC-6-A2 | STATIC | Every owned file identical to the plugin's | No stale-memory-layer line from this check |
 | TC-8.4 | UC-6-A3 | STATIC | Plugin-only install: no receipt, no `~/.claude/rules`, `install.sh` never run | Silent; no warning, no throw |
-| TC-8.5 | UC-6-E1 | STATIC | Rules directory unreadable; separately, an oversized or binary installed rule file | Fail-open: no warning from the check, no throw, rest of the spine intact (NFR-4) |
+| TC-8.5 | UC-6-E1 | STATIC | Rules directory unreadable; separately, an oversized or binary installed rule file | Fail-open: exit 0, no throw, rest of the spine intact (NFR-4). A drift line is allowed for an unreadable or oversized installed file; it is not required |
 | TC-8.6 | UC-6-E2 | STATIC | Plugin's own `rules/topic-closure.md` absent (temp plugin root) | Silent, no throw |
 | TC-8.7 | UC-6-EC1 | STATIC | Rule differs while the version-drift line and the project-scope stale-install line also fire | All lines present independently through the shared `capBlock` budget; none suppresses another |
 | TC-8.8 | UC-6-EC2 | STATIC | Warn, then copy the file in place (simulating `install.sh`), then a second invocation with the `compact` and `resume` sources | Second and third invocations are silent; no cached result |

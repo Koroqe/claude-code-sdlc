@@ -592,7 +592,7 @@ It has to work this way. Claude Code resolves subagents by precedence — a user
 
 For the same reason, upgrading from v3.x **removes** the 13 agent files and 5 command files that older versions installed into `~/.claude/`. Left in place they would shadow their plugin replacements. Removal is scoped to a manifest, never a wildcard, so your own agents in `~/.claude/agents/` are untouched — and everything removed is captured in a timestamped backup first.
 
-**What an `install.sh`-only setup gets** (plugin never installed): the memory layer is active, so the mandatory pipeline instruction and all five process rules load on every session and Claude follows the documented workflow. But there are no specialist subagents to delegate to, so the phases run inline rather than through `prd-writer`, `architect`, `qa-planner` and the rest. Install the plugin for the full agency.
+**What an `install.sh`-only setup gets** (plugin never installed): the memory layer is active, so the mandatory pipeline instruction and all six process rules load on every session and Claude follows the documented workflow. But there are no specialist subagents to delegate to, so the phases run inline rather than through `prd-writer`, `architect`, `qa-planner` and the rest. Install the plugin for the full agency.
 
 - **Edit agents** — each is a standalone `.md` file in `agents/`, shipped via the plugin. Do not copy them to `~/.claude/agents/`: user-level agents shadow plugin agents permanently, so a local copy freezes that agent at the version you copied.
 - **Add agents** — create a new `.md` with YAML frontmatter (`name`, `description`, `tools`, `model`)
