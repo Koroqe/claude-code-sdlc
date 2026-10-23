@@ -2,7 +2,7 @@
 
 ## Meta
 
-Feature counter: 4
+Feature counter: 5
 
 ## Prevention Rules
 
@@ -105,8 +105,8 @@ Pattern: tests/hooks/*.js
 Rule: WHEN a RED test removes or reads a fixture that may not exist yet, guard it so the test fails on its assertion instead of crashing — a crash is not red-phase evidence
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
-Last confirmed at: 4
-Retires at: 14
+Last confirmed at: 5
+Retires at: 15
 
 ### validator-fr-tags-come-from-prd-headings
 Confidence: 0.3
@@ -115,8 +115,8 @@ Pattern: scripts/ci/validate-*.js
 Rule: WHEN a validator tags problems with requirement ids, take each tag from the PRD FR headings, never a plan summary — a wrong tag breaks fixtures matched on it
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
-Last confirmed at: 4
-Retires at: 14
+Last confirmed at: 5
+Retires at: 15
 
 ### run-multiline-ci-steps-by-hand
 Confidence: 0.3
@@ -125,5 +125,15 @@ Pattern: .github/workflows/ci.yml
 Rule: WHEN a change touches a file that a multi-line run step in ci.yml checks, run that step body by hand with bash -c — ci-parity.js runs only single node lines, so a local green sweep skips it
 Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
-Last confirmed at: 4
-Retires at: 14
+Last confirmed at: 5
+Retires at: 15
+
+### never-trim-security-wording-to-fit-a-cap
+Confidence: 0.3
+Category: security
+Pattern: src/rules/*.md
+Rule: NEVER trim wording a security review mandated to fit a byte cap — record a cap decision instead, since a trimmed clause reopens the finding it closed
+Trigger: Gate Auto-Fix
+Occurrences: 1 (features: topic-closure)
+Last confirmed at: 5
+Retires at: 15

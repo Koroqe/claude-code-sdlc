@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-10-23
+
+### Sessions now finish by closing the topic — 11:16 UTC
+**Summary:** A work session is now considered finished only when its work is merged, nothing is left owing, and the leftover branches and workspace are cleaned up. Open items come back as questions you can answer, not a list you have to read.
+**Details:** Adds a topic-closure rule to every install: a session is finished when the work is merged, nothing is owed, and branches and the worktree are removed. Open items become questions with concrete options, recommended first, not a to-do list. Unattended runs record decisions as blockers instead. Cleanup runs only in interactive sessions after safety checks and never forces anything; pushes stay the user's choice. Also fixes an installer bug that could delete all backups. Version 4.12.0.
+**Technical details:** Adds one installer-owned rule to the memory layer. No new agent, skill or hook. Cleanup is gated on proof that the work is on the base, nothing would be lost, no other process is using the worktree, and the session owns it. Hardened over three security audit rounds: recorded decisions never count as consent, options are rebuilt from git, and tracker text is handled through files. The installer now derives its rule count from the manifest, announces when it replaces a hand-made copy of an owned file, and no longer deletes every backup on a zero or overflowing retention value. CI gains a topic-closure validator with seeded fixtures and byte ceilings for the memory layer. Existing installs get the plugin part on plugin update. Their next session start reports the memory layer as stale until they re-run the installer. Four live behaviours are deferred to issue #12, each failing safe to a prompt. No screens, endpoints or schema impact.
+
 ## 2026-09-23
 
 ### Every real merge-ready verdict was refused on current Claude Code — 17:33 UTC

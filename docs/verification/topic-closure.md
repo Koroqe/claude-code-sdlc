@@ -14,7 +14,7 @@ generated_at: 2026-10-23 01:35
 
 ## Verification Report
 
-Feature: topic-closure (PRD section 17, Koroqe/claude-code-sdlc#11). Worktree a git worktree of this repository, branch `feat/topic-closure`. Static analysis only; no command was run.
+Feature: topic-closure (PRD section 17, Koroqe/claude-code-sdlc#11). Worktree: a git worktree of this repository, branch `feat/topic-closure`. Static analysis only; no command was run.
 
 ### Level 1 - File Existence: PASS
 - `src/rules/topic-closure.md`, `scripts/ci/validate-topic-closure.js`, `docs/findings/topic-closure-live-checks.md`, `docs/use-cases/topic-closure_use_cases.md`, `docs/qa/topic-closure_test_cases.md` all exist.
@@ -64,7 +64,7 @@ Exercised (criterion (a), tests that call the code and assert on output, with re
 
 Not exercised by anything:
 - The rule's behaviour inside a live model session: AskUserQuestion prompts, the fallback when the tool is unavailable, the unattended record-only path, the own-process-tree lsof claim, own-cwd removal, and the TC-11.10 launch-directory prompt. These are the 10 LIVE QA cases and the BEHAVIORAL TC-10.x rows. Four are deferred to Koroqe/claude-code-sdlc#12 by maintainer decision, and `docs/findings/topic-closure-live-checks.md` records no result for any of them. TC-11.10 needs a real interactive session. As instructed, these are carried in `human_verification_required` and not as gaps that automation could close.
-- The validator guards the presence of the instructing text (76 REQUIRED literals, FR-2.9 literals scoped to their paragraph), not compliance by the model.
+- The validator guards the presence of the instructing text (77 REQUIRED literals, FR-2.9 literals scoped to their paragraph), not compliance by the model.
 
 Process notes (not defects in the shipped code):
 - The scratchpad shows the Gate 3 auto-fix commit 7000e72 (rule v5 at 4,942 B against the DD-1b cap of 4,950, `## Release` push guard in `CLAUDE.md`, PRD amendment) followed by "Next: re-run Gates 2+3 over the fix commit". Whether that re-run has happened is not recorded. I read the post-fix tree: the validator `MAX_BYTES = 4950` and the rule text are consistent with it.
