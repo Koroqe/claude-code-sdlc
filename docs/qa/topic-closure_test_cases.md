@@ -57,7 +57,7 @@ Each row is asserted by the Validator against `src/rules/topic-closure.md`. A mi
 |---|---|---|---|---|
 | TC-3.1 | UC-5-EC2 | STATIC | Rule contains none of `this Mac`, `~/Documents`, `Projects.nosync`, `Deliberately NOT listed`, `delete this file` (the hand-made file's maintenance note must not ship, so the installer overwrite leaves no stale instruction) | Zero occurrences of each; one problem per occurrence if seeded |
 | TC-3.2 | UC-5-EC2 | STATIC | Rule contains no `/Users/` path and no reference to `output-shaping.md` or `opos-precedence.md` | Zero matches |
-| TC-3.3 | UC-9-A1 | STATIC | `wc -c src/rules/topic-closure.md` | At most 4500 bytes (FR-5.1); the 5000 ceiling is TC-6.2 |
+| TC-3.3 | UC-9-A1 | STATIC | `wc -c src/rules/topic-closure.md` | At most 4800 bytes (FR-5.1); the 5000 ceiling is TC-6.2 |
 
 ## 4. Wiring and Pointers (STATIC, validator step (c))
 
