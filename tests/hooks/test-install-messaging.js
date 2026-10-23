@@ -67,14 +67,17 @@ function runInstall(args) {
 // `claude` CLI is never reached (including uninstall runs without --no-plugin).
 function runInstallIn(home, args, extraEnv) {
   const proj = tempDir('sdlc-install-proj-');
+  const env = Object.assign({}, process.env, {
+    HOME: home,
+    PATH: mockDir + ':' + process.env.PATH,
+  }, extraEnv || {});
+  // A null value means "unset this variable".
+  Object.keys(env).forEach(function (k) { if (env[k] === null) delete env[k]; });
   const r = spawnSync('bash', [INSTALL].concat(args), {
     cwd: proj,
     encoding: 'utf8',
     timeout: 120000,
-    env: Object.assign({}, process.env, {
-      HOME: home,
-      PATH: mockDir + ':' + process.env.PATH,
-    }, extraEnv || {}),
+    env: env,
   });
   rimraf(proj);
   return r;
@@ -246,10 +249,34 @@ for (const args of variants) {
     c.contains('LOW: SDLC_KEEP_BACKUPS=3 notice says pruned after 3 newer ones', both(r), 'pruned after 3 newer ones');
     rimraf(h);
     h = mk();
-    const envNoKeep = Object.assign({}, process.env); delete envNoKeep.SDLC_KEEP_BACKUPS;
     r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: '' });
     c.contains('LOW: empty SDLC_KEEP_BACKUPS falls back to the default 5', both(r), 'pruned after 5 newer ones');
     rimraf(h);
+    h = mk();
+    r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: null });
+    c.contains('LOW: unset SDLC_KEEP_BACKUPS falls back to the default 5', both(r), 'pruned after 5 newer ones');
+    rimraf(h);
+
+    // MEDIUM-1: "00" and an overflowing digit string are opt-outs, never "keep zero".
+    // Seed two old backups, run a real install (which adds its own), assert none deleted.
+    ['00', '000', '99999999999999999999'].forEach(function (val) {
+      const hh = mk();
+      const old = ['backup-20200101-000000', 'backup-20200102-000000'];
+      old.forEach(function (n) {
+        const d = path.join(hh, '.claude', n);
+        fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(path.join(d, 'marker'), 'x');
+        const t = new Date('2020-01-01T00:00:00Z');
+        fs.utimesSync(d, t, t);
+      });
+      const rr = runInstallIn(hh, BASE, { SDLC_KEEP_BACKUPS: val });
+      c.contains('MEDIUM-1: SDLC_KEEP_BACKUPS=' + val + ' notice says never pruned', both(rr), 'never pruned');
+      const left = fs.readdirSync(path.join(hh, '.claude')).filter(function (n) { return /^backup-\d{8}-\d{6}/.test(n); });
+      c.ok('MEDIUM-1: SDLC_KEEP_BACKUPS=' + val + ' deletes no backup (seeded 2 + own)',
+        left.length >= 3 && old.every(function (n) { return left.indexOf(n) !== -1; }), left.join(','));
+      c.ok('MEDIUM-1: SDLC_KEEP_BACKUPS=' + val + ' prints no "Pruned" line', both(rr).indexOf('Pruned ') === -1);
+      rimraf(hh);
+    });
   }
 
   // TC-7.5: upgrade from a seeded 4.11.2 install (claude.md + five rules + receipt).

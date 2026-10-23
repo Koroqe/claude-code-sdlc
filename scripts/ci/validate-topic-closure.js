@@ -129,6 +129,8 @@ const REQUIRED = [
   { fr: "FR-3.3", literal: "only build output, dependencies or the" },
   { fr: "FR-2.10", literal: "no `+` refspec" },
   { fr: "FR-3.4", literal: ".claude/tmp/" },
+  { fr: "FR-2.11", literal: "--title \"$(cat <file>)\"" },
+  { fr: "FR-3.4", literal: "untracked, not a symlink" },
 ];
 
 const MAX_BYTES = 4950;

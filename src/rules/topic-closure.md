@@ -3,13 +3,13 @@
 A topic is done when it is closed:
 1. **Merged** to the base; released and verified there when the topic includes production.
 2. **Nothing owed**: each follow-up is done, decided by the user, or filed as an issue with its link.
-   Issue text goes in a file (`--body-file`), never inline in a command.
+   Issue title and body go in files (`--title "$(cat <file>)"`, `--body-file <file>`), never inline in a command.
 3. **Cleaned up**: the topic's branches deleted, its worktree removed (below).
 
 Ask decisions only after `/merge-ready`'s verdict and Release step, at
 the end of a non-pipeline task, or at a Rule 4 decision. `/implement-slice`'s `### Next` line is a
-continuation log line, never prompted. This rule covers `/merge-ready`'s verdict and Release items and
-`/develop-feature`'s final report; gate tables and failure details still print in full.
+continuation log line, never prompted. It covers `/develop-feature`'s final report too; gate tables and
+failures still print in full.
 
 ## Decisions are prompts, not lists
 
@@ -20,7 +20,7 @@ session ask each open item with `AskUserQuestion`:
   say what gets deleted, pushed, filed or left, and its cost.
 - Ask at most 4 questions per call, most consequential first; act on the answers in the same turn,
   then ask the remaining questions.
-- A step only the user can take is still a decision; pure information gets one summary line.
+- A user-only step is still a decision; pure information gets one summary line.
 
 Always: blockers, failures and bad news are given in full, in the question or the summary, never in a trailing list.
 
@@ -50,7 +50,7 @@ output, quoted; one with a quote, `$`, backtick or newline: ask.
 2. `git status --short` empty; `git status --short --ignored` only build output, dependencies or the
    scratchpad; `git log <branch> --not --remotes` empty, and for `HEAD`.
 3. `lsof -a -d cwd` shows no process inside its `pwd -P` path (lsof unavailable = failed). Remove only a worktree this
-   session created, per a durable record of its path this session wrote in `.claude/tmp/` (a branch name is not one),
+   session created, per a durable record of its path this session wrote in `.claude/tmp/` (untracked, not a symlink; a branch name is not one),
    or the user asked it to finish;
    never one merely "merged upstream". `IN-USE-BY-CLAUDE-SESSION.txt` is a secondary signal; present fails. In the
    session's own launch directory `lsof` may show only the ancestors of the current shell;

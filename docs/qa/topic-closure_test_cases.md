@@ -41,7 +41,7 @@ Each row is asserted by the Validator against `src/rules/topic-closure.md`. A mi
 | TC-2.9 | UC-4-E12, UC-4-EC9 | STATIC | C0 preconditions: closure runs only in an interactive session, only with `## Blockers` empty and no decision pending; never unattended; scratchpad is gitignored and removal deletes it | Interactive-only and Blockers-empty literals present |
 | TC-2.10 | UC-4-A1, UC-4-E11, UC-4-EC6 | STATIC | C1: `git fetch` before the check, `merge-base --is-ancestor`, and the release/cherry-pick alternative with the tree comparison stated | `git fetch`, `merge-base --is-ancestor`, tree-comparison literals present |
 | TC-2.11 | UC-4-E1, UC-4-E14, UC-4-EC1 | STATIC | C2: `git status --short`, `git status --short --ignored` (build output fine), `git log <branch> --not --remotes` | All three command literals present; the ignored-files check allows only build output, dependencies or the scratchpad (FR-3.3, `only build output, dependencies or the`) |
-| TC-2.12 | UC-4-E2, UC-4-E4, UC-4-E13, UC-4-EC3 | STATIC | C3: `lsof -a -d cwd`, "lsof unavailable = check failed", session-created-the-worktree-or-asked-to-finish, never removed on "merged upstream" alone | `lsof -a -d cwd`, unavailable-means-failed, created-by-session, merged-upstream literals present; the session-created worktree is proven by a durable record in `.claude/tmp/` (FR-3.4, `.claude/tmp/`) |
+| TC-2.12 | UC-4-E2, UC-4-E4, UC-4-E13, UC-4-EC3 | STATIC | C3: `lsof -a -d cwd`, "lsof unavailable = check failed", session-created-the-worktree-or-asked-to-finish, never removed on "merged upstream" alone | `lsof -a -d cwd`, unavailable-means-failed, created-by-session, merged-upstream literals present; the session-created worktree is proven by a durable record in `.claude/tmp/` (FR-3.4, `.claude/tmp/`); the record is `untracked, not a symlink` (FR-3.4 literal) |
 | TC-2.13 | UC-4-E3 | STATIC | The `IN-USE-BY-CLAUDE-SESSION.txt` marker is stated as a secondary signal only, `lsof` primary | `IN-USE` marker literal present with the secondary-signal wording |
 | TC-2.14 | UC-4-E5 | STATIC | `git worktree remove` is stated without `--force`; refusal means stop and ask, no `rm -rf` fallback on the 2.17+ path | `git worktree remove` literal present; `--force` appears only in a "never" context |
 | TC-2.15 | UC-4-A3, UC-4-E6, UC-4-EC10, UC-4-EC11 | STATIC | Old-git path: version gate below 2.17, path verbatim from `git worktree list --porcelain` (never the first entry), fresh `lsof +D`, marker check, `rm -rf --` with an absolute path and the no-glob/no-variable/no-trailing-slash/not-a-symlink conditions, never retry harder | `lsof +D`, `rm -rf --`, `--porcelain`, `2.17` and the four-condition literals present |
@@ -50,7 +50,7 @@ Each row is asserted by the Validator against `src/rules/topic-closure.md`. A mi
 | TC-2.18 | UC-4-A6, UC-4-A8, UC-4-E9 | STATIC | FR-2.10: merging/pushing to base and deleting a remote branch are prompt-only, run after the pick with `SDLC_ALLOW_GIT_GUARD=1`, never unattended; the Release step's own push is carved out as unchanged | `SDLC_ALLOW_GIT_GUARD=1`, prompt-only, and the `## Release` carve-out literals present; the push is never forced, no `+` refspec (FR-2.10, ``no `+` refspec``) |
 | TC-2.19 | UC-4-A9, UC-4-EC2 | STATIC | Launch-directory prompt: never removed from inside; options "Remove now with `git -C <main checkout> worktree remove <path>`" and "Leave it for removal from the main checkout"; own-process-tree clause (only ancestors of the current shell may show in `lsof`, any other process still fails C3) | Both option texts and the own-process-tree clause present |
 | TC-2.20 | UC-4, UC-4-EC8 | STATIC | Rule states the closure order (leave the worktree, remove, prune where applicable, delete branches, do not ask again) and the closing message as one short paragraph, no leftovers list | Order and one-paragraph literals present |
-| TC-2.21 | UC-4-A6 | STATIC | FR-2.11: issue text filed for an owed follow-up goes in a file passed with `--body-file`, never inline in a command (command-injection guard) | `--body-file` and `never inline in a command` literals present |
+| TC-2.21 | UC-1-A2 | STATIC | FR-2.11: issue text filed for an owed follow-up goes in a file passed with `--body-file`, never inline in a command (command-injection guard) | `--body-file`, `never inline in a command` and the title-file form `--title "$(cat <file>)"` literals present (a backticked title inside double quotes would execute; command-substitution output is not re-evaluated) |
 
 ## 3. Rule Content — Forbidden Literals and Size (STATIC, validator step (b))
 
@@ -118,6 +118,7 @@ Every case runs `install.sh` with a temp `HOME`; nothing touches the real `~/.cl
 | TC-7.11 | UC-7-E1 | STATIC | Uninstall when the rule file is already absent | Exit 0; uninstall continues with the remaining files |
 | TC-7.12 | UC-7-EC1 | STATIC | Uninstall with `mine.md` and an unrelated `rules/other.md` present | Both survive; static check that the uninstall path iterates manifest entries and never globs `rules/*` |
 | TC-7.13 | UC-5 | STATIC | Grep `install.sh` and `README.md` for the message and count wording | `rule_count` is derived from `MANIFEST_OWNS` (no `ls ... rules/*.md` count). The help text and the banner necessarily hard-code 6, because the banner prints before `load_manifest`; every message reads six, none reads five (AC-12) |
+| TC-7.14 | UC-5-EC1 | STATIC | `SDLC_KEEP_BACKUPS` set to `00`, `000`, or a 20-digit number, with two old `backup-YYYYMMDD-HHMMSS` dirs seeded and a hand-made `rules/topic-closure.md` forcing a new backup; also unset (default 5) (security MEDIUM-1, MEDIUM-7) | Notice says "never pruned" for `00`/`000`/overflow and no backup is deleted (seeded two plus the run's own all survive, no "Pruned" line); unset says "pruned after 5 newer ones". Both `backup_retention_note` and `prune_old_backups` read one helper, `backup_keep_count` |
 
 ## 8. Session-Start Drift Check (STATIC, `tests/hooks/test-session-start-spine.js`)
 
@@ -251,7 +252,7 @@ Run after the release commit is pushed to `main`. Record the command output in t
 |---|---|
 | UC-1 | TC-2.1, TC-10.1, TC-11.1 |
 | UC-1-A1 | TC-2.2, TC-10.2 |
-| UC-1-A2 | TC-10.3 |
+| UC-1-A2 | TC-10.3, TC-2.21 |
 | UC-1-A3 | TC-10.4 |
 | UC-1-A4 | TC-2.3, TC-10.5 |
 | UC-1-E1 | TC-2.4, TC-5.2, TC-10.6 |
@@ -314,7 +315,7 @@ Run after the release commit is pushed to `main`. Record the command output in t
 | UC-4-EC9 | TC-2.9, TC-11.34 |
 | UC-4-EC10 | TC-2.15, TC-11.35 |
 | UC-4-EC11 | TC-2.15, TC-11.36 |
-| UC-5 | TC-7.1, TC-7.2, TC-7.13 |
+| UC-5 | TC-7.1, TC-7.2, TC-7.13, TC-7.14 |
 | UC-5-A1 | TC-7.3 |
 | UC-5-A2 | TC-7.4 |
 | UC-5-A3 | TC-7.5 |

@@ -706,25 +706,36 @@ backup_existing() {
 #   - only those matching this installer's own `backup-YYYYMMDD-HHMMSS` shape,
 #     so a directory a user named `backup-notes` is never touched,
 #   - never the one just created, which is always the newest.
-# Retention is overridable, and setting it to 0 disables pruning entirely.
-# The effective retention as prose, derived exactly as prune_old_backups
-# derives it, so a notice never echoes a raw (unsanitized) environment value.
-backup_retention_note() {
+# Retention is overridable (SDLC_KEEP_BACKUPS); 0, 00, a non-numeric value or an
+# absurdly long one all mean "never prune". Both the notice and the pruner read
+# the count from backup_keep_count, so they cannot disagree.
+
+# Effective backup retention: prints the keep count, or nothing when pruning is off.
+backup_keep_count() {
   local keep="${SDLC_KEEP_BACKUPS:-5}"
-  case "$keep" in
-    ''|*[!0-9]*|0) printf 'never pruned' ;;
-    *) printf 'pruned after %s newer ones' "$((10#$keep))" ;;
-  esac
+  case "$keep" in ''|*[!0-9]*) return 0 ;; esac   # non-numeric: never prune
+  [ "${#keep}" -le 4 ] || return 0                 # absurd length: never prune, never overflow
+  keep=$((10#$keep))
+  [ "$keep" -gt 0 ] || return 0                    # 0, 00, 000: explicit opt-out
+  printf '%s' "$keep"
+}
+
+# The effective retention as prose, so a notice never echoes a raw
+# (unsanitized) environment value.
+backup_retention_note() {
+  local keep
+  keep="$(backup_keep_count)"
+  if [ -z "$keep" ]; then
+    printf 'never pruned'
+  else
+    printf 'pruned after %s newer ones' "$keep"
+  fi
 }
 
 prune_old_backups() {
   local keep removed d name kept
-  keep="${SDLC_KEEP_BACKUPS:-5}"
-
-  case "$keep" in
-    ''|*[!0-9]*) return 0 ;;   # non-numeric override: do nothing rather than guess
-    0) return 0 ;;             # explicit opt-out
-  esac
+  keep="$(backup_keep_count)"
+  [ -n "$keep" ] || return 0
 
   # Filter to OUR backups first, then apply the retention count. Counting
   # before filtering was a real bug: a user directory called `backup-notes`
