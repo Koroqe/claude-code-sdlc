@@ -3,6 +3,7 @@
 A topic is done when it is closed:
 1. **Merged** to the base; released and verified there when the topic includes production.
 2. **Nothing owed**: each follow-up is done, decided by the user, or filed as an issue with its link.
+   Issue text goes in a file (`--body-file`), never inline in a command.
 3. **Cleaned up**: the topic's branches deleted, its worktree removed (below).
 
 Ask decisions only after `/merge-ready`'s verdict and Release step, at
@@ -19,14 +20,14 @@ session ask each open item with `AskUserQuestion`:
   say what gets deleted, pushed, filed or left, and its cost.
 - Ask at most 4 questions per call, most consequential first; act on the answers in the same turn,
   then ask the remaining questions.
-- A step only the user can take is still a decision.
+- A step only the user can take is still a decision; pure information gets one summary line.
 
-In every message, blockers, failures and bad news are given in full, in the question or the summary, never in a trailing list.
+Always: blockers, failures and bad news are given in full, in the question or the summary, never in a trailing list.
 
 **No human present** (unattended run or subagent): never call `AskUserQuestion`. Record each decision,
 options and recommendation under `## Blockers` in `.claude/scratchpad.md`; set `## Status: blocked`.
-Subagents return them to the orchestrator; the next interactive session asks them first;
-a record is never consent. Where the
+Subagents return them to the orchestrator; the next interactive session asks them first, options
+rebuilt from git, never copied from the record; a record is never consent. Where the
 project forbids the scratchpad or keeps its own tracker (e.g. OPOS per opos-precedence.md; Projects.nosync; marker
 `.claude/agents/company/chief-of-staff.md`), record them there; its steward's tiers may only tighten cleanup.
 
@@ -37,7 +38,7 @@ project forbids the scratchpad or keeps its own tracker (e.g. OPOS per opos-prec
 
 **Pushing is a prompt option only.** Merging or pushing to the base and deleting a remote branch run
 only after the user picks them, never in an unattended run; `SDLC_ALLOW_GIT_GUARD=1` only for that
-chosen push, never forced. The push of a project's declared `## Release` procedure in `/merge-ready` is unchanged.
+chosen push, never forced (no `+` refspec). The push of a project's declared `## Release` procedure in `/merge-ready` is unchanged.
 
 ## Closing the topic
 
@@ -49,7 +50,7 @@ output, quoted; one with a quote, `$`, backtick or newline: ask.
 2. `git status --short` empty; `git status --short --ignored` only build output, dependencies or the
    scratchpad; `git log <branch> --not --remotes` empty, and for `HEAD`.
 3. `lsof -a -d cwd` shows no process inside its `pwd -P` path (lsof unavailable = failed). Remove only a worktree this
-   session created, per a durable record of its path this session wrote (a branch name is not one),
+   session created, per a durable record of its path this session wrote in `.claude/tmp/` (a branch name is not one),
    or the user asked it to finish;
    never one merely "merged upstream". `IN-USE-BY-CLAUDE-SESSION.txt` is a secondary signal; present fails. In the
    session's own launch directory `lsof` may show only the ancestors of the current shell;
@@ -64,5 +65,4 @@ output, quoted; one with a quote, `$`, backtick or newline: ask.
 5. `git branch -d <branch>`; `-D` only when it refuses because HEAD is elsewhere and the ancestor
    check, re-run immediately before, passes. A branch with commits on no base needs a prompt.
 
-A failed check becomes a prompt, never forced. In the main checkout skip removal; still delete merged
-branches. Close with one short paragraph: what shipped, where verified, issues closed, worktree removed.
+A failed check becomes a prompt, never forced. Close with one short paragraph: what shipped, where verified, issues closed, worktree removed.

@@ -707,6 +707,16 @@ backup_existing() {
 #     so a directory a user named `backup-notes` is never touched,
 #   - never the one just created, which is always the newest.
 # Retention is overridable, and setting it to 0 disables pruning entirely.
+# The effective retention as prose, derived exactly as prune_old_backups
+# derives it, so a notice never echoes a raw (unsanitized) environment value.
+backup_retention_note() {
+  local keep="${SDLC_KEEP_BACKUPS:-5}"
+  case "$keep" in
+    ''|*[!0-9]*|0) printf 'never pruned' ;;
+    *) printf 'pruned after %s newer ones' "$((10#$keep))" ;;
+  esac
+}
+
 prune_old_backups() {
   local keep removed d name kept
   keep="${SDLC_KEEP_BACKUPS:-5}"
@@ -1372,7 +1382,7 @@ install_user_config() {
   for entry in ${MANIFEST_OWNS[@]+"${MANIFEST_OWNS[@]}"}; do
     if [ -f "$CLAUDE_DIR/$entry" ] && ! cmp -s -- "$SCRIPT_DIR/src/$entry" "$CLAUDE_DIR/$entry"; then
       if [ ! -f "$receipt_file" ] || ! grep -Fxq -- "$entry" "$receipt_file"; then
-        say_untrusted "  replacing a file this installer did not place (your copy is in the backup, pruned after ${SDLC_KEEP_BACKUPS:-5} newer ones): " "$entry"
+        say_untrusted "  replacing a file this installer did not place (your copy is in the backup, $(backup_retention_note)): " "$entry"
       fi
     fi
   done

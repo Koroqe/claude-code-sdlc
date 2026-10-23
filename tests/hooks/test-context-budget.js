@@ -5,7 +5,7 @@
  * The context budget must FAIL on an over-ceiling tree, pinned to an exact
  * problem count — the same anti-vacuity discipline every validator here carries.
  * Trees are built in a temp dir rather than committed as a fixture: the budget
- * scores 24 components, and a committed fixture would mean 24 stub files whose
+ * scores 26 components, and a committed fixture would mean 26 stub files whose
  * only job is to be the right size.
  */
 

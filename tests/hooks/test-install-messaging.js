@@ -65,7 +65,7 @@ function runInstall(args) {
 // Caller-seeded HOME variant. Same sandbox contract as runInstall: --local, a
 // temp cwd that is never the repo root, mockDir first on PATH so the real
 // `claude` CLI is never reached (including uninstall runs without --no-plugin).
-function runInstallIn(home, args) {
+function runInstallIn(home, args, extraEnv) {
   const proj = tempDir('sdlc-install-proj-');
   const r = spawnSync('bash', [INSTALL].concat(args), {
     cwd: proj,
@@ -74,7 +74,7 @@ function runInstallIn(home, args) {
     env: Object.assign({}, process.env, {
       HOME: home,
       PATH: mockDir + ':' + process.env.PATH,
-    }),
+    }, extraEnv || {}),
   });
   rimraf(proj);
   return r;
@@ -219,6 +219,36 @@ for (const args of variants) {
     c.contains('MEDIUM-7: notice names the entry', both(r), 'rules/topic-closure.md');
     c.ok('MEDIUM-7: nothing inside rules/ other than owned files was created',
       fs.readdirSync(rulesOf(h)).every(function (n) { return /^[a-z-]+\.md$/.test(n); }));
+    rimraf(h);
+  }
+
+  // MEDIUM-7 retention wording: the notice states the EFFECTIVE keep count and
+  // never echoes a raw SDLC_KEEP_BACKUPS value.
+  {
+    const mk = function () {
+      const h = seedHome();
+      fs.writeFileSync(path.join(rulesOf(h), 'topic-closure.md'), '# hand-made\n');
+      return h;
+    };
+    let h = mk();
+    let r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: '0' });
+    c.contains('LOW: SDLC_KEEP_BACKUPS=0 notice says never pruned', both(r), 'never pruned');
+    c.ok('LOW: SDLC_KEEP_BACKUPS=0 notice does not claim pruning',
+      both(r).indexOf('pruned after') === -1, both(r).slice(0, 400));
+    rimraf(h);
+    h = mk();
+    r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: 'abc$(x)' });
+    c.contains('LOW: non-numeric SDLC_KEEP_BACKUPS notice says never pruned', both(r), 'never pruned');
+    c.ok('LOW: raw env value is never echoed', both(r).indexOf('abc$(x)') === -1, both(r).slice(0, 400));
+    rimraf(h);
+    h = mk();
+    r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: '3' });
+    c.contains('LOW: SDLC_KEEP_BACKUPS=3 notice says pruned after 3 newer ones', both(r), 'pruned after 3 newer ones');
+    rimraf(h);
+    h = mk();
+    const envNoKeep = Object.assign({}, process.env); delete envNoKeep.SDLC_KEEP_BACKUPS;
+    r = runInstallIn(h, BASE, { SDLC_KEEP_BACKUPS: '' });
+    c.contains('LOW: empty SDLC_KEEP_BACKUPS falls back to the default 5', both(r), 'pruned after 5 newer ones');
     rimraf(h);
   }
 

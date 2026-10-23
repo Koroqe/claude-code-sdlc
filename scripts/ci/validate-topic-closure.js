@@ -7,15 +7,14 @@
  * every session.
  *
  * Checks:
- *   FR-5.1  size cap 4800 B; every REQUIRED literal present (FR-2.9 ones
- *           scoped to the FR-2.9 paragraph).
- * Tracer checks:
  *   FR-5.1  the rule file exists and is non-empty (an empty rule is exactly one
- *           problem, then the validator stops).
+ *           problem, then the validator stops); size cap 4950 B (DD-1b); every
+ *           REQUIRED literal present (FR-2.9 ones scoped to the FR-2.9 paragraph).
  *   FR-5.2  manifests/owned-files.txt lists `rules/topic-closure.md` under
  *           `owns` — not `legacy`, which would REMOVE it on install.
  *   FR-5.4  the four pointer files (src/claude.md, skills/merge-ready,
- *           skills/develop-feature, src/rules/error-recovery.md) carry their
+ *           skills/develop-feature, src/rules/error-recovery.md; with the rule
+ *           and the manifest, six sources in all) carry their
  *           pointer / Rule 4 wording, restate no substance, and the two skills
  *           list AskUserQuestion in `allowed-tools`. FR-2.8 for the Rule 4 text.
  *   FR-5.8(b) the rule carries no maintainer-environment literal. The shipped
@@ -124,9 +123,15 @@ const REQUIRED = [
   { fr: "FR-2.10", literal: "never forced" },
   { fr: "FR-3.4", literal: "present fails" },
   { fr: "FR-3.5", literal: "lists just this worktree" },
+  { fr: "FR-2.7", literal: "rebuilt from git, never copied from the record" },
+  { fr: "FR-2.11", literal: "--body-file" },
+  { fr: "FR-2.11", literal: "never inline in a command" },
+  { fr: "FR-3.3", literal: "only build output, dependencies or the" },
+  { fr: "FR-2.10", literal: "no `+` refspec" },
+  { fr: "FR-3.4", literal: ".claude/tmp/" },
 ];
 
-const MAX_BYTES = 4800;
+const MAX_BYTES = 4950;
 
 /** FR-2.9 literals must sit inside that paragraph (the `unavailable or refused` line to the next blank line). */
 const FR29_SCOPED = ['unavailable or refused', 'once, plainly', '## Status: blocked', 'no trailing owed list'];

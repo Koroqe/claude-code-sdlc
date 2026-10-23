@@ -487,8 +487,10 @@ jobs:
         run: node scripts/ci/validate-triage-parity.js --root "$(mktemp -d)" --expect-failure "matches too few" --expect-problems 1
 
       # topic-closure validator: one seeded fixture per arm. Each is a complete
-      # passing mirror of every file the validator opens except its single
-      # defect, so the pinned count proves THAT arm fired and nothing else did.
+      # passing mirror of every file the validator opens except its seeded
+      # defect(s), so the pinned count proves THAT arm fired and nothing else did.
+      # bad-unwired carries two defects (the manifest no longer owns the entry,
+      # and the develop-feature pointer is gone), each counted in its pin of 2.
       - name: Falsify — topic-closure validator catches a deleted FR-2.9 fallback paragraph
         run: node scripts/ci/validate-topic-closure.js --root tests/fixtures/ci/topic-closure/bad-missing-fallback --min 1 --expect-failure "FR-2.9" --expect-problems 4
 

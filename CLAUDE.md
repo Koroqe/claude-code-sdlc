@@ -75,7 +75,12 @@ Two consequences that are easy to get backwards:
    ```
 
 3. **Commit and push to `main`.** This is the step that actually delivers, because the marketplace
-   tracks `main`.
+   tracks `main`. The push that runs carries the guards:
+   - Push the feature branch first, so CI runs on the exact SHA, and wait for CI green on it.
+     `ci-parity.js` skips multi-line `run: |` steps; CI does not.
+   - Confirm the push with the user at push time.
+   - Publish the verified SHA with `SDLC_ALLOW_GIT_GUARD=1 git push origin "<sha>":refs/heads/main`:
+     fast-forward only, never `--force`, never a `+` refspec.
 
 4. **Cut the GitHub release** — documentation and discovery, using notes derived from the
    `CHANGELOG.md` entry:
