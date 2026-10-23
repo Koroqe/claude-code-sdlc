@@ -107,3 +107,13 @@ Trigger: Repeated Deviation Rule
 Occurrences: 1 (features: topic-closure)
 Last confirmed at: 4
 Retires at: 14
+
+### validator-fr-tags-come-from-prd-headings
+Confidence: 0.3
+Category: general
+Pattern: scripts/ci/validate-*.js
+Rule: WHEN a validator tags each problem with a requirement id, take every tag from the PRD's own FR headings, never from a plan summary — a mis-tagged id silently breaks fixture expectations matched on that id
+Trigger: Repeated Deviation Rule
+Occurrences: 1 (features: topic-closure)
+Last confirmed at: 4
+Retires at: 14
