@@ -2,6 +2,13 @@
 
 All notable changes to this project, newest first. Entries are grouped by UTC date.
 
+## 2026-11-17
+
+### Name the copyright holder in full — 11:24 UTC
+**Summary:** The license file now names the author in full. The license itself is unchanged: the project stays MIT and open source.
+**Details:** The copyright line in LICENSE read "Copyright (c) 2025 Aleksei", with a first name only and a year before the project's first release in March 2026. It now reads "Copyright (c) 2026 Oleksii Korobeinikov". No other word of the MIT License changed, and every user's rights are exactly as before.
+**Technical details:** One line of the license file. No code, plugin manifest, install or behaviour change, and no version bump.
+
 ## 2026-10-23
 
 ### Sessions now finish by closing the topic — 11:16 UTC
